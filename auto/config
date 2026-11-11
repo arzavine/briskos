@@ -6,7 +6,7 @@ lb config noauto \
     --distribution bookworm \
     --architectures amd64 \
     --archive-areas "main contrib non-free non-free-firmware" \
-    --bootloader syslinux,grub-efi \
+    --bootloaders syslinux,grub-efi \
     --binary-images iso-hybrid \
     --image-name "BriskOS-1.0-amd64" \
     --iso-volume "BriskOS_1.0" \

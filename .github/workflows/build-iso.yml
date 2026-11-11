@@ -51,7 +51,8 @@ jobs:
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache
+          sudo rm -rf /usr/local/share/boost
           sudo docker system prune -af || true
           echo "Available disk space after cleanup:"
           df -h /
@@ -89,6 +90,13 @@ jobs:
           fi
           bash -n scripts/build-iso.sh
           bash -n scripts/build-docker.sh
+          bash -n auto/config
+          for hook in config/hooks/live/*.hook.chroot; do
+            [ -f "$hook" ] && bash -n "$hook"
+          done
+          for bin in config/includes.chroot/usr/local/bin/*; do
+            [ -f "$bin" ] && bash -n "$bin"
+          done
 
       - name: Execute ISO Build Harness
         run: |
@@ -97,6 +105,8 @@ jobs:
             BUILD_FLAGS="--no-clean"
           fi
           sudo ./scripts/build-iso.sh ${BUILD_FLAGS}
+          # Ensure runner user owns generated artifacts and workspace for subsequent steps
+          sudo chown -R $(id -u):$(id -g) . 2>/dev/null || true
 
       - name: Generate Build Summary
         run: |
@@ -136,8 +146,16 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Upload Build Failure Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BriskOS-Build-Failure-Logs
+          path: logs/
+          retention-days: 7
+
       - name: Create GitHub Release and Attach ISO
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == true)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.create_release == true || github.event.inputs.create_release == 'true'))
         uses: softprops/action-gh-release@v2
         with:
           files: |

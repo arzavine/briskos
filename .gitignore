@@ -1,6 +1,8 @@
 # Debian live-build artifact directories
 .build/
+auto/.build
 binary/
+cache/
 chroot/
 *.iso
 *.iso.zsync

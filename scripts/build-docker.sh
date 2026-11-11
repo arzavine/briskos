@@ -6,6 +6,10 @@
 # ==============================================================================
 set -euo pipefail
 
+# Disable MSYS/MinGW POSIX-to-Windows path conversion when running under Git Bash on Windows
+# Prevents docker -v "/d/...:/build" from being mangled into semicolon-separated paths
+export MSYS_NO_PATHCONV=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
@@ -135,8 +139,13 @@ run_container() {
         tty_flag="-i"
     fi
 
+    # Detect host user UID/GID so build container can adjust artifact ownership
+    local host_uid
+    local host_gid
+    host_uid="$(id -u 2>/dev/null || echo 1000)"
+    host_gid="$(id -g 2>/dev/null || echo 1000)"
+
     # Host-to-container mount paths
-    # Note: On Windows Git Bash or MSYS, forward slash handling is automatic with Docker
     local mount_src="${PROJECT_ROOT}"
 
     if [ "${OPEN_SHELL}" = true ]; then
@@ -144,6 +153,8 @@ run_container() {
         log_info "Inside container, workspace is mounted at /build"
         docker run --privileged --rm ${tty_flag} \
             -v "${mount_src}:/build" \
+            -e "HOST_UID=${host_uid}" \
+            -e "HOST_GID=${host_gid}" \
             --entrypoint /bin/bash \
             "${IMAGE_TAG}"
         return
@@ -152,9 +163,19 @@ run_container() {
     log_info "Executing BriskOS build inside container..."
     log_info "Forwarding arguments: ${FORWARD_ARGS[*]:-(default production build)}"
     
-    docker run --privileged --rm ${tty_flag} \
-        -v "${mount_src}:/build" \
-        "${IMAGE_TAG}" "${FORWARD_ARGS[@]}"
+    if [ ${#FORWARD_ARGS[@]} -gt 0 ]; then
+        docker run --privileged --rm ${tty_flag} \
+            -v "${mount_src}:/build" \
+            -e "HOST_UID=${host_uid}" \
+            -e "HOST_GID=${host_gid}" \
+            "${IMAGE_TAG}" "${FORWARD_ARGS[@]}"
+    else
+        docker run --privileged --rm ${tty_flag} \
+            -v "${mount_src}:/build" \
+            -e "HOST_UID=${host_uid}" \
+            -e "HOST_GID=${host_gid}" \
+            "${IMAGE_TAG}"
+    fi
 
     log_success "Container build execution completed."
 }

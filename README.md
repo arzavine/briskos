@@ -284,25 +284,32 @@ BriskOS features a lightweight, serverless Over-The-Air (OTA) update system powe
 Phase 4 establishes an industrial-grade, multi-tier build and release architecture for BriskOS:
 
 * **Hardened Native Build Harness (`scripts/build-iso.sh`)**:
-  * **Strict POSIX & Error Trapping**: Operates under `set -euo pipefail` with automated `ERR` trap capturing line-level failures and tailing the build log.
+  * **Strict POSIX & Error Trapping**: Operates under `set -euo pipefail` with automated `ERR`, `INT`, and `TERM` traps capturing failures, tailing the build log, and safely unmounting any active pseudo-filesystems in `chroot/` (`/dev/pts`, `/dev`, `/proc`, `/sys`).
+  * **Chroot Mount Protection**: Features a dedicated `cleanup_mounts` routine using `mountpoint -q` checks and lazy forced unmounting (`umount -lf`) to prevent host filesystem pollution or hung mount locks.
   * **Pre-Flight Sanity Audit**: Verifies root permissions, tool presence (`lb`, `debootstrap`, `xorriso`, `mksquashfs`), free storage capacity ($\ge 8$ GB), package manifest validity, and recursive executable bits (`chmod +x`).
   * **Dry-Run Audit Simulation (`--dry-run` / `-d`)**: Allows developers and CI environments on unprovisioned hosts to completely audit package lists, hooks, scripts, and disk readiness without root and without downloading Debian archives.
   * **Colorized Telemetry & Log Rotation**: Real-time ANSI colored terminal output with automated rotation retaining the newest $N$ logs (`--keep-logs 10`).
+  * **Zero-Duplication Artifact Standardization**: Standardizes hybrid ISO filenames and output directory routing via atomic moves or hardlinks with symlink compatibility, avoiding duplicate multi-gigabyte ISO copies on disk.
+  * **Host User Ownership Mapping**: Automatically detects `$SUDO_UID` / `$SUDO_GID` or `$HOST_UID` / `$HOST_GID` to ensure generated ISO images, checksum files, and build logs are owned by the invoking user rather than locked to root.
   * **Cryptographic Verification**: Generates `BriskOS-1.0-amd64.iso.sha256` and `BriskOS-1.0-amd64.iso.sha512` automatically upon build completion.
 
 * **Containerized Docker Build System (`Dockerfile` & `scripts/build-docker.sh`)**:
   * **Hermetic Debian Bookworm Base**: Containerized around `debian:bookworm` to eliminate host contamination and host OS distribution incompatibilities.
   * **Cross-Platform Compatibility**: Enables building the BriskOS ISO with a single command on Ubuntu, Fedora, Arch, Alpine, macOS (with Docker Desktop), or Windows 10/11 (with Docker Desktop or WSL2).
-  * **Privileged Loopback Execution**: Automatically configures `--privileged` loop device pass-through (`/dev/loop*`) and workspace volume mounting (`-v $(pwd):/build`).
+  * **Windows Git Bash (MSYS) Safe**: Automatically sets `MSYS_NO_PATHCONV=1` to prevent volume bind-mount path mangling when launching Docker from Windows Git Bash.
+  * **Privileged Loopback Execution**: Automatically configures `--privileged` loop device pass-through (`/dev/loop*`), host user UID/GID propagation, and workspace volume mounting (`-v $(pwd):/build`).
   * **Interactive Diagnostic Shell (`--shell` / `-s`)**: Enables dropping directly into the container root shell for live-build troubleshooting and environment inspection.
 
 * **Production GitHub Actions CI/CD Pipeline (`.github/workflows/build-iso.yml`)**:
   * **Automated Triggering**: Runs on pushes to `main`/`master`, semantic version tags (`v*`), pull requests, and manual triggers (`workflow_dispatch`).
-  * **Runner Storage Optimization**: Automatically cleans pre-installed runner caches (.NET SDK, Android SDK, CodeQL, Haskell) to release $20+$ GB of disk space on `ubuntu-latest`.
+  * **Runner Storage Optimization**: Automatically cleans pre-installed runner caches (.NET SDK, Android SDK, CodeQL, Haskell, Boost) to release $25+$ GB of disk space on `ubuntu-latest`.
+  * **Comprehensive Pre-Flight Static Check**: Validates syntax of all shell scripts (`auto/config`, live hooks, custom binaries, harness scripts) via `bash -n` prior to initiating the multi-stage build.
   * **Toolchain Installation**: Automatically installs `live-build`, `debootstrap`, `xorriso`, `squashfs-tools`, and dual EFI/BIOS bootloader tools.
+  * **Post-Build Ownership Normalization**: Restores workspace ownership to the runner user (`id -u:id -g`) so artifact uploads and post-job checkout hooks run without permission errors.
   * **Cryptographic Step Summary**: Publishes ISO file size, SHA256 checksum, and SHA512 hash directly into the GitHub Actions run summary.
   * **Artifact Persistence**: Stores the generated ISO, checksums, and full build logs with 14-day retention.
-  * **Automated Tagged Releases**: Automatically creates GitHub Releases for `v*` tags with release notes, attaching the bootable ISO and verification checksums.
+  * **Failure Diagnostic Capture**: Automatically uploads build failure logs (`logs/`) on failure so issues can be diagnosed immediately from workflow runs.
+  * **Automated Tagged Releases**: Automatically creates GitHub Releases for `v*` tags with release notes, attaching the bootable ISO and verification checksums (supports both manual and tag-based release triggers).
 
 ---
 
@@ -325,10 +332,11 @@ Phase 4 establishes an industrial-grade, multi-tier build and release architectu
 | **Phase 3 Fontconfig XML** | ElementTree schema validation and DTD compliance across `30-brisk-ms-font-substitutions.conf`, `10-brisk-rendering.conf`, and `fonts.conf` | **PASS** |
 | **Phase 3 Desktop Entries** | Freedesktop specification compliance, standard Categories, Exec syntax, and MIME bindings for Wine and OTA launchers | **PASS** |
 | **Phase 4 Directory Structure** | `.github/workflows/build-iso.yml`, `Dockerfile`, `scripts/build-docker.sh`, enhanced `scripts/build-iso.sh` | **PASS** |
-| **Phase 4 Shell Script Strictness** | Strict `bash -n` static syntax validation on `build-iso.sh` and `build-docker.sh` | **PASS** |
+| **Phase 4 Shell Script Strictness** | Strict `bash -n` static syntax validation across all scripts (`build-iso.sh`, `build-docker.sh`, `auto/config`, hooks, `/usr/local/bin`) | **PASS** |
 | **Phase 4 Pre-Flight Audit** | `build-iso.sh --dry-run` successfully audits configs, 5 manifests, 3 hooks, 4 binaries, and storage | **PASS** |
-| **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian Bookworm with non-interactive flags and complete toolchain | **PASS** |
-| **Phase 4 CI/CD Workflow Schema** | Valid GitHub Actions workflow with runner storage optimization, artifact upload, and softprops release step | **PASS** |
+| **Phase 4 Mount Cleanup & Signals** | Reverse unmounting (`cleanup_mounts`) and `ERR`/`INT`/`TERM` signal traps verified | **PASS** |
+| **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian Bookworm with non-interactive flags, `MSYS_NO_PATHCONV=1`, and host UID mapping | **PASS** |
+| **Phase 4 CI/CD Workflow Schema** | Valid GitHub Actions workflow with runner storage optimization, comprehensive script syntax audits, failure log capture, and release automation | **PASS** |
 | **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) verified across all files and scripts | **PASS** |
 
 ---

@@ -262,6 +262,9 @@ clean_build() {
         return
     fi
 
+    log_info "Ensuring no stale chroot mounts before clean..."
+    cleanup_mounts
+
     log_info "Starting clean step (lb clean --purge)..."
     if [ "${DRY_RUN}" = true ]; then
         log_info "[DRY-RUN] Simulated: lb clean --purge"
@@ -345,18 +348,29 @@ verify_artifact() {
         exit 1
     fi
 
-    # Standardize final target filename as BriskOS-1.0-amd64.iso
+    # Standardize final target filename as BriskOS-1.0-amd64.iso without duplicating disk space
     local canonical_iso="BriskOS-1.0-amd64.iso"
     if [ "${found_iso}" != "${canonical_iso}" ]; then
         log_info "Standardizing artifact '${found_iso}' -> '${canonical_iso}'..."
-        cp -l "${found_iso}" "${canonical_iso}" 2>/dev/null || cp "${found_iso}" "${canonical_iso}"
+        if cp -l "${found_iso}" "${canonical_iso}" 2>/dev/null; then
+            # Retain original filename as lightweight symlink for backwards compatibility
+            rm -f "${found_iso}"
+            ln -sf "${canonical_iso}" "${found_iso}" 2>/dev/null || true
+        else
+            mv "${found_iso}" "${canonical_iso}"
+        fi
     fi
 
-    # Move/Copy to custom output directory if different from project root
+    # Move/link to custom output directory if different from project root
     local final_iso_path="${canonical_iso}"
     if [ "${OUTPUT_DIR}" != "${PROJECT_ROOT}" ]; then
-        cp "${canonical_iso}" "${OUTPUT_DIR}/${canonical_iso}"
-        final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
+        log_info "Moving artifact to designated output directory: ${OUTPUT_DIR}..."
+        if cp -l "${canonical_iso}" "${OUTPUT_DIR}/${canonical_iso}" 2>/dev/null; then
+            final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
+        else
+            mv "${canonical_iso}" "${OUTPUT_DIR}/${canonical_iso}"
+            final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
+        fi
     fi
 
     log_info "Generating cryptographic checksums (SHA256 & SHA512)..."
@@ -367,6 +381,23 @@ verify_artifact() {
     local sha512_val
     sha512_val="$(sha512sum "${final_iso_path}" | awk '{print $1}')"
     echo "${sha512_val}  $(basename "${final_iso_path}")" > "${final_iso_path}.sha512"
+
+    # Adjust file ownership if running via sudo or within a container with host UID/GID
+    local target_uid=""
+    local target_gid=""
+    if [ -n "${SUDO_UID:-}" ] && [ "${SUDO_UID}" -ne 0 ]; then
+        target_uid="${SUDO_UID}"
+        target_gid="${SUDO_GID:-${SUDO_UID}}"
+    elif [ -n "${HOST_UID:-}" ] && [ "${HOST_UID}" -ne 0 ]; then
+        target_uid="${HOST_UID}"
+        target_gid="${HOST_GID:-${HOST_UID}}"
+    fi
+
+    if [ -n "${target_uid}" ]; then
+        log_info "Adjusting artifact ownership for host user (${target_uid}:${target_gid})..."
+        chown "${target_uid}:${target_gid}" "${final_iso_path}" "${final_iso_path}.sha256" "${final_iso_path}.sha512" 2>/dev/null || true
+        chown -R "${target_uid}:${target_gid}" "${LOG_DIR}" 2>/dev/null || true
+    fi
 
     local iso_size
     iso_size="$(du -h "${final_iso_path}" | cut -f1)"
@@ -393,23 +424,55 @@ verify_artifact() {
 }
 
 # ------------------------------------------------------------------------------
-# Error Handler
+# Chroot Mount Cleanup & Signal Handlers
 # ------------------------------------------------------------------------------
+cleanup_mounts() {
+    # Safely unmount any active or residual chroot pseudo-filesystems in reverse order
+    if [ -d "${PROJECT_ROOT}/chroot" ]; then
+        local mount_points=(
+            "${PROJECT_ROOT}/chroot/dev/pts"
+            "${PROJECT_ROOT}/chroot/dev/shm"
+            "${PROJECT_ROOT}/chroot/dev"
+            "${PROJECT_ROOT}/chroot/proc"
+            "${PROJECT_ROOT}/chroot/sys"
+            "${PROJECT_ROOT}/chroot/run"
+        )
+        for mp in "${mount_points[@]}"; do
+            if mountpoint -q "${mp}" 2>/dev/null; then
+                log_warn "Unmounting active chroot mountpoint: ${mp}"
+                umount -lf "${mp}" 2>/dev/null || true
+            fi
+        done
+    fi
+}
+
+handle_interrupt() {
+    echo ""
+    log_warn "Build interrupted by signal (SIGINT/SIGTERM). Cleaning up mounts..."
+    cleanup_mounts
+    exit 130
+}
+
 handle_error() {
     local exit_code="$?"
     local line_no="$1"
+    if [ "${exit_code}" -eq 0 ]; then
+        exit_code=1
+    fi
     echo ""
     log_error "Build pipeline failed at line ${line_no} with exit status ${exit_code}."
     log_error "Review detailed log output: ${LOG_FILE}"
     if [ -f "${LOG_FILE}" ]; then
-        echo -e "${COLOR_YELLOW}--- Last 20 lines of build log ---${COLOR_RESET}"
-        tail -n 20 "${LOG_FILE}" | strip_ansi || true
+        echo -e "${COLOR_YELLOW}--- Last 25 lines of build log ---${COLOR_RESET}"
+        tail -n 25 "${LOG_FILE}" | strip_ansi || true
         echo -e "${COLOR_YELLOW}----------------------------------${COLOR_RESET}"
     fi
+    cleanup_mounts
     exit "${exit_code}"
 }
 
 trap 'handle_error $LINENO' ERR
+trap 'handle_interrupt' INT TERM
 
 # ------------------------------------------------------------------------------
 # Argument Parsing & Main Execution
