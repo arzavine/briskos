@@ -1,0 +1,170 @@
+name: Build BriskOS ISO
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      clean_build:
+        description: 'Perform clean build (lb clean --purge)'
+        required: false
+        default: true
+        type: boolean
+      create_release:
+        description: 'Create GitHub release and attach ISO (for manual runs)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-iso:
+    name: Build BriskOS 1.0 amd64 ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Free Runner Disk Space
+        run: |
+          echo "Initial disk space:"
+          df -h /
+          echo "Cleaning pre-installed runner caches to maximize live-build storage..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af || true
+          echo "Available disk space after cleanup:"
+          df -h /
+
+      - name: Install Live-Build & ISO Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            live-build \
+            debootstrap \
+            xorriso \
+            squashfs-tools \
+            dosfstools \
+            mtools \
+            isolinux \
+            syslinux-common \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            binutils \
+            ca-certificates \
+            curl \
+            coreutils \
+            findutils \
+            sed \
+            gawk
+
+      - name: Verify Permissions & Shell Script Syntax
+        run: |
+          chmod +x scripts/*.sh auto/config
+          if [ -d config/hooks/live ]; then
+            chmod +x config/hooks/live/*.hook.chroot 2>/dev/null || true
+          fi
+          if [ -d config/includes.chroot/usr/local/bin ]; then
+            chmod +x config/includes.chroot/usr/local/bin/* 2>/dev/null || true
+          fi
+          bash -n scripts/build-iso.sh
+          bash -n scripts/build-docker.sh
+
+      - name: Execute ISO Build Harness
+        run: |
+          BUILD_FLAGS=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.clean_build }}" = "false" ]; then
+            BUILD_FLAGS="--no-clean"
+          fi
+          sudo ./scripts/build-iso.sh ${BUILD_FLAGS}
+
+      - name: Generate Build Summary
+        run: |
+          ISO_FILE="BriskOS-1.0-amd64.iso"
+          if [ -f "${ISO_FILE}" ]; then
+            ISO_SIZE=$(du -h "${ISO_FILE}" | cut -f1)
+            SHA256=$(cat "${ISO_FILE}.sha256" | awk '{print $1}')
+            SHA512=$(cat "${ISO_FILE}.sha512" | awk '{print $1}')
+            
+            echo "### 🚀 BriskOS 1.0 LTS (Feather) Build Succeeded" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Artifact** | \`${ISO_FILE}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Size** | \`${ISO_SIZE}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **SHA256 Checksum** | \`${SHA256}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **SHA512 Checksum** | \`${SHA512:0:32}...\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Verification Command" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "echo \"${SHA256}  ${ISO_FILE}\" | sha256sum --check" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Build failed: No ISO artifact found" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload ISO and Checksums Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BriskOS-1.0-amd64-ISO
+          path: |
+            BriskOS-1.0-amd64.iso
+            BriskOS-1.0-amd64.iso.sha256
+            BriskOS-1.0-amd64.iso.sha512
+            logs/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Create GitHub Release and Attach ISO
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == true)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            BriskOS-1.0-amd64.iso
+            BriskOS-1.0-amd64.iso.sha256
+            BriskOS-1.0-amd64.iso.sha512
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body: |
+            ## BriskOS 1.0 LTS (Feather) Official Release
+
+            Featherweight, modern stacking Wayland desktop Linux distribution based on **Debian 12 (Bookworm) amd64**.
+
+            ### Verification
+            Verify image integrity with SHA256:
+            ```bash
+            sha256sum -c BriskOS-1.0-amd64.iso.sha256
+            ```
+
+            ### System Specifications
+            - **Base**: Debian 12 (Bookworm) amd64 with `linux-image-amd64` and complete non-free firmware
+            - **Compositor**: Labwc (stacking Wayland compositor with Openbox bindings)
+            - **Desktop Shell**: Waybar bottom panel, Wofi floating app launcher, Foot terminal, Mako notifications
+            - **Idle Footprint**: < 512 MB idle RAM baseline with zstd zram compression
+            - **Windows Compatibility**: Wine 64-bit with 1-click `brisk-wine-runner` & `brisk-wine-config`
+            - **Office Typography**: 1:1 metric font substitutions (Carlito, Caladea, Liberation)
+            - **Over-The-Air Updater**: Serverless GitHub update checker and Zenity graphical updater frontend
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,6 +12,7 @@
 * **Phase 1**: Foundational infrastructure, Debian Bookworm package manifests, system identity branding, live-build chroot hooks, and the ISO build automation harness.
 * **Phase 2**: Complete Desktop Shell & UI Architecture featuring the Labwc Wayland compositor, Waybar bottom taskbar, Wofi Start Menu launcher, Foot terminal, Mako notifications, GTK theming, and aerodynamic vector artwork—strictly governed by antislop-ui design principles.
 * **Phase 3**: Seamless Windows Application Compatibility Layer (1-click runner, prefix management control panel), Microsoft Office metric-compatible font substitutions & subpixel rendering optimizations, and Serverless GitHub OTA Update Infrastructure (background daemon, Zenity GUI updater).
+* **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian Bookworm Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
 
 ---
 
@@ -19,6 +20,10 @@
 
 ```text
 d:/.Vibe Coder/OS/
+├── .github/
+│   └── workflows/
+│       └── build-iso.yml                    # Production GitHub Actions CI/CD workflow
+├── .gitignore                               # Git ignore rules (build trees, caches, ISOs, checksums)
 ├── auto/
 │   └── config                               # live-build automation configuration
 ├── config/
@@ -87,8 +92,10 @@ d:/.Vibe Coder/OS/
 │       ├── 02-office-productivity.list.chroot # LibreOffice/ONLYOFFICE notes, Microsoft fonts, Evince
 │       ├── 03-windows-compat.list.chroot    # Wine, Wine64, Winetricks, Cabextract, Zenity
 │       └── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
+├── Dockerfile                               # Containerized Debian Bookworm build environment
 ├── scripts/
-│   └── build-iso.sh                         # Automated build harness (lb clean, config, build, verify)
+│   ├── build-docker.sh                      # Cross-platform Docker build harness (Linux, Windows, WSL2)
+│   └── build-iso.sh                         # Hardened native ISO build harness with telemetry & checksums
 └── README.md                                # Project documentation & technical specifications
 ```
 
@@ -155,24 +162,7 @@ All chroot hooks execute during live image assembly with strict `set -euo pipefa
 
 ---
 
-### 4. Build System & Automation (`scripts/build-iso.sh`)
-
-The ISO build harness provides a turnkey build pipeline:
-
-```bash
-sudo ./scripts/build-iso.sh
-```
-
-**Pipeline Stages:**
-1. **Prerequisite Check**: Verifies root execution and existence of `live-build`, `debootstrap`, `xorriso`, and `squashfs-tools`.
-2. **Clean**: Executes `lb clean --purge` to ensure an idempotent, pristine build state.
-3. **Configure**: Invokes `auto/config` with Bookworm amd64 parameters, archive areas (`main contrib non-free non-free-firmware`), hybrid ISO mode, and UEFI/BIOS dual bootloaders.
-4. **Build**: Executes `lb build`, streaming output to both stdout and a timestamped log (`logs/build_<timestamp>.log`).
-5. **Artifact Verification**: Verifies creation of `BriskOS-1.0-amd64.hybrid.iso`, calculating image size and SHA-256 checksum.
-
----
-
-### 5. Desktop Shell & UI Architecture (`config/includes.chroot/etc/skel/.config/`)
+### 4. Desktop Shell & UI Architecture (`config/includes.chroot/etc/skel/.config/`)
 
 Phase 2 establishes a high-performance stacking Wayland environment built on top of `labwc` and wlroots protocols, delivering an elegant desktop workflow with minimal overhead.
 
@@ -205,9 +195,9 @@ Phase 2 establishes a high-performance stacking Wayland environment built on top
 
 ---
 
-### 6. Design System & Antislop-UI Compliance
+### 5. Design System & Antislop-UI Compliance
 
-All Phase 2 interface components strictly implement **antislop-ui** principles:
+All interface components strictly implement **antislop-ui** principles:
 * **Palette Restraint**: Focused palette anchored on deep slate backgrounds (`#0f172a`, `#1e293b`), crisp neutral typography (`#f8fafc`, `#94a3b8`), and a single purposeful accent—**Brisk Ice Cyan** (`#38bdf8`).
 * **Zero Slop Elements**: No generic AI purple-to-cyan or pink-to-blue gradients; no excessive pill-shaped buttons; no gratuitous full-screen glassmorphism or blur.
 * **Subtle Elevation**: Depth established with restrained 1px borders (`rgba(255, 255, 255, 0.08)`) and solid surface layers.
@@ -215,7 +205,7 @@ All Phase 2 interface components strictly implement **antislop-ui** principles:
 
 ---
 
-### 7. Windows Application Compatibility Suite (Phase 3)
+### 6. Windows Application Compatibility Suite (Phase 3)
 
 BriskOS delivers seamless, out-of-the-box Windows application execution on top of Wine 64-bit and custom orchestration utilities:
 
@@ -239,7 +229,7 @@ BriskOS delivers seamless, out-of-the-box Windows application execution on top o
 
 ---
 
-### 8. Microsoft Office Font Fidelity & Subpixel Rendering Engine (Phase 3)
+### 7. Microsoft Office Font Fidelity & Subpixel Rendering Engine (Phase 3)
 
 BriskOS addresses Linux-to-Windows office document incompatibility (unexpected pagination, wrapping discrepancies, and broken cell boundaries) through system-level Fontconfig XML configurations:
 
@@ -263,7 +253,7 @@ BriskOS addresses Linux-to-Windows office document incompatibility (unexpected p
 
 ---
 
-### 9. Serverless GitHub OTA Update Infrastructure (Phase 3)
+### 8. Serverless GitHub OTA Update Infrastructure (Phase 3)
 
 BriskOS features a lightweight, serverless Over-The-Air (OTA) update system powered by upstream GitHub Releases API and standard Debian package repositories:
 
@@ -289,6 +279,33 @@ BriskOS features a lightweight, serverless Over-The-Air (OTA) update system powe
 
 ---
 
+### 9. ISO Build Engine & CI/CD Infrastructure (Phase 4)
+
+Phase 4 establishes an industrial-grade, multi-tier build and release architecture for BriskOS:
+
+* **Hardened Native Build Harness (`scripts/build-iso.sh`)**:
+  * **Strict POSIX & Error Trapping**: Operates under `set -euo pipefail` with automated `ERR` trap capturing line-level failures and tailing the build log.
+  * **Pre-Flight Sanity Audit**: Verifies root permissions, tool presence (`lb`, `debootstrap`, `xorriso`, `mksquashfs`), free storage capacity ($\ge 8$ GB), package manifest validity, and recursive executable bits (`chmod +x`).
+  * **Dry-Run Audit Simulation (`--dry-run` / `-d`)**: Allows developers and CI environments on unprovisioned hosts to completely audit package lists, hooks, scripts, and disk readiness without root and without downloading Debian archives.
+  * **Colorized Telemetry & Log Rotation**: Real-time ANSI colored terminal output with automated rotation retaining the newest $N$ logs (`--keep-logs 10`).
+  * **Cryptographic Verification**: Generates `BriskOS-1.0-amd64.iso.sha256` and `BriskOS-1.0-amd64.iso.sha512` automatically upon build completion.
+
+* **Containerized Docker Build System (`Dockerfile` & `scripts/build-docker.sh`)**:
+  * **Hermetic Debian Bookworm Base**: Containerized around `debian:bookworm` to eliminate host contamination and host OS distribution incompatibilities.
+  * **Cross-Platform Compatibility**: Enables building the BriskOS ISO with a single command on Ubuntu, Fedora, Arch, Alpine, macOS (with Docker Desktop), or Windows 10/11 (with Docker Desktop or WSL2).
+  * **Privileged Loopback Execution**: Automatically configures `--privileged` loop device pass-through (`/dev/loop*`) and workspace volume mounting (`-v $(pwd):/build`).
+  * **Interactive Diagnostic Shell (`--shell` / `-s`)**: Enables dropping directly into the container root shell for live-build troubleshooting and environment inspection.
+
+* **Production GitHub Actions CI/CD Pipeline (`.github/workflows/build-iso.yml`)**:
+  * **Automated Triggering**: Runs on pushes to `main`/`master`, semantic version tags (`v*`), pull requests, and manual triggers (`workflow_dispatch`).
+  * **Runner Storage Optimization**: Automatically cleans pre-installed runner caches (.NET SDK, Android SDK, CodeQL, Haskell) to release $20+$ GB of disk space on `ubuntu-latest`.
+  * **Toolchain Installation**: Automatically installs `live-build`, `debootstrap`, `xorriso`, `squashfs-tools`, and dual EFI/BIOS bootloader tools.
+  * **Cryptographic Step Summary**: Publishes ISO file size, SHA256 checksum, and SHA512 hash directly into the GitHub Actions run summary.
+  * **Artifact Persistence**: Stores the generated ISO, checksums, and full build logs with 14-day retention.
+  * **Automated Tagged Releases**: Automatically creates GitHub Releases for `v*` tags with release notes, attaching the bootable ISO and verification checksums.
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -307,26 +324,103 @@ BriskOS features a lightweight, serverless Over-The-Air (OTA) update system powe
 | **Phase 3 Shell Script Syntax** | Strict `bash -n` validation and POSIX compliance across `brisk-wine-runner`, `brisk-wine-config`, `brisk-update-checker`, `brisk-updater-gui`, and Wine chroot hooks | **PASS** |
 | **Phase 3 Fontconfig XML** | ElementTree schema validation and DTD compliance across `30-brisk-ms-font-substitutions.conf`, `10-brisk-rendering.conf`, and `fonts.conf` | **PASS** |
 | **Phase 3 Desktop Entries** | Freedesktop specification compliance, standard Categories, Exec syntax, and MIME bindings for Wine and OTA launchers | **PASS** |
-| **Phase 3 Line Endings** | 100% pure Unix LF line endings (zero CRLF) verified across all Phase 3 scripts, configs, and manifests | **PASS** |
-| **File Formatting** | 100% pure Unix LF line endings across all configuration files, stylesheets, and scripts | **PASS** |
+| **Phase 4 Directory Structure** | `.github/workflows/build-iso.yml`, `Dockerfile`, `scripts/build-docker.sh`, enhanced `scripts/build-iso.sh` | **PASS** |
+| **Phase 4 Shell Script Strictness** | Strict `bash -n` static syntax validation on `build-iso.sh` and `build-docker.sh` | **PASS** |
+| **Phase 4 Pre-Flight Audit** | `build-iso.sh --dry-run` successfully audits configs, 5 manifests, 3 hooks, 4 binaries, and storage | **PASS** |
+| **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian Bookworm with non-interactive flags and complete toolchain | **PASS** |
+| **Phase 4 CI/CD Workflow Schema** | Valid GitHub Actions workflow with runner storage optimization, artifact upload, and softprops release step | **PASS** |
+| **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) verified across all files and scripts | **PASS** |
 
 ---
 
 ## Getting Started: Building the ISO
 
-### Prerequisites (Debian/Ubuntu Host)
+### Method A: Containerized Build with Docker (Recommended)
+
+The easiest, cross-platform method to build the ISO without installing live-build on your host:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y live-build debootstrap xorriso squashfs-tools
-```
-
-### Running the Build
-
-```bash
+# Clone the repository
 git clone https://github.com/briskos/briskos.git
 cd briskos
-sudo ./scripts/build-iso.sh
+
+# Build the ISO using the containerized harness
+./scripts/build-docker.sh
+
+# Rebuild container image before assembly (if Dockerfile modified)
+./scripts/build-docker.sh --build-image
+
+# Dry-run audit inside container environment
+./scripts/build-docker.sh --dry-run
+
+# Launch interactive debugging shell inside container
+./scripts/build-docker.sh --shell
 ```
 
-The resulting ISO will be generated in the root directory: `BriskOS-1.0-amd64.hybrid.iso`.
+---
+
+### Method B: Native Host Build (Debian 12 / Ubuntu 22.04+)
+
+If building directly on a Debian/Ubuntu system:
+
+#### 1. Install Prerequisites
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  live-build \
+  debootstrap \
+  xorriso \
+  squashfs-tools \
+  dosfstools \
+  mtools \
+  isolinux \
+  syslinux-common \
+  grub-pc-bin \
+  grub-efi-amd64-bin \
+  binutils
+```
+
+#### 2. Run Pre-Flight Validation
+```bash
+# Audit build configuration and prerequisites without building
+sudo ./scripts/build-iso.sh --dry-run
+```
+
+#### 3. Run Production Build
+```bash
+# Standard clean production build
+sudo ./scripts/build-iso.sh
+
+# Incremental build (skipping clean step for faster debugging)
+sudo ./scripts/build-iso.sh --no-clean
+
+# Custom output destination
+sudo ./scripts/build-iso.sh -o /var/iso-output
+```
+
+---
+
+### Method C: Automated Cloud Build with GitHub Actions
+
+1. Fork or push the repository to GitHub.
+2. Navigate to **Actions** $\rightarrow$ **Build BriskOS ISO** $\rightarrow$ **Run workflow**.
+3. Once completed, download `BriskOS-1.0-amd64.iso` and checksums directly from the **Artifacts** section.
+4. Pushing a version tag automatically publishes a GitHub Release with the ISO attached:
+   ```bash
+   git tag -a v1.0 -m "Release BriskOS 1.0 LTS"
+   git push origin v1.0
+   ```
+
+---
+
+## Verifying Image Integrity
+
+Always verify the integrity of the downloaded or built ISO image before flashing:
+
+```bash
+# Verify using SHA-256
+sha256sum -c BriskOS-1.0-amd64.iso.sha256
+
+# Verify using SHA-512
+sha512sum -c BriskOS-1.0-amd64.iso.sha512
+```

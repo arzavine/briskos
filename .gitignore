@@ -5,6 +5,8 @@ chroot/
 *.iso
 *.iso.zsync
 *.hybrid.iso
+*.sha256
+*.sha512
 *.log
 logs/
 
