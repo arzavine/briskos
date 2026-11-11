@@ -1,0 +1,24 @@
+# ==============================================================================
+# BriskOS Office & Productivity Suite
+# Minimal footprint productivity applications and font compatibility
+# ==============================================================================
+
+# Primary Office Suite (ONLYOFFICE Desktop Editors / LibreOffice Minimal Fallback)
+# Note: For production builds with ONLYOFFICE, configure upstream repository:
+# deb [signed-by=/usr/share/keyrings/onlyoffice.gpg] https://download.onlyoffice.com/repo/debian squeeze main
+# and uncomment 'onlyoffice-desktopeditors'.
+# Standard Debian 12 (Bookworm) repository fallback:
+# onlyoffice-desktopeditors
+libreoffice-writer
+libreoffice-calc
+
+# Microsoft-Compatible Metric Substitution Fonts
+fonts-crosextra-carlito
+fonts-crosextra-caladea
+
+# Microsoft TrueType Core Fonts (Arial, Times, Courier, etc. via contrib)
+ttf-mscorefonts-installer
+
+# Document & Image Viewers
+evince
+viewnior

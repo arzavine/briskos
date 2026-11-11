@@ -1,0 +1,16 @@
+# Debian live-build artifact directories
+.build/
+binary/
+chroot/
+*.iso
+*.iso.zsync
+*.hybrid.iso
+*.log
+logs/
+
+# Temporary and editor files
+*~
+*.swp
+*.bak
+.DS_Store
+Thumbs.db

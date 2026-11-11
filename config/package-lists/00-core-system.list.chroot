@@ -1,0 +1,42 @@
+# ==============================================================================
+# BriskOS Core System & Hardware Layer
+# Target Distribution: Debian 12 (Bookworm) amd64
+# ==============================================================================
+
+# Linux Kernel
+linux-image-amd64
+
+# Firmware (Non-free & Free hardware support)
+firmware-linux-free
+firmware-linux-nonfree
+firmware-misc-nonfree
+firmware-realtek
+firmware-iwlwifi
+firmware-atheros
+firmware-sof-signed
+
+# Init System & Device Management
+systemd
+systemd-sysv
+udev
+dbus
+
+# Audio Stack (PipeWire modern audio engine)
+pipewire
+pipewire-audio-client-libraries
+pipewire-pulse
+wireplumber
+
+# Network Management
+network-manager
+iwd
+
+# Base Administration & Localization
+sudo
+locales
+tzdata
+
+# Bootloader Support (UEFI + BIOS / Secure Boot)
+grub-efi-amd64-bin
+grub-pc-bin
+shim-signed

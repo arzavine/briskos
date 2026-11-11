@@ -1,0 +1,25 @@
+# ==============================================================================
+# BriskOS System Utilities & Diagnostics
+# Lightweight command-line and graphical administration tools
+# ==============================================================================
+
+# System Information & Monitoring
+# fastfetch is available from Debian 13 (Trixie) or upstream deb; neofetch is default in Bookworm
+neofetch
+htop
+btop
+
+# Network & Retrieval Tools
+curl
+wget
+git
+
+# Text Editors
+nano
+
+# Archive Management
+p7zip-full
+unrar-free
+
+# Audio Mixer & Routing Control (PulseAudio / PipeWire control GUI)
+pavucontrol

@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 02-setup-zram: Configuring zram-tools"
+echo "=========================================================="
+
+# 1. Ensure zram-tools is installed in the chroot
+if ! dpkg -s zram-tools &>/dev/null; then
+    echo "--> Installing zram-tools package..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq || true
+    apt-get install -y --no-install-recommends zram-tools
+fi
+
+# 2. Configure /etc/default/zramswap for ultra-lightweight RAM compression
+echo "--> Configuring /etc/default/zramswap (ALGO=zstd, PERCENT=50)..."
+mkdir -p /etc/default
+
+cat << 'EOF' > /etc/default/zramswap
+# BriskOS zram-tools configuration
+# Ultra-lightweight RAM compression for responsive multitasking
+
+# Compression algorithm selection
+# zstandard (zstd) provides the optimal balance of speed and high compression ratio
+ALGO=zstd
+
+# Specifies the percentage of total available RAM allocated to zram
+PERCENT=50
+
+# Priority for swap device
+PRIORITY=100
+EOF
+
+# 3. Enable the zramswap service
+echo "--> Enabling zramswap.service..."
+systemctl enable zramswap.service 2>/dev/null || true
+
+echo "--> zram configuration completed successfully."

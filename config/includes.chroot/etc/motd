@@ -1,0 +1,15 @@
+Welcome to BriskOS 1.0 LTS (Feather)
+
+System Profile:
+  * OS:            BriskOS 1.0 (Debian 12 Bookworm base)
+  * Kernel:        Linux amd64
+  * Desktop:       Labwc (Wayland) + Waybar
+  * Memory:        Featherweight tier (< 512 MB idle baseline)
+
+System Tools:
+  * neofetch       System hardware, kernel, and memory summary
+  * btop           Real-time CPU, memory, and process monitor
+  * nmtui          NetworkManager terminal interface
+
+Documentation:     https://github.com/briskos/briskos
+Support & Issues:  https://github.com/briskos/briskos/issues

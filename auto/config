@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+lb config noauto \
+    --mode debian \
+    --distribution bookworm \
+    --architectures amd64 \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --bootloader syslinux,grub-efi \
+    --binary-images iso-hybrid \
+    --image-name "BriskOS-1.0-amd64" \
+    --iso-volume "BriskOS_1.0" \
+    --iso-application "BriskOS 1.0 Live" \
+    --iso-publisher "BriskOS Project <https://github.com/briskos/briskos>" \
+    --memtest none \
+    --apt-indices false \
+    --apt-recommends true \
+    --security true \
+    --updates true \
+    --backports false \
+    --debian-installer false \
+    --win32-loader false \
+    "${@}"

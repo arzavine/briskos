@@ -1,0 +1,34 @@
+# ==============================================================================
+# BriskOS Wayland Desktop Environment
+# Minimal, performant stacking Wayland compositor stack
+# ==============================================================================
+
+# Compositor & Shell Components
+labwc
+waybar
+wofi
+foot
+
+# File Manager & Utilities
+thunar
+thunar-archive-plugin
+thunar-volman
+
+# Notification & Screen Management
+mako-notifier
+swayidle
+swaylock
+
+# Wayland Utilities (Clipboard & Screenshots)
+wl-clipboard
+grim
+slurp
+xwayland
+
+# Authentication Agent
+polkit-kde-agent-1
+
+# Appearance, Icons & Typography
+papirus-icon-theme
+fonts-inter
+fonts-noto-color-emoji

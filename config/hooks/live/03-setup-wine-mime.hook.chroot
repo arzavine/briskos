@@ -1,0 +1,96 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 03-setup-wine-mime: Configuring Wine MIME associations"
+echo "=========================================================="
+
+# 1. Create desktop entry for Wine Windows Program Loader
+mkdir -p /usr/share/applications
+
+cat << 'EOF' > /usr/share/applications/wine.desktop
+[Desktop Entry]
+Type=Application
+Name=Wine Windows Program Loader
+Comment=Run Windows applications on BriskOS
+Exec=wine start /unix %f
+MimeType=application/x-ms-dos-executable;application/x-msi;application/x-msdownload;application/x-wine-extension-exe;application/x-wine-extension-msi;application/x-ms-shortcut;
+Icon=wine
+NoDisplay=false
+StartupNotify=true
+Terminal=false
+Categories=Utility;Emulator;
+EOF
+
+# 2. Create MIME type definitions if not present
+mkdir -p /usr/share/mime/packages
+
+cat << 'EOF' > /usr/share/mime/packages/wine-custom.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-ms-dos-executable">
+    <comment>Windows Executable</comment>
+    <glob pattern="*.exe"/>
+    <glob pattern="*.EXE"/>
+  </mime-type>
+  <mime-type type="application/x-msi">
+    <comment>Windows Installer Package</comment>
+    <glob pattern="*.msi"/>
+    <glob pattern="*.MSI"/>
+  </mime-type>
+  <mime-type type="application/x-msdownload">
+    <comment>Windows Executable/DLL</comment>
+    <glob pattern="*.dll"/>
+    <glob pattern="*.scr"/>
+  </mime-type>
+</mime-info>
+EOF
+
+# 3. Set default application associations for Windows executable types in mimeapps.list
+MIME_DIRS=("/etc/xdg" "/usr/share/applications")
+
+for mdir in "${MIME_DIRS[@]}"; do
+    mkdir -p "$mdir"
+    MIME_FILE="$mdir/mimeapps.list"
+
+    if [ ! -f "$MIME_FILE" ]; then
+        touch "$MIME_FILE"
+    fi
+
+    for mime_type in \
+        "application/x-ms-dos-executable" \
+        "application/x-msi" \
+        "application/x-msdownload" \
+        "application/x-wine-extension-exe" \
+        "application/x-wine-extension-msi" \
+        "application/x-ms-shortcut"; do
+
+        # Ensure [Default Applications] section exists
+        if ! grep -q "^\[Default Applications\]" "$MIME_FILE"; then
+            echo -e "\n[Default Applications]" >> "$MIME_FILE"
+        fi
+
+        # Remove existing association if present, then add under [Default Applications]
+        sed -i "/^${mime_type}=/d" "$MIME_FILE"
+        sed -i "/^\[Default Applications\]/a ${mime_type}=wine.desktop" "$MIME_FILE"
+
+        # Ensure [Added Associations] section exists
+        if ! grep -q "^\[Added Associations\]" "$MIME_FILE"; then
+            echo -e "\n[Added Associations]" >> "$MIME_FILE"
+        fi
+
+        # Add under [Added Associations]
+        sed -i "/^\[Added Associations\]/a ${mime_type}=wine.desktop;" "$MIME_FILE"
+    done
+done
+
+# 4. Update desktop and MIME databases if commands are available
+if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database /usr/share/applications || true
+fi
+
+if command -v update-mime-database &>/dev/null; then
+    update-mime-database /usr/share/mime || true
+fi
+
+echo "--> Wine MIME associations registered successfully."

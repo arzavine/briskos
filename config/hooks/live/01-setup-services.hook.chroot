@@ -1,0 +1,69 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 01-setup-services: Configuring system/user services"
+echo "=========================================================="
+
+# 1. Enable core system services
+SYSTEM_SERVICES=(
+    "NetworkManager.service"
+    "bluetooth.service"
+    "systemd-timesyncd.service"
+)
+
+for svc in "${SYSTEM_SERVICES[@]}"; do
+    if systemctl list-unit-files "$svc" &>/dev/null || [ -f "/lib/systemd/system/$svc" ] || [ -f "/etc/systemd/system/$svc" ] || [ -f "/usr/lib/systemd/system/$svc" ]; then
+        echo "--> Enabling system service: $svc"
+        systemctl enable "$svc" 2>/dev/null || true
+    else
+        echo "--> Notice: $svc not present yet, skipping direct enable"
+    fi
+done
+
+# 2. Enable global user services for PipeWire audio server and WirePlumber session manager
+echo "--> Setting up PipeWire and WirePlumber global user service links..."
+
+USER_SERVICES=(
+    "pipewire.service"
+    "pipewire-pulse.service"
+    "wireplumber.service"
+)
+
+USER_SOCKETS=(
+    "pipewire.socket"
+    "pipewire-pulse.socket"
+)
+
+# Attempt systemctl --global enable (operates on /etc/systemd/user without needing active daemon)
+for usvc in "${USER_SERVICES[@]}"; do
+    systemctl --global enable "$usvc" 2>/dev/null || true
+done
+
+for usock in "${USER_SOCKETS[@]}"; do
+    systemctl --global enable "$usock" 2>/dev/null || true
+done
+
+# In addition, ensure explicit symlinks in /etc/systemd/user/ for guaranteed activation during user session
+mkdir -p /etc/systemd/user/default.target.wants
+mkdir -p /etc/systemd/user/sockets.target.wants
+
+for usvc in "${USER_SERVICES[@]}"; do
+    for dir in /usr/lib/systemd/user /lib/systemd/user; do
+        if [ -f "$dir/$usvc" ]; then
+            ln -sf "$dir/$usvc" "/etc/systemd/user/default.target.wants/$usvc"
+            break
+        fi
+    done
+done
+
+for usock in "${USER_SOCKETS[@]}"; do
+    for dir in /usr/lib/systemd/user /lib/systemd/user; do
+        if [ -f "$dir/$usock" ]; then
+            ln -sf "$dir/$usock" "/etc/systemd/user/sockets.target.wants/$usock"
+            break
+        fi
+    done
+done
+
+echo "--> Service configuration completed."

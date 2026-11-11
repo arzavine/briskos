@@ -1,0 +1,15 @@
+# ==============================================================================
+# BriskOS Windows Compatibility Layer
+# Wine binary loader, 64-bit architecture support, and runtime helpers
+# ==============================================================================
+
+# Wine Execution Environment
+wine
+wine64
+
+# Configuration & Extraction Tools
+winetricks
+cabextract
+
+# Dialog & GUI Prompting for Scripts
+zenity
