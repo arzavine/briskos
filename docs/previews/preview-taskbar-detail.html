@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BriskOS 1.0 LTS - Waybar Taskbar & System Modules Detail</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: #0f172a;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      position: relative;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Desktop Wallpaper SVG Layer
+     * ------------------------------------------------------------------------- */
+    .wallpaper-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      z-index: 0;
+      opacity: 0.85;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Architecture & Module Inspection Cards (Upper Section Showcase)
+     * ------------------------------------------------------------------------- */
+    .showcase-header {
+      position: absolute;
+      top: 48px;
+      left: 80px;
+      z-index: 20;
+    }
+    .showcase-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    .showcase-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .showcase-subtitle {
+      font-size: 15px;
+      color: #94a3b8;
+      max-width: 680px;
+      line-height: 1.5;
+    }
+
+    /* Metrics Grid */
+    .metrics-container {
+      position: absolute;
+      top: 170px;
+      left: 80px;
+      display: flex;
+      gap: 20px;
+      z-index: 20;
+    }
+    .metric-card {
+      width: 260px;
+      background-color: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .metric-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .metric-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: -0.02em;
+    }
+    .metric-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.35;
+    }
+
+    /* -------------------------------------------------------------------------
+     * High-Fidelity Popovers & Module Flyouts
+     * ------------------------------------------------------------------------- */
+    .flyout-card {
+      position: absolute;
+      background-color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(56, 189, 248, 0.2);
+      z-index: 200;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .flyout-header {
+      padding: 12px 16px;
+      background-color: #1e293b;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .flyout-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .flyout-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .flyout-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* 1. PipeWire Volume Flyout */
+    #flyout-volume {
+      bottom: 50px;
+      right: 560px;
+      width: 320px;
+    }
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .slider-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .slider-label {
+      color: #94a3b8;
+    }
+    .slider-pct {
+      color: #38bdf8;
+      font-weight: 700;
+    }
+    .slider-track {
+      width: 100%;
+      height: 8px;
+      background-color: #1e293b;
+      border-radius: 4px;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .slider-fill {
+      height: 100%;
+      width: 85%;
+      background-color: #38bdf8;
+      border-radius: 4px;
+      position: relative;
+    }
+    .slider-thumb {
+      position: absolute;
+      right: -6px;
+      top: -4px;
+      width: 16px;
+      height: 16px;
+      background-color: #f8fafc;
+      border: 2px solid #38bdf8;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+    .stream-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      background-color: #162032;
+    }
+    .stream-name {
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stream-vol {
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    /* 2. Wi-Fi Network Flyout */
+    #flyout-network {
+      bottom: 50px;
+      right: 380px;
+      width: 290px;
+    }
+    .net-detail-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .net-key {
+      color: #64748b;
+    }
+    .net-val {
+      color: #f8fafc;
+      font-weight: 500;
+    }
+    .net-val.cyan {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    /* 3. Calendar Clock Flyout */
+    #flyout-calendar {
+      bottom: 50px;
+      right: 60px;
+      width: 310px;
+    }
+    .calendar-clock-header {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .cal-digital-time {
+      font-size: 26px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: -0.02em;
+    }
+    .cal-digital-date {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .cal-month-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 4px 0 8px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      text-align: center;
+      font-size: 11.5px;
+    }
+    .cal-weekday {
+      color: #38bdf8;
+      font-weight: 700;
+      padding: 4px 0;
+    }
+    .cal-day {
+      padding: 6px 0;
+      border-radius: 4px;
+      color: #94a3b8;
+    }
+    .cal-day.other-month {
+      color: #475569;
+    }
+    .cal-day.today {
+      background-color: #38bdf8;
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    /* 4. Hover Tooltip for Start Menu */
+    .tooltip-popup {
+      position: absolute;
+      bottom: 48px;
+      left: 12px;
+      background-color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #f8fafc;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      z-index: 150;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Connector Pointer Lines */
+    .pointer-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #38bdf8;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Waybar Bottom Taskbar (40px)
+     * Matches config/includes.chroot/etc/skel/.config/waybar/style.css
+     * ------------------------------------------------------------------------- */
+    #waybar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 1920px;
+      height: 40px;
+      background-color: #0f172a;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px;
+      z-index: 1000;
+    }
+
+    .modules-left {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+    /* Hovered Start Menu Button */
+    #custom-startmenu {
+      height: 32px;
+      background-color: #38bdf8;
+      color: #0f172a;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 0 14px;
+      margin: 4px 4px 4px 6px;
+      border: 1px solid #38bdf8;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+    }
+
+    .pinned-launcher {
+      width: 32px;
+      height: 32px;
+      background-color: transparent;
+      color: #94a3b8;
+      margin: 4px 2px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pinned-launcher.hovered {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .modules-center {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+    #taskbar {
+      display: flex;
+      align-items: center;
+      margin: 4px 6px;
+      gap: 6px;
+    }
+    .taskbar-button {
+      height: 32px;
+      border-radius: 6px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .taskbar-button.active {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-bottom: 2px solid #38bdf8;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    .taskbar-button.inactive {
+      background-color: rgba(30, 41, 59, 0.5);
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .modules-right {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+    .tray-module {
+      height: 32px;
+      background-color: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0 10px;
+      margin: 4px 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+    .tray-module.active-popover {
+      border: 1px solid #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+    }
+    .tray-module.charging {
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+    .tray-module#clock {
+      font-weight: 600;
+      padding: 0 12px;
+    }
+    #custom-power {
+      height: 32px;
+      background-color: #1e293b;
+      color: #f43f5e;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0 12px;
+      margin: 4px 6px 4px 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =========================================================================
+   * Desktop Wallpaper Background (Full 1920x1080 SVG from brisk-default.svg)
+   * ========================================================================= -->
+  <div class="wallpaper-container">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <defs>
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#0b0f19"/><stop offset="45%" stop-color="#0f172a"/><stop offset="100%" stop-color="#080c14"/>
+        </linearGradient>
+        <radialGradient id="ambientGlow" cx="68%" cy="46%" r="55%" fx="68%" fy="46%">
+          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.07"/><stop offset="40%" stop-color="#0ea5e9" stop-opacity="0.025"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="subtleGlowLeft" cx="22%" cy="65%" r="40%">
+          <stop offset="0%" stop-color="#1e293b" stop-opacity="0.4"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="facetGrad1" x1="15%" y1="20%" x2="85%" y2="80%">
+          <stop offset="0%" stop-color="#1e293b" stop-opacity="0.6"/><stop offset="50%" stop-color="#162236" stop-opacity="0.4"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0.2"/>
+        </linearGradient>
+        <linearGradient id="crestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#0284c7"/>
+        </linearGradient>
+        <pattern id="gridPattern" width="80" height="80" patternUnits="userSpaceOnUse">
+          <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.03"/>
+          <circle cx="80" cy="80" r="1" fill="#38bdf8" fill-opacity="0.07"/>
+        </pattern>
+        <radialGradient id="gridMaskGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/><stop offset="60%" stop-color="#ffffff" stop-opacity="0.25"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+        </radialGradient>
+        <mask id="gridMask"><rect width="1920" height="1080" fill="url(#gridMaskGrad)"/></mask>
+      </defs>
+
+      <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+      <rect width="1920" height="1080" fill="url(#ambientGlow)"/>
+      <rect width="1920" height="1080" fill="url(#subtleGlowLeft)"/>
+      <rect width="1920" height="1080" fill="url(#gridPattern)" mask="url(#gridMask)"/>
+      <polygon points="-80,640 680,480 1480,540 2040,320 2040,680 1340,780 520,760 -80,920" fill="url(#facetGrad1)" stroke="#38bdf8" stroke-opacity="0.08" stroke-width="1"/>
+
+      <g stroke="#94a3b8" stroke-opacity="0.2" stroke-width="1" fill="none">
+        <path d="M 64 88 L 64 64 L 88 64"/><path d="M 1832 64 L 1856 64 L 1856 88"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- =========================================================================
+   * Upper Section: Showcase Header & Architecture Inspection Cards
+   * ========================================================================= -->
+  <div class="showcase-header">
+    <div class="showcase-tag">Waybar 0.9.x Shell Integration</div>
+    <h1 class="showcase-title">Aerodynamic Bottom Taskbar & Indicators</h1>
+    <p class="showcase-subtitle">
+      Zero-bloat system panel adhering strictly to the BriskOS Antislop UI system. Features 40px ergonomic height, 1px subtle elevation borders, Ice Cyan active indicators, and native Wayland protocol integration.
+    </p>
+  </div>
+
+  <div class="metrics-container">
+    <div class="metric-card">
+      <span class="metric-label">Memory Footprint</span>
+      <span class="metric-value">11.4 MiB</span>
+      <span class="metric-desc">Ultra-lean Wayland panel process RSS under normal interactive workload.</span>
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-label">Wayland Protocol</span>
+      <span class="metric-value">wlr-toplevel</span>
+      <span class="metric-desc">Native compositor window tracking and window activation without Xwayland.</span>
+    </div>
+
+    <div class="metric-card">
+      <span class="metric-label">Audio & Session</span>
+      <span class="metric-value">PipeWire 0.3</span>
+      <span class="metric-desc">Low-latency pulse audio sink integration with smooth volume popovers.</span>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+   * Interactive Popovers (High-Fidelity Detail Mockups)
+   * ========================================================================= -->
+
+  <!-- 1. Volume Slider Popup (PipeWire) -->
+  <div class="flyout-card" id="flyout-volume">
+    <div class="flyout-header">
+      <div class="flyout-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" stroke-linecap="round"/>
+        </svg>
+        <span>Audio Output</span>
+      </div>
+      <span class="flyout-badge">PipeWire</span>
+    </div>
+
+    <div class="flyout-body">
+      <div class="slider-container">
+        <div class="slider-info">
+          <span class="slider-label">Master Volume (ALC256)</span>
+          <span class="slider-pct">85%</span>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill">
+            <div class="slider-thumb"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Active Audio Streams</div>
+      
+      <div class="stream-row">
+        <span class="stream-name">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          Firefox Browser
+        </span>
+        <span class="stream-vol">100%</span>
+      </div>
+
+      <div class="stream-row">
+        <span class="stream-name">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="3"/><polyline points="6 9 10 12 6 15"/></svg>
+          Foot Terminal (Bell)
+        </span>
+        <span class="stream-vol">65%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Wi-Fi Status Flyout -->
+  <div class="flyout-card" id="flyout-network">
+    <div class="flyout-header">
+      <div class="flyout-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" stroke-linecap="round"/>
+        </svg>
+        <span>Wi-Fi Connection</span>
+      </div>
+      <span class="flyout-badge" style="color:#10b981; border-color:rgba(16,185,129,0.3); background:rgba(16,185,129,0.12)">Online</span>
+    </div>
+
+    <div class="flyout-body">
+      <div class="net-detail-row">
+        <span class="net-key">SSID:</span>
+        <span class="net-val cyan">Brisk-Mesh</span>
+      </div>
+      <div class="net-detail-row">
+        <span class="net-key">Signal Quality:</span>
+        <span class="net-val">92% (-42 dBm)</span>
+      </div>
+      <div class="net-detail-row">
+        <span class="net-key">Standard / Band:</span>
+        <span class="net-val">Wi-Fi 6 (5 GHz)</span>
+      </div>
+      <div class="net-detail-row">
+        <span class="net-key">IPv4 Address:</span>
+        <span class="net-val">192.168.1.145/24</span>
+      </div>
+      <div class="net-detail-row">
+        <span class="net-key">Gateway / DNS:</span>
+        <span class="net-val">192.168.1.1 (1.1.1.1)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Calendar Clock Popup -->
+  <div class="flyout-card" id="flyout-calendar">
+    <div class="flyout-header">
+      <div class="flyout-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>Date & Calendar</span>
+      </div>
+      <span class="flyout-badge">System Time</span>
+    </div>
+
+    <div class="flyout-body">
+      <div class="calendar-clock-header">
+        <span class="cal-digital-time">14:30:45</span>
+        <span class="cal-digital-date">Wednesday, 11 November 2026</span>
+      </div>
+
+      <div class="cal-month-nav">
+        <span>November 2026</span>
+        <span style="color:#64748b; font-size:12px;">UTC+0</span>
+      </div>
+
+      <div class="cal-grid">
+        <div class="cal-weekday">Mo</div>
+        <div class="cal-weekday">Tu</div>
+        <div class="cal-weekday">We</div>
+        <div class="cal-weekday">Th</div>
+        <div class="cal-weekday">Fr</div>
+        <div class="cal-weekday">Sa</div>
+        <div class="cal-weekday">Su</div>
+
+        <div class="cal-day other-month">26</div>
+        <div class="cal-day other-month">27</div>
+        <div class="cal-day other-month">28</div>
+        <div class="cal-day other-month">29</div>
+        <div class="cal-day other-month">30</div>
+        <div class="cal-day other-month">31</div>
+        <div class="cal-day">1</div>
+
+        <div class="cal-day">2</div>
+        <div class="cal-day">3</div>
+        <div class="cal-day">4</div>
+        <div class="cal-day">5</div>
+        <div class="cal-day">6</div>
+        <div class="cal-day">7</div>
+        <div class="cal-day">8</div>
+
+        <div class="cal-day">9</div>
+        <div class="cal-day">10</div>
+        <div class="cal-day today">11</div>
+        <div class="cal-day">12</div>
+        <div class="cal-day">13</div>
+        <div class="cal-day">14</div>
+        <div class="cal-day">15</div>
+
+        <div class="cal-day">16</div>
+        <div class="cal-day">17</div>
+        <div class="cal-day">18</div>
+        <div class="cal-day">19</div>
+        <div class="cal-day">20</div>
+        <div class="cal-day">21</div>
+        <div class="cal-day">22</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tooltip for Start Menu button -->
+  <div class="tooltip-popup">
+    <div class="pointer-dot"></div>
+    <span>Applications & Search (Super)</span>
+  </div>
+
+  <!-- =========================================================================
+   * Waybar Bottom Taskbar (40px)
+   * ========================================================================= -->
+  <div id="waybar">
+    <!-- Left: Start Menu & Quick Launchers -->
+    <div class="modules-left">
+      <div id="custom-startmenu">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <polygon points="0,4 20,11 13,14 0,9" fill="#0f172a"/>
+          <polygon points="6,13 23,19 17,21 6,17" fill="#0f172a" fill-opacity="0.8"/>
+          <polygon points="12,21 26,25 21,27 12,24" fill="#0f172a" fill-opacity="0.6"/>
+        </svg>
+        <span>❖ Brisk</span>
+      </div>
+
+      <div class="pinned-launcher hovered" title="Web Browser (Firefox)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="10" stroke="#38bdf8"/>
+          <line x1="2" y1="12" x2="22" y2="12" stroke="#38bdf8"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="#38bdf8"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="File Manager (Thunar)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+          <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
+          <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="Terminal (Foot)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+          <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+          <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="Productivity Suite (ONLYOFFICE)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="3" fill="#f97316"/>
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Center: Window Taskbar with Ice Cyan Active Indicator -->
+    <div class="modules-center">
+      <div id="taskbar">
+        <!-- Active Taskbar Pill with Ice Cyan Indicator -->
+        <div class="taskbar-button active">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+            <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+            <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>foot: user@briskos:~</span>
+        </div>
+
+        <!-- Inactive Taskbar Pill -->
+        <div class="taskbar-button inactive">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+            <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
+            <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
+          </svg>
+          <span>Documents — File Manager</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Active System Tray Modules -->
+    <div class="modules-right">
+      <!-- Volume module (active popover open) -->
+      <div class="tray-module active-popover" id="pulseaudio">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" stroke-linecap="round"/>
+        </svg>
+        <span>85%</span>
+      </div>
+
+      <!-- Network module (active popover open) -->
+      <div class="tray-module active-popover" id="network">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" stroke-linecap="round"/>
+        </svg>
+        <span>📶 Brisk-Mesh (92%)</span>
+      </div>
+
+      <!-- Battery module -->
+      <div class="tray-module charging" id="battery">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="7" width="17" height="10" rx="2" stroke="currentColor"/>
+          <line x1="21" y1="11" x2="21" y2="13" stroke="currentColor" stroke-linecap="round"/>
+          <rect x="4" y="9" width="13" height="6" rx="1" fill="#38bdf8"/>
+        </svg>
+        <span>⚡ 98%</span>
+      </div>
+
+      <!-- Clock module (active popover open) -->
+      <div class="tray-module active-popover" id="clock">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>14:30</span>
+      </div>
+
+      <!-- Power module -->
+      <div id="custom-power" title="Power Off / Exit Session">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#f43f5e" stroke-width="2.2" stroke-linecap="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+          <line x1="12" y1="2" x2="12" y2="12"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
