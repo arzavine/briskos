@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install BriskOS 1.0 LTS
+GenericName=System Installer
+Comment=Install BriskOS permanently to your SSD or hard drive
+Exec=brisk-installer
+Icon=calamares
+Terminal=false
+StartupNotify=true
+Categories=System;Utility;
+Keywords=installer;calamares;system;install;setup;

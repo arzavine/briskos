@@ -2,6 +2,9 @@
 <openbox_menu>
   <menu id="root-menu" label="BriskOS Menu">
     <!-- Quick Launch Applications -->
+    <item label="Install BriskOS 1.0 LTS" icon="calamares">
+      <action name="Execute" command="brisk-installer" />
+    </item>
     <item label="Terminal" icon="utilities-terminal">
       <action name="Execute" command="foot" />
     </item>
@@ -49,6 +52,9 @@
       </item>
       <item label="Software Updater" icon="system-software-update">
         <action name="Execute" command="/usr/local/bin/brisk-updater-gui" />
+      </item>
+      <item label="Install BriskOS" icon="calamares">
+        <action name="Execute" command="brisk-installer" />
       </item>
       <separator />
       <item label="Reload Compositor Config" icon="view-refresh">

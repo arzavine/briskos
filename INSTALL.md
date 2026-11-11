@@ -22,9 +22,20 @@ This manual provides authoritative, step-by-step instructions for flashing, boot
    - [4.3 Wi-Fi & Network Configuration](#43-wi-fi--network-configuration)
    - [4.4 Audio Playback & Volume Control](#44-audio-playback--volume-control)
 5. [Installation Walkthrough](#5-installation-walkthrough)
-   - [5.1 Strategy A: Clean Drive Installation](#51-strategy-a-clean-drive-installation)
-   - [5.2 Strategy B: Dual-Boot alongside Windows](#52-strategy-b-dual-boot-alongside-windows)
-   - [5.3 Disk Partition Layout Reference](#53-disk-partition-layout-reference)
+   - [5.1 Launching the Calamares Installer](#51-launching-the-calamares-installer)
+   - [5.2 Method 2: Permanent Installation via Calamares GUI Installer](#52-method-2-permanent-installation-via-calamares-gui-installer)
+     - [Step 1: Welcome & Pre-Flight Validation](#step-1-welcome--pre-flight-validation)
+     - [Step 2: Regional Localization (Locale & Timezone)](#step-2-regional-localization-locale--timezone)
+     - [Step 3: Keyboard Model & Keymap Selection](#step-3-keyboard-model--keymap-selection)
+     - [Step 4: Disk Partitioning (Erase Disk vs Manual Partitioning)](#step-4-disk-partitioning-erase-disk-vs-manual-partitioning)
+     - [Step 5: User Account & Authentication Setup](#step-5-user-account--authentication-setup)
+     - [Step 6: Installation Summary Review](#step-6-installation-summary-review)
+     - [Step 7: Automated Installation & Unsquashfs Extraction](#step-7-automated-installation--unsquashfs-extraction)
+     - [Step 8: Bootloader Deployment & Live Package Removal](#step-8-bootloader-deployment--live-package-removal)
+     - [Step 9: Reboot into BriskOS](#step-9-reboot-into-briskos)
+   - [5.3 Strategy A: Clean Drive Installation](#53-strategy-a-clean-drive-installation)
+   - [5.4 Strategy B: Dual-Boot alongside Windows](#54-strategy-b-dual-boot-alongside-windows)
+   - [5.5 Disk Partition Layout Reference](#55-disk-partition-layout-reference)
 6. [Post-Installation Configuration](#6-post-installation-configuration)
    - [6.1 Package Repository & System Updates](#61-package-repository--system-updates)
    - [6.2 Windows Compatibility Layer (Wine)](#62-windows-compatibility-layer-wine)
@@ -278,7 +289,138 @@ BriskOS routes system audio through **PipeWire** and the **WirePlumber** session
 
 ## 5. Installation Walkthrough
 
-### 5.1 Strategy A: Clean Drive Installation
+BriskOS 1.0 LTS is provided as a dual-purpose hybrid live ISO image:
+- **Method 1: Live In-Memory Session**: Boot directly into the full Labwc desktop environment without writing a single byte to storage. Ideal for hardware auditing, internet browsing, file recovery, and testing.
+- **Method 2: Permanent Installation via Calamares GUI Installer**: Deploy BriskOS permanently to internal NVMe, SSD, or HDD storage using the built-in graphical installer.
+
+---
+
+### 5.1 Launching the Calamares Installer
+
+In the live session, launch the installer through any of the following convenient access points:
+
+1. **Waybar Bottom Taskbar**: Click the dedicated `💿 Install` quick-action button in the left taskbar island.
+2. **Desktop Shortcut**: Double-click the **Install BriskOS 1.0 LTS** shortcut icon on the desktop.
+3. **Labwc Context Menu**: Right-click anywhere on the desktop wallpaper and select **Install BriskOS 1.0 LTS** from the top of the menu (or navigate to *System -> Install BriskOS*).
+4. **Wofi Start Menu**: Press `Super` (Windows key) or click the `❖` start button, type `Install`, and press Enter.
+5. **Terminal CLI**: Open Foot terminal (`Super + Enter`) and execute:
+   ```bash
+   brisk-installer
+   ```
+
+> [!NOTE]
+> The `brisk-installer` wrapper script verifies live session environment status, configures Qt Wayland compatibility (`QT_QPA_PLATFORM="wayland;xcb"`), acquires polkit permissions passwordlessly via `/etc/polkit-1/rules.d/49-nopasswd_calamares.rules`, and streams real-time debug telemetry to `/var/log/calamares-installer.log`.
+
+---
+
+### 5.2 Method 2: Permanent Installation via Calamares GUI Installer
+
+The Calamares installation wizard provides a streamlined, step-by-step graphical workflow tailored with BriskOS "Night Glass" styling (#0b1120 Midnight Slate background, #38bdf8 Ice Cyan highlights).
+
+```text
++---------------------------------------------------------------------------------+
+|  BriskOS 1.0 LTS Installer (Calamares)                                    [X]   |
++-------------------+-------------------------------------------------------------+
+|  1. Welcome       |  Welcome to BriskOS 1.0 LTS (Feather)                       |
+|  2. Location      |                                                             |
+|  3. Keyboard      |  [✓] At least 1.0 GB RAM available                          |
+|  4. Partitions    |  [✓] At least 10.0 GB storage available                     |
+|  5. Users         |  [✓] Connected to power source                              |
+|  6. Summary       |  [✓] Connected to internet (Optional)                       |
+|  7. Install       |                                                             |
+|  8. Finish        |  Language: [ English (United States)                ▼ ]     |
++-------------------+-------------------------------------------------------------+
+|                                                      [ Back ] [ Next ] [ Cancel]|
++---------------------------------------------------------------------------------+
+```
+
+#### Step 1: Welcome & Pre-Flight Validation
+* **Language Selection**: Select your desired installation and system language from the dropdown menu.
+* **Pre-Flight System Requirements Audit**: The installer automatically queries hardware specifications:
+  * **Memory**: Minimum 1.0 GB RAM required (2.0+ GB recommended).
+  * **Storage**: Minimum 10.0 GB free disk space required (20.0+ GB recommended).
+  * **Power Supply**: Connected to external AC power or battery above critical levels.
+  * **Internet Connectivity**: Confirms network reachability (optional, offline installation is 100% supported).
+* Click **Next** to proceed once hardware checks pass.
+
+#### Step 2: Regional Localization (Locale & Timezone)
+* **Timezone Map**: Click on your geographical location on the interactive world map or select your Region and Zone from the dropdown lists (e.g., *America / New_York*, *Europe / London*, *Asia / Tokyo*).
+* **System Locale**: Formats dates, numbers, currency, and paper standards to match your regional preferences.
+* Click **Next**.
+
+#### Step 3: Keyboard Model & Keymap Selection
+* **Keyboard Model**: Select standard generic PC (105-key) or your specific laptop layout.
+* **Keymap**: Choose your preferred keyboard language variant (e.g., *English (US)*, *German*, *French AZERTY*, *Spanish*).
+* **Interactive Test Input Box**: Type in the test box to confirm special characters, symbols, and alt-key combinations work properly before applying.
+* Click **Next**.
+
+#### Step 4: Disk Partitioning (Erase Disk vs Manual Partitioning)
+Calamares offers two primary storage strategies:
+
+##### Option 4A: Erase Disk (Automated Clean Installation)
+* Ideal for dedicating the entire drive to BriskOS.
+* **Select Storage Device**: Choose the target disk drive from the dropdown selector (e.g. `/dev/nvme0n1` or `/dev/sda`).
+* **Partition Scheme**: The installer automatically creates an optimal GPT partition layout with an EFI System Partition (512 MB, FAT32 mounted at `/boot/efi`) and a primary root partition formatted in `ext4` mounted at `/`.
+* **Swap Options**: Select **No Swap** (recommended, as BriskOS automatically deploys high-speed in-RAM `zram-tools` compressed swap) or **Swap to file**.
+* **Encrypt System** *(Optional)*: Check **Encrypt system** and specify a passphrase if LUKS full-disk encryption is required.
+
+##### Option 4B: Manual Partitioning (Dual-Boot & Custom Partition Tables)
+* Recommended for dual-booting alongside Windows or preserving existing home partitions.
+* Displays current disk partitions, partition flags, filesystems, and unallocated free space.
+* **For UEFI Systems**:
+  1. Highlight the existing **EFI System Partition** (FAT32, typically 100 MB - 512 MB). Click **Edit**, set Mount Point to `/boot/efi`, keep existing filesystem intact, and ensure **Format** is **unchecked**.
+  2. Select the unallocated **Free Space** (minimum 15 GB, recommended 25+ GB). Click **Create**:
+     - *Size*: Remaining free space
+     - *File system*: `ext4`
+     - *Mount point*: `/`
+     - *Flags*: `root`
+* **For Legacy BIOS (MBR) Systems**:
+  1. Select unallocated space and create an `ext4` partition mounted at `/` with the `boot` flag active.
+* Click **Next**.
+
+#### Step 5: User Account & Authentication Setup
+* **Real Name & Username**: Enter your name (e.g., `Brisk User`) and preferred login username (e.g., `brisk`).
+* **Computer Name (Hostname)**: Specify the network hostname for this machine (defaults to `briskos`).
+* **User Password**: Enter a strong password for user authentication.
+* **Administrative Privileges**:
+  * Check **"Log in automatically without asking for the password"** if desired for personal machines.
+  * Check **"Use the same password for the administrator (root) account"** (recommended for standard desktop sudo workflow).
+* Click **Next**.
+
+#### Step 6: Installation Summary Review
+* A comprehensive summary page reviews all impending actions:
+  * Target installation disk and partition table modifications.
+  * Formatted partitions and mount point bindings.
+  * Selected timezone, language, and keyboard layouts.
+  * User account configuration.
+* > [!WARNING]
+  > No changes are written to disk until this step is confirmed. Clicking **Install** begins partition formatting and data extraction. Ensure any critical data on target partitions is backed up.
+* Click **Install**, then click **Install Now** on the confirmation dialog.
+
+#### Step 7: Automated Installation & Unsquashfs Extraction
+* Calamares initiates the execution phase:
+  1. **Partitioning & Formatting**: Creates partition tables and formats filesystems.
+  2. **Filesystem Unpacking (`unpackfs`)**: Extracts `/run/live/medium/live/filesystem.squashfs` directly to the target root filesystem.
+  3. **Machine ID & FSTAB Generation**: Sets unique `/etc/machine-id` and mounts drives by UUID in `/etc/fstab`.
+  4. **Localization & Users**: Generates requested locales, timezone symlinks, and user accounts.
+  5. **Network Configuration**: Copies live network configurations to the target system.
+
+#### Step 8: Bootloader Deployment & Live Package Removal
+* **GRUB Bootloader Installation**: Calamares runs `grub-install` to register BriskOS in the UEFI boot firmware (`/boot/efi/EFI/briskos/grubx64.efi`) and executes `os-prober` to detect existing OS installations (such as Windows Boot Manager).
+* **Automated Live Cleanup (`packages`)**: Automatically uninstalls live session tools and installers from the target disk:
+  * Removes: `calamares`, `calamares-settings-debian`, `live-tools`, `live-boot`, `live-config`, `live-config-systemd`.
+  * Preserves full offline standalone integrity for the installed system.
+* Unmounts all target partitions safely.
+
+#### Step 9: Reboot into BriskOS
+* The **Finished** screen confirms successful installation: *"BriskOS 1.0 LTS (Feather) has been installed on your computer."*
+* Check the **Restart now** checkbox and click **Done**.
+* When the computer reboots, remove the USB installation drive.
+* Enjoy your permanent, blazing-fast installation of BriskOS 1.0 LTS!
+
+---
+
+### 5.3 Strategy A: Clean Drive Installation
 
 This procedure allocates the entire storage drive exclusively to BriskOS, wiping all existing data and operating systems.
 
@@ -303,7 +445,7 @@ Target Disk Layout (Clean Install, GPT):
 
 ---
 
-### 5.2 Strategy B: Dual-Boot alongside Windows
+### 5.4 Strategy B: Dual-Boot alongside Windows
 
 Dual-booting allows you to select either Windows 10/11 or BriskOS from the GRUB boot menu upon powering on your PC.
 
@@ -338,7 +480,7 @@ Dual-Boot Disk Layout (Preserving Windows, GPT):
 
 ---
 
-### 5.3 Disk Partition Layout Reference
+### 5.5 Disk Partition Layout Reference
 
 | Partition | Recommended Size | Filesystem | Mount Point | Flags / Purpose |
 | :--- | :--- | :--- | :--- | :--- |

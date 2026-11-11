@@ -14,6 +14,7 @@
     // Module Layout - 3-Island Architecture
     "modules-left": [
         "custom/startmenu",
+        "custom/installer",
         "custom/browser",
         "custom/files",
         "custom/terminal",
@@ -38,6 +39,11 @@
         "tooltip-format": "Applications & Search (Super)",
         "on-click": "pkill -x wofi || wofi --show drun",
         "escape": true
+    },
+    "custom/installer": {
+        "format": "💿 Install",
+        "tooltip-format": "Install BriskOS 1.0 LTS permanently to disk",
+        "on-click": "brisk-installer"
     },
     "custom/browser": {
         "format": "🌐",

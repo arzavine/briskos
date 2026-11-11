@@ -1,0 +1,8 @@
+# ==============================================================================
+# BriskOS Calamares Installer Sudo Privileges
+# Allows live session user and sudo members to execute Calamares installer
+# ==============================================================================
+
+live ALL=(ALL) NOPASSWD: /usr/bin/calamares, /usr/local/bin/calamares, /usr/local/bin/brisk-installer
+user ALL=(ALL) NOPASSWD: /usr/bin/calamares, /usr/local/bin/calamares, /usr/local/bin/brisk-installer
+%sudo ALL=(ALL) NOPASSWD: /usr/bin/calamares, /usr/local/bin/calamares, /usr/local/bin/brisk-installer

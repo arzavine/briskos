@@ -1,0 +1,24 @@
+/* ==============================================================================
+ * BriskOS Calamares Installer Passwordless Execution Policy
+ * ==============================================================================
+ * Allows live session users ('live', 'user', or members of sudo group)
+ * to run Calamares system installer without root password prompts.
+ * ============================================================================== */
+
+polkit.addRule(function(action, subject) {
+    if ((action.id === "org.debian.pkexec.calamares" ||
+         action.id === "com.github.calamares.calamares" ||
+         action.id === "io.calamares.calamares" ||
+         action.id === "org.calamares.calamares" ||
+         (action.id === "org.freedesktop.policykit.exec" &&
+          (action.lookup("program") === "/usr/bin/calamares" ||
+           action.lookup("program") === "/usr/local/bin/calamares" ||
+           action.lookup("program") === "/usr/local/bin/brisk-installer"))) &&
+        (subject.isInGroup("sudo") ||
+         subject.isInGroup("live") ||
+         subject.isInGroup("wheel") ||
+         subject.user === "live" ||
+         subject.user === "user")) {
+        return polkit.Result.YES;
+    }
+});

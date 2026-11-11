@@ -1,0 +1,70 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Live Hook: 04-setup-installer
+# Configures executable permissions, polkit policies, sudo privileges,
+# and desktop launcher integration for the Calamares graphical installer.
+# ==============================================================================
+
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 04-setup-installer: Configuring Calamares installer"
+echo "=========================================================="
+
+# 1. Installer wrapper binary permissions
+if [ -f "/usr/local/bin/brisk-installer" ]; then
+    echo "--> Setting executable permissions on /usr/local/bin/brisk-installer"
+    chmod 755 /usr/local/bin/brisk-installer
+    chown root:root /usr/local/bin/brisk-installer
+fi
+
+# 2. Desktop launcher and skel permissions
+echo "--> Configuring desktop launcher icons..."
+mkdir -p /etc/skel/Desktop
+mkdir -p /usr/share/applications
+
+if [ -f "/usr/share/applications/install-briskos.desktop" ]; then
+    chmod 755 /usr/share/applications/install-briskos.desktop
+    chown root:root /usr/share/applications/install-briskos.desktop
+fi
+
+if [ -f "/etc/skel/Desktop/install-briskos.desktop" ]; then
+    chmod 755 /etc/skel/Desktop/install-briskos.desktop
+elif [ -f "/usr/share/applications/install-briskos.desktop" ]; then
+    cp -a /usr/share/applications/install-briskos.desktop /etc/skel/Desktop/install-briskos.desktop
+    chmod 755 /etc/skel/Desktop/install-briskos.desktop
+fi
+
+# 3. Polkit rule permissions (must be owned by root, mode 644 or 440)
+echo "--> Configuring Polkit rules for passwordless installer..."
+if [ -f "/etc/polkit-1/rules.d/49-nopasswd_calamares.rules" ]; then
+    chmod 644 /etc/polkit-1/rules.d/49-nopasswd_calamares.rules
+    chown root:root /etc/polkit-1/rules.d/49-nopasswd_calamares.rules
+fi
+
+# 4. Sudoers permissions (must be mode 440, owned by root:root)
+echo "--> Configuring Sudoers privileges for Calamares..."
+if [ -f "/etc/sudoers.d/calamares" ]; then
+    chown root:root /etc/sudoers.d/calamares
+    chmod 440 /etc/sudoers.d/calamares
+    if command -v visudo >/dev/null 2>&1; then
+        echo "--> Validating /etc/sudoers.d/calamares syntax..."
+        visudo -cf /etc/sudoers.d/calamares || {
+            echo "ERROR: Syntax error in /etc/sudoers.d/calamares" >&2
+            exit 1
+        }
+    fi
+fi
+
+# 5. Initialize log file with open write permissions for live session logging
+echo "--> Initializing installer log file..."
+mkdir -p /var/log
+touch /var/log/calamares-installer.log
+chmod 666 /var/log/calamares-installer.log
+
+# 6. Refresh desktop database
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications || true
+fi
+
+echo "--> [BriskOS Hook] 04-setup-installer complete."

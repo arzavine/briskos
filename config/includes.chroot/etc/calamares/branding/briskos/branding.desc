@@ -1,0 +1,39 @@
+# BriskOS Calamares Branding Descriptor
+# Configures product strings, artwork assets, window geometry, and Night Glass styling
+---
+componentName: briskos
+welcomeStyle: widget
+welcomeExpandingStyle: normal
+windowExpanding: normal
+windowSize: 850px, 580px
+windowPlacement: center
+
+strings:
+    productName:         "BriskOS"
+    version:             "1.0 LTS (Feather)"
+    shortVersion:        "1.0"
+    versionedName:       "BriskOS 1.0 LTS"
+    shortVersionedName:  "BriskOS 1.0"
+    bootloaderEntryName: "BriskOS"
+    productUrl:          "https://github.com/briskos/briskos"
+    supportUrl:          "https://github.com/briskos/briskos"
+    knownIssuesUrl:      "https://github.com/briskos/briskos/issues"
+    releaseNotesUrl:     "https://github.com/briskos/briskos"
+    donateUrl:           "https://github.com/briskos/briskos"
+
+images:
+    productLogo:         "logo.svg"
+    productIcon:         "logo.svg"
+    productWelcome:      "welcome.svg"
+
+slideshow:               []
+
+style:
+   SidebarBackground:    "#0f172a"
+   SidebarText:          "#94a3b8"
+   SidebarTextSelect:    "#f8fafc"
+   SidebarTextHighlight: "#38bdf8"
+
+navigation: widget
+
+stylesheet: stylesheet.qss

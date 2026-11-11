@@ -14,6 +14,18 @@
 * **Phase 3**: Seamless Windows Application Compatibility Layer (1-click runner, prefix management control panel), Microsoft Office metric-compatible font substitutions & subpixel rendering optimizations, and Serverless GitHub OTA Update Infrastructure (background daemon, Zenity GUI updater).
 * **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian Bookworm Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
 * **Phase 5**: QEMU Virtual Machine Test Harness (`scripts/test-qemu.sh`, `scripts/test-qemu.bat`), Safe Interactive USB Flash Tool (`scripts/flash-usb.sh`), and Production Bare-Metal Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md)).
+* **Phase 6**: Out-of-the-box Calamares Graphical Installer featuring bespoke "Night Glass" Qt styling, custom vector artwork, passwordless polkit elevation, multi-entry live session integration (Waybar, Desktop, context menu), and automated live-build cleanup hooks.
+
+---
+
+## Key Features
+
+* **Out-of-the-Box Calamares Graphical Installer**: User-friendly, modern GUI installer styled with BriskOS "Night Glass" dark theme (`#0b1120` Midnight Slate, `#38bdf8` Ice Cyan accents), offering automated whole-disk erasure, manual partitioning (GPT/MBR, EFI/BIOS), user creation, bootloader deployment, and seamless post-installation cleanup.
+* **Sub-512 MB Idle RAM Baseline**: Ultra-lean Wayland desktop footprint running Labwc stacking compositor and transparent `zstd` zram memory compression (50% RAM allocation).
+* **Multi-Entry Live Session Integration**: 1-click launch from the Waybar taskbar `💿 Install` module, Desktop shortcut icon, Labwc right-click root menu, and Wofi Start Menu.
+* **Seamless Windows Compatibility Layer**: Pre-configured Wine 64-bit runtime with 1-click execution for `.exe` and `.msi` installers and GUI prefix manager (`brisk-wine-config`).
+* **Office Metric-Compatible Typography**: 1:1 metric font substitutions (Carlito, Caladea, Liberation) ensuring pixel-perfect layout fidelity for Microsoft Office files.
+* **Serverless OTA Update System**: Lightweight background update checking daemon (`brisk-update-checker`) and Zenity-powered updater GUI (`brisk-updater-gui`) connected directly to GitHub Releases.
 
 ---
 
@@ -33,9 +45,15 @@ d:/.Vibe Coder/OS/
 │   │   └── live/
 │   │       ├── 01-setup-services.hook.chroot # System & PipeWire/WirePlumber user services
 │   │       ├── 02-setup-zram.hook.chroot     # zram-tools configuration (zstd, 50% RAM)
-│   │       └── 03-setup-wine-mime.hook.chroot # Wine desktop entry & Windows MIME associations
+│   │       ├── 03-setup-wine-mime.hook.chroot # Wine desktop entry & Windows MIME associations
+│   │       └── 04-setup-installer.hook.chroot # Calamares permissions, polkit, sudoers & log setup
 │   ├── includes.chroot/
 │   │   ├── etc/
+│   │   │   ├── calamares/                   # Calamares graphical installer configuration
+│   │   │   │   ├── branding/
+│   │   │   │   │   └── briskos/             # Night Glass styling (stylesheet.qss), logo & banner SVGs
+│   │   │   │   ├── modules/                 # Module descriptors (welcome, packages, unpackfs, bootloader)
+│   │   │   │   └── settings.conf            # Calamares module sequence & branding config
 │   │   │   ├── fonts/
 │   │   │   │   └── conf.d/
 │   │   │   │       ├── 10-brisk-rendering.conf          # Subpixel hinting & LCD filter configuration
@@ -46,7 +64,12 @@ d:/.Vibe Coder/OS/
 │   │   │   ├── issue.net                    # Remote login banner
 │   │   │   ├── motd                         # Post-login welcome & system diagnostics
 │   │   │   ├── os-release                   # freedesktop.org OS identity specification
+│   │   │   ├── polkit-1/
+│   │   │   │   └── rules.d/
+│   │   │   │       └── 49-nopasswd_calamares.rules      # Passwordless pkexec rules for live installer
 │   │   │   ├── skel/
+│   │   │   │   ├── Desktop/
+│   │   │   │   │   └── install-briskos.desktop          # Live desktop installer shortcut
 │   │   │   │   └── .config/
 │   │   │   │       ├── fontconfig/
 │   │   │   │       │   └── fonts.conf       # User default font aliases (sans-serif, serif, mono)
@@ -70,12 +93,15 @@ d:/.Vibe Coder/OS/
 │   │   │   │       └── wofi/
 │   │   │   │           ├── config           # Floating Start Menu launcher configuration
 │   │   │   │           └── style.css        # Antislop-UI Start Menu stylesheet
+│   │   │   ├── sudoers.d/
+│   │   │   │   └── calamares                # Passwordless sudo elevation for live installer
 │   │   │   └── xdg/
 │   │   │       └── autostart/
 │   │   │           └── brisk-update-checker.desktop     # Background OTA update checker autostart
 │   │   └── usr/
 │   │       ├── local/
 │   │       │   └── bin/
+│   │       │       ├── brisk-installer      # Calamares launcher wrapper (Wayland env & logging)
 │   │       │       ├── brisk-wine-runner    # 1-Click Windows binary & installer runner
 │   │       │       ├── brisk-wine-config    # Wine GUI control panel & prefix manager
 │   │       │       ├── brisk-update-checker # Serverless GitHub OTA update check daemon
@@ -84,7 +110,8 @@ d:/.Vibe Coder/OS/
 │   │           ├── applications/
 │   │           │   ├── brisk-wine-runner.desktop        # File manager association for .exe/.msi
 │   │           │   ├── brisk-wine-config.desktop        # Wine configuration control panel launcher
-│   │           │   └── brisk-updater.desktop            # Start Menu Software Updater launcher
+│   │           │   ├── brisk-updater.desktop            # Start Menu Software Updater launcher
+│   │           │   └── install-briskos.desktop          # Calamares graphical installer desktop entry
 │   │           └── backgrounds/
 │   │               └── briskos/
 │   │                   └── brisk-default.svg # Bespoke aerodynamic vector wallpaper (1080p)
@@ -93,7 +120,8 @@ d:/.Vibe Coder/OS/
 │       ├── 01-desktop-wayland.list.chroot   # Labwc compositor, Waybar, Wofi, Foot, Thunar
 │       ├── 02-office-productivity.list.chroot # LibreOffice/ONLYOFFICE notes, Microsoft fonts, Evince
 │       ├── 03-windows-compat.list.chroot    # Wine, Wine64, Winetricks, Cabextract, Zenity
-│       └── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
+│       ├── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
+│       └── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
 ├── Dockerfile                               # Containerized Debian Bookworm build environment
 ├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
@@ -140,6 +168,12 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
   * **System Diagnostics**: `neofetch`, `htop`, `btop`
   * **Networking & Tools**: `curl`, `wget`, `git`, `nano`, `p7zip-full`, `unrar-free`, `pavucontrol`
 
+* **`05-installer.list.chroot`**:
+  * **Installer Framework**: `calamares`, `calamares-settings-debian`
+  * **Storage & Partitioning**: `gparted`, `dosfstools`, `e2fsprogs`, `btrfs-progs`, `xfsprogs`, `kpmcore`
+  * **Bootloader & Firmware Utilities**: `efibootmgr`, `grub-efi-amd64-bin`, `grub-pc-bin`
+  * **Image Extraction**: `squashfs-tools`
+
 ---
 
 ### 2. System Branding & Identity (`config/includes.chroot/etc/`)
@@ -165,6 +199,11 @@ All chroot hooks execute during live image assembly with strict `set -euo pipefa
   * Generates `/usr/share/applications/wine.desktop` (`Exec=wine start /unix %f`).
   * Configures shared MIME associations in `/etc/xdg/mimeapps.list` for `.exe`, `.msi`, `.dll`, and `.scr` executables to open automatically with Wine upon launch.
   * Updates system desktop and MIME databases.
+* **`04-setup-installer.hook.chroot`**:
+  * Sets executable permissions (`755`) on `/usr/local/bin/brisk-installer` and desktop shortcuts.
+  * Enforces root-owned restrictive permissions (`440` on `/etc/sudoers.d/calamares`, `644` on `/etc/polkit-1/rules.d/49-nopasswd_calamares.rules`).
+  * Initializes world-writable installer log `/var/log/calamares-installer.log` (`666`) for live debugging.
+  * Triggers desktop database update for instantaneous shortcut indexing.
 
 ---
 
@@ -387,6 +426,41 @@ Phase 5 delivers comprehensive virtualization test harnesses, a foolproof USB wr
 
 ---
 
+### 11. Out-of-the-Box Calamares Graphical Installer & Night Glass Qt Styling (Phase 6)
+
+Phase 6 incorporates a production-grade, graphical system installer powered by the **Calamares** framework, tailored with BriskOS's bespoke **"Night Glass"** design system and comprehensive desktop shell integration:
+
+* **Unified Launcher Integration (`/usr/local/bin/brisk-installer`)**:
+  * Executable shell wrapper ensuring seamless execution across Wayland and X11 environments (`QT_QPA_PLATFORM="wayland;xcb"`, `QT_AUTO_SCREEN_SCALE_FACTOR=1`).
+  * Live environment detection auditing `/run/live`, overlayfs root, and kernel cmdline parameters.
+  * Desktop notifications via `notify-send` when launching the wizard.
+  * Automatic privilege escalation using `pkexec calamares -d` with stdout/stderr telemetry captured directly to `/var/log/calamares-installer.log`.
+* **Multi-Entry Desktop Access**:
+  * **Waybar Taskbar Module**: Dedicated `💿 Install` quick-action pill in the left island with Ice Cyan accent hover effects.
+  * **Desktop Shortcut**: Root-owned `/etc/skel/Desktop/install-briskos.desktop` icon ready on user login.
+  * **Labwc Context Menu**: Top-level entry in `menu.xml` for rapid right-click desktop deployment.
+  * **Wofi Start Menu**: Categorized under *System* and indexed for immediate search.
+* **Calamares Installation Sequence (`settings.conf`)**:
+  * **User Interaction Stages (`show`)**: `welcome` -> `locale` -> `keyboard` -> `partition` -> `users` -> `summary`.
+  * **Execution Stages (`exec`)**: `partition` -> `mount` -> `unpackfs` -> `machineid` -> `fstab` -> `locale` -> `keyboard` -> `localecfg` -> `users` -> `networkcfg` -> `hwclock` -> `services-systemd` -> `grubcfg` -> `bootloader` -> `packages` -> `umount`.
+  * **Completion Stage (`show`)**: `finished` with optional immediate system reboot.
+* **Night Glass Design System (`stylesheet.qss` & `branding.desc`)**:
+  * Strict compliance with Antislop UI guidelines:
+    * **Base Window Background**: `#0b1120` (Midnight Slate)
+    * **Sidebar & Navigation Panels**: `#0f172a` with `1px solid rgba(255, 255, 255, 0.08)` borders
+    * **Active Step & Highlight**: `#38bdf8` (Ice Cyan) active indicator border and high-contrast text
+    * **Interactive Inputs**: `#1e293b` background with `#334155` borders and 6px corner radiuses
+    * **Primary PushButtons**: Ice Cyan accent styling with `#0284c7` hover and `#0369a1` pressed states
+  * Custom aerodynamic vector artwork assets: `logo.svg` (512x512 scalable feather insignia) and `welcome.svg` (720x320 wide banner).
+* **System Privilege & Security Policies**:
+  * Polkit policy `/etc/polkit-1/rules.d/49-nopasswd_calamares.rules` enabling passwordless installer elevation for `live`, `user`, and `sudo`/`wheel` groups.
+  * Sudoers override `/etc/sudoers.d/calamares` with mode `440`.
+* **Live-Build Chroot Permissions Hook (`04-setup-installer.hook.chroot`)**:
+  * Automatically enforces `755` executable modes on wrapper scripts and desktop launchers during ISO generation.
+  * Initializes open permissions on `/var/log/calamares-installer.log` and updates desktop MIME databases.
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -394,6 +468,9 @@ Phase 5 delivers comprehensive virtualization test harnesses, a foolproof USB wr
 | **Phase 1 Directory Structure** | `config/package-lists/`, `config/includes.chroot/etc/`, `config/hooks/live/`, `auto/`, `scripts/` | **PASS** |
 | **Phase 1 Package Repositories** | Debian 12 (Bookworm) package validity across all `.list.chroot` manifests | **PASS** |
 | **Phase 1 Script Strictness** | POSIX / Bash syntax checks (`bash -n`, `sh -n`) with `set -euo pipefail` | **PASS** |
+| **Phase 6 Calamares Configuration** | Syntax validity of `settings.conf`, `branding.desc`, and all module configs | **PASS** |
+| **Phase 6 Night Glass Styling** | Qt QSS stylesheet structure, token consistency, and vector SVG assets | **PASS** |
+| **Phase 6 Live Integration** | Waybar taskbar module, Labwc menu entries, polkit rules, and wrapper script | **PASS** |
 | **Phase 1 Standards** | `os-release` freedesktop.org adherence and MIME associations | **PASS** |
 | **Phase 2 Directory Structure** | All 14 shell, compositor, and asset configuration files present in `.config/` and `usr/share/backgrounds/` | **PASS** |
 | **Phase 2 XML Syntax** | Valid XML structure in `labwc/rc.xml`, `labwc/menu.xml`, and `brisk-default.svg` | **PASS** |

@@ -1,0 +1,68 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Calamares Installer Launcher Wrapper
+# ==============================================================================
+# Handles environment checks, Wayland/Qt session configuration, polkit elevation,
+# and structured debug logging to /var/log/calamares-installer.log.
+# ==============================================================================
+
+set -eo pipefail
+
+LOG_FILE="/var/log/calamares-installer.log"
+
+# Function to ensure log file exists and is writable
+ensure_logfile() {
+    if [ ! -f "$LOG_FILE" ]; then
+        touch "$LOG_FILE" 2>/dev/null || sudo touch "$LOG_FILE" 2>/dev/null || true
+        chmod 666 "$LOG_FILE" 2>/dev/null || sudo chmod 666 "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+ensure_logfile
+
+log_msg() {
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "$msg"
+    echo "$msg" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+log_msg "Starting BriskOS Calamares Installer wrapper..."
+
+# 1. Environment check: determine if running in a live session or as root
+IS_LIVE=false
+if [ -d "/run/live" ] || [ -d "/run/live/medium" ] || grep -qs "boot=live" /proc/cmdline || [ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = "overlay" ]; then
+    IS_LIVE=true
+    log_msg "Live environment detected."
+else
+    log_msg "Notice: Not running from standard live media path."
+    if [ "$(id -u)" -ne 0 ]; then
+        log_msg "Running as regular user in non-live system. Proceeding with caution."
+    else
+        log_msg "Running as root user."
+    fi
+fi
+
+# 2. Display and Qt environment variables for Wayland with XCB fallback
+export QT_QPA_PLATFORM="wayland;xcb"
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+export GDK_BACKEND="wayland,x11"
+log_msg "Configured QT_QPA_PLATFORM=${QT_QPA_PLATFORM}, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-none}, DISPLAY=${DISPLAY:-none}"
+
+# Visual desktop notification if available
+if command -v notify-send >/dev/null 2>&1; then
+    notify-send -i calamares "BriskOS Installer" "Launching system installer..." 2>/dev/null || true
+fi
+
+# 3. Execute Calamares with proper elevation and debugging flags
+EXIT_CODE=0
+if [ "$(id -u)" -eq 0 ]; then
+    log_msg "Executing: calamares -d directly as root"
+    calamares -d 2>&1 | tee -a "$LOG_FILE"
+    EXIT_CODE=${PIPESTATUS[0]}
+else
+    log_msg "Executing: pkexec calamares -d with polkit privilege escalation"
+    pkexec calamares -d 2>&1 | tee -a "$LOG_FILE"
+    EXIT_CODE=${PIPESTATUS[0]}
+fi
+
+log_msg "Calamares installer terminated with exit code: ${EXIT_CODE}"
+exit "$EXIT_CODE"
