@@ -1,0 +1,150 @@
+{
+    // =========================================================================
+    // BriskOS Waybar Bottom Taskbar Configuration
+    // Antislop UI: Slate & Ice Cyan aerodynamic system shell
+    // =========================================================================
+    "layer": "top",
+    "position": "bottom",
+    "height": 40,
+    "spacing": 4,
+
+    // Module Layout
+    "modules-left": [
+        "custom/startmenu",
+        "custom/browser",
+        "custom/files",
+        "custom/terminal",
+        "custom/office"
+    ],
+    "modules-center": [
+        "wlr/taskbar"
+    ],
+    "modules-right": [
+        "pulseaudio",
+        "network",
+        "battery",
+        "clock",
+        "custom/power"
+    ],
+
+    // -------------------------------------------------------------------------
+    // Modules Left: Application Launcher & Quick-Launch Pinned Items
+    // -------------------------------------------------------------------------
+    "custom/startmenu": {
+        "format": "❖ Brisk",
+        "tooltip-format": "Applications & Search (Super)",
+        "on-click": "pkill -x wofi || wofi --show drun",
+        "escape": true
+    },
+    "custom/browser": {
+        "format": "🌐",
+        "tooltip-format": "Web Browser",
+        "on-click": "x-www-browser",
+        "escape": true
+    },
+    "custom/files": {
+        "format": "📁",
+        "tooltip-format": "File Manager (Thunar)",
+        "on-click": "thunar",
+        "escape": true
+    },
+    "custom/terminal": {
+        "format": "💻",
+        "tooltip-format": "Terminal (Foot)",
+        "on-click": "foot",
+        "escape": true
+    },
+    "custom/office": {
+        "format": "📝",
+        "tooltip-format": "Productivity Suite (Office)",
+        "on-click": "onlyoffice-desktopeditors || libreoffice",
+        "escape": true
+    },
+
+    // -------------------------------------------------------------------------
+    // Modules Center: Window Taskbar
+    // -------------------------------------------------------------------------
+    "wlr/taskbar": {
+        "format": "{icon} {title}",
+        "icon-size": 18,
+        "icon-theme": "Papirus-Dark",
+        "spacing": 4,
+        "tooltip-format": "{title}",
+        "on-click": "activate",
+        "on-click-middle": "close",
+        "ignore-list": [
+            "wofi"
+        ],
+        "max-length": 30
+    },
+
+    // -------------------------------------------------------------------------
+    // Modules Right: System Indicators & Session Controls
+    // -------------------------------------------------------------------------
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-bluetooth": "󰂯 {icon} {volume}%",
+        "format-bluetooth-muted": "󰂯 🔇 {volume}%",
+        "format-muted": "🔇 {volume}%",
+        "format-icons": {
+            "headphone": "🎧",
+            "hands-free": "🎧",
+            "headset": "🎧",
+            "phone": "📞",
+            "portable": "📱",
+            "car": "🚗",
+            "default": ["🔈", "🔉", "🔊"]
+        },
+        "scroll-step": 5,
+        "on-click": "pavucontrol",
+        "tooltip-format": "Volume: {volume}% ({desc})"
+    },
+    "network": {
+        "interval": 5,
+        "format-wifi": "📶 {essid} ({signalStrength}%)",
+        "format-ethernet": "🖧 {ipaddr}",
+        "format-linked": "🖧 {ifname} (No IP)",
+        "format-disconnected": "⚠️ Offline",
+        "tooltip-format": "Interface: {ifname}\nIP: {ipaddr}/{cidr}\nGateway: {gwaddr}",
+        "tooltip-format-wifi": "SSID: {essid} ({signalStrength}%)\nIP: {ipaddr}/{cidr}",
+        "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}/{cidr}",
+        "tooltip-format-disconnected": "Network Disconnected",
+        "on-click": "foot -e nmtui"
+    },
+    "battery": {
+        "states": {
+            "good": 95,
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon} {capacity}%",
+        "format-charging": "⚡ {capacity}%",
+        "format-plugged": "🔌 {capacity}%",
+        "format-alt": "{icon} {time}",
+        "format-icons": ["🪫", "🔋", "🔋"],
+        "tooltip-format": "Battery: {capacity}% ({time})"
+    },
+    "clock": {
+        "interval": 1,
+        "format": "{:%H:%M}",
+        "format-alt": "{:%A, %d %B %Y  %H:%M:%S}",
+        "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>",
+        "calendar": {
+            "mode": "month",
+            "mode-mon-col": 3,
+            "on-scroll": 1,
+            "format": {
+                "months": "<span color='#f8fafc'><b>{}</b></span>",
+                "days": "<span color='#94a3b8'><b>{}</b></span>",
+                "weekdays": "<span color='#38bdf8'><b>{}</b></span>",
+                "today": "<span color='#0f172a' background='#38bdf8'><b><u>{}</u></b></span>"
+            }
+        }
+    },
+    "custom/power": {
+        "format": "⏻",
+        "tooltip-format": "Power Off / Exit Session",
+        "on-click": "labwc --exit",
+        "escape": true
+    }
+}

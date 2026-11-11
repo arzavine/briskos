@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu>
+  <menu id="root-menu" label="BriskOS Menu">
+    <!-- Quick Launch Applications -->
+    <item label="Terminal" icon="utilities-terminal">
+      <action name="Execute" command="foot" />
+    </item>
+    <item label="File Manager" icon="system-file-manager">
+      <action name="Execute" command="thunar" />
+    </item>
+    <item label="Web Browser" icon="internet-web-browser">
+      <action name="Execute" command="x-www-browser" />
+    </item>
+
+    <separator />
+
+    <!-- Productivity & Office Applications -->
+    <menu id="productivity-menu" label="Productivity" icon="applications-office">
+      <item label="ONLYOFFICE Desktop Editors" icon="onlyoffice-desktopeditors">
+        <action name="Execute" command="onlyoffice-desktopeditors" />
+      </item>
+      <item label="Document Editor (LibreOffice Writer)" icon="libreoffice-writer">
+        <action name="Execute" command="libreoffice --writer" />
+      </item>
+      <item label="Spreadsheet (LibreOffice Calc)" icon="libreoffice-calc">
+        <action name="Execute" command="libreoffice --calc" />
+      </item>
+      <item label="PDF Viewer (Evince)" icon="org.gnome.Evince">
+        <action name="Execute" command="evince" />
+      </item>
+      <item label="Image Viewer (Viewnior)" icon="viewnior">
+        <action name="Execute" command="viewnior" />
+      </item>
+    </menu>
+
+    <!-- System Utilities -->
+    <menu id="system-menu" label="System" icon="applications-system">
+      <item label="Task Manager (htop)" icon="utilities-system-monitor">
+        <action name="Execute" command="foot -T 'Task Manager' htop" />
+      </item>
+      <item label="System Resource Monitor (btop)" icon="utilities-system-monitor">
+        <action name="Execute" command="foot -T 'Resource Monitor' btop" />
+      </item>
+      <item label="Audio Volume Control" icon="multimedia-volume-control">
+        <action name="Execute" command="pavucontrol" />
+      </item>
+      <separator />
+      <item label="Reload Compositor Config" icon="view-refresh">
+        <action name="Reconfigure" />
+      </item>
+    </menu>
+
+    <separator />
+
+    <!-- Session Management -->
+    <item label="Lock Screen" icon="system-lock-screen">
+      <action name="Execute" command="swaylock -f -c 0f172a" />
+    </item>
+    <item label="Log Out" icon="system-log-out">
+      <action name="Exit" />
+    </item>
+    <item label="Restart System" icon="system-reboot">
+      <action name="Execute" command="systemctl reboot" />
+    </item>
+    <item label="Power Off" icon="system-shutdown">
+      <action name="Execute" command="systemctl poweroff" />
+    </item>
+  </menu>
+</openbox_menu>

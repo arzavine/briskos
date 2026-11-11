@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19"/>
+      <stop offset="45%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#080c14"/>
+    </linearGradient>
+
+    <radialGradient id="ambientGlow" cx="68%" cy="46%" r="55%" fx="68%" fy="46%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.07"/>
+      <stop offset="40%" stop-color="#0ea5e9" stop-opacity="0.025"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="subtleGlowLeft" cx="22%" cy="65%" r="40%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Aerodynamic Facet Gradients -->
+    <linearGradient id="facetGrad1" x1="15%" y1="20%" x2="85%" y2="80%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#162236" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <linearGradient id="facetGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.5"/>
+      <stop offset="50%" stop-color="#1e293b" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#334155" stop-opacity="0.15"/>
+    </linearGradient>
+
+    <linearGradient id="facetGrad3" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#0a0f1d" stop-opacity="0.7"/>
+      <stop offset="60%" stop-color="#131e33" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#1e293b" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- Cyan Accent Gradients -->
+    <linearGradient id="cyanStrokeGrad" x1="0%" y1="30%" x2="100%" y2="70%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0"/>
+      <stop offset="25%" stop-color="#38bdf8" stop-opacity="0.4"/>
+      <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.9"/>
+      <stop offset="85%" stop-color="#0ea5e9" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="cyanStreamGrad2" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.05"/>
+      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.5"/>
+      <stop offset="75%" stop-color="#22d3ee" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <linearGradient id="crestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+
+    <!-- Precision Grid Pattern -->
+    <pattern id="gridPattern" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.03"/>
+      <circle cx="80" cy="80" r="1" fill="#38bdf8" fill-opacity="0.07"/>
+    </pattern>
+
+    <!-- Grid Vignette Mask -->
+    <radialGradient id="gridMaskGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="gridMask">
+      <rect width="1920" height="1080" fill="url(#gridMaskGrad)"/>
+    </mask>
+  </defs>
+
+  <!-- 1. Background Base -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+  <rect width="1920" height="1080" fill="url(#ambientGlow)"/>
+  <rect width="1920" height="1080" fill="url(#subtleGlowLeft)"/>
+
+  <!-- 2. Subtle Precision Grid Layer -->
+  <rect width="1920" height="1080" fill="url(#gridPattern)" mask="url(#gridMask)"/>
+
+  <!-- 3. Aerodynamic Structural Facets (Deep Slate Flow Surfaces) -->
+  <!-- Lower Deep Polygon -->
+  <polygon points="-100,1080 480,720 1280,860 2020,1080" fill="url(#facetGrad3)"/>
+
+  <!-- Main Sweeping Supersonic Wedge -->
+  <polygon points="-80,640 680,480 1480,540 2040,320 2040,680 1340,780 520,760 -80,920" 
+           fill="url(#facetGrad1)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.08" 
+           stroke-width="1"/>
+
+  <!-- Upper Flow Facet -->
+  <polygon points="120,0 880,320 1680,260 2040,120 2040,0" 
+           fill="url(#facetGrad2)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.06" 
+           stroke-width="1"/>
+
+  <!-- Intersecting Airfoil Chord -->
+  <path d="M -60 420 Q 520 460 1080 380 T 2020 240 L 1980 340 Q 1120 480 480 540 Z" 
+        fill="#1e293b" 
+        fill-opacity="0.25" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.12" 
+        stroke-width="1"/>
+
+  <!-- 4. Aerodynamic Streamlines & Vector Accent Lines -->
+  <!-- Primary High-Velocity Chord Line -->
+  <path d="M -40 510 C 440 550, 820 430, 1360 410 S 1820 320, 2000 290" 
+        fill="none" 
+        stroke="url(#cyanStrokeGrad)" 
+        stroke-width="2.5" 
+        stroke-linecap="round"/>
+
+  <!-- Secondary Parallel Streamline (Dashed Velocity Trail) -->
+  <path d="M 0 540 C 460 580, 840 460, 1380 438 S 1840 346, 1980 320" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.45" 
+        stroke-width="1.2" 
+        stroke-dasharray="140 12 40 12 80 12" 
+        stroke-linecap="round"/>
+
+  <!-- Tertiary Laminar Flow Boundary -->
+  <path d="M 160 620 C 620 640, 980 520, 1460 490 S 1880 410, 2020 390" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.2" 
+        stroke-width="1" 
+        stroke-dasharray="6 6"/>
+
+  <!-- High Elevation Trailing Line -->
+  <path d="M 280 260 C 720 320, 1140 240, 1620 210 S 1940 160, 2040 140" 
+        fill="none" 
+        stroke="url(#cyanStreamGrad2)" 
+        stroke-width="1.5" 
+        stroke-linecap="round"/>
+
+  <!-- Transonic Shock Vector -->
+  <line x1="680" y1="480" x2="1480" y2="540" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.3" 
+        stroke-width="1.2"/>
+
+  <line x1="880" y1="320" x2="1680" y2="260" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.18" 
+        stroke-width="1"/>
+
+  <!-- Precision Measurement / Construction Marks -->
+  <g stroke="#38bdf8" stroke-opacity="0.3" stroke-width="1">
+    <!-- Tick vectors -->
+    <line x1="960" y1="410" x2="960" y2="426"/>
+    <line x1="1120" y1="400" x2="1120" y2="416"/>
+    <line x1="1280" y1="404" x2="1280" y2="420"/>
+    <line x1="1440" y1="420" x2="1440" y2="436"/>
+  </g>
+
+  <!-- Precision Geometric Coordinate Nodes -->
+  <g>
+    <!-- Node 1: Apex Intersection -->
+    <circle cx="1360" cy="410" r="3" fill="#38bdf8"/>
+    <circle cx="1360" cy="410" r="8" fill="none" stroke="#38bdf8" stroke-opacity="0.4" stroke-width="1"/>
+
+    <!-- Node 2: Compression Point -->
+    <circle cx="820" cy="470" r="2.5" fill="#38bdf8" fill-opacity="0.8"/>
+    <circle cx="820" cy="470" r="6" fill="none" stroke="#38bdf8" stroke-opacity="0.3" stroke-width="1"/>
+
+    <!-- Node 3: Flow Departure -->
+    <circle cx="1680" cy="350" r="2.5" fill="#38bdf8" fill-opacity="0.7"/>
+
+    <!-- Node 4: Leading Vector Anchor -->
+    <polygon points="680,477 683,480 680,483 677,480" fill="#38bdf8"/>
+  </g>
+
+  <!-- 5. Technical Corner Framing & Aerospace Telemetry (Minimalist & Unobtrusive) -->
+  <g stroke="#94a3b8" stroke-opacity="0.2" stroke-width="1" fill="none">
+    <!-- Top-left bracket -->
+    <path d="M 64 88 L 64 64 L 88 64"/>
+    <!-- Top-right bracket -->
+    <path d="M 1832 64 L 1856 64 L 1856 88"/>
+    <!-- Bottom-left bracket -->
+    <path d="M 64 992 L 64 1016 L 88 1016"/>
+    <!-- Bottom-right bracket -->
+    <path d="M 1832 1016 L 1856 1016 L 1856 992"/>
+  </g>
+
+  <!-- Telemetry Metadata Labels -->
+  <g font-family="Inter, -apple-system, system-ui, sans-serif" font-size="9" fill="#64748b" letter-spacing="2">
+    <text x="96" y="73" fill-opacity="0.6">BRISK-OS // VECTOR-DESKTOP</text>
+    <text x="1710" y="73" fill-opacity="0.4" text-anchor="end">SYS.WAYLAND.64BIT</text>
+    <text x="96" y="1011" fill-opacity="0.4">1920 × 1080 // ULTRA-RESPONSIVE</text>
+  </g>
+
+  <!-- 6. Bespoke BriskOS Brand Mark (Refined Aerodynamic Crest) -->
+  <g transform="translate(100, 116)">
+    <!-- Aerodynamic Chevron / Wing Icon -->
+    <g transform="translate(0, 0)">
+      <!-- Leading Dynamic Wedge -->
+      <polygon points="0,4 28,14 18,18 0,11" fill="url(#crestGrad)"/>
+      <!-- Trailing Aerodynamic Fin -->
+      <polygon points="8,17 32,25 24,28 8,22" fill="#38bdf8" fill-opacity="0.6"/>
+      <!-- Accent Strike -->
+      <polygon points="16,27 36,33 30,35 16,31" fill="#0ea5e9" fill-opacity="0.4"/>
+    </g>
+
+    <!-- Typography -->
+    <text x="50" y="24" 
+          font-family="Inter, -apple-system, system-ui, sans-serif" 
+          font-size="18" 
+          font-weight="700" 
+          letter-spacing="5" 
+          fill="#f8fafc">BRISK<tspan fill="#38bdf8">OS</tspan></text>
+    <text x="52" y="36" 
+          font-family="Inter, -apple-system, system-ui, sans-serif" 
+          font-size="8" 
+          font-weight="500" 
+          letter-spacing="2.5" 
+          fill="#94a3b8">MINIMALIST WAYLAND WORKSPACE</text>
+  </g>
+</svg>

@@ -1,0 +1,25 @@
+# ==============================================================================
+# BriskOS Wofi Start Menu Launcher Configuration
+# Antislop UI: Slate & Ice Cyan aerodynamic system shell
+# ==============================================================================
+
+# Operating Mode
+mode=drun
+show=drun
+
+# Geometry & Dimensions
+width=440
+height=500
+location=bottom_left
+xoffset=12
+yoffset=-52
+
+# Appearance & Behavior
+prompt=Search apps, documents...
+allow_images=true
+image_size=28
+insensitive=true
+no_actions=true
+term=foot
+hide_scroll=true
+layer=overlay

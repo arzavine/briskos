@@ -1,0 +1,47 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Labwc Session Autostart
+# Spawns desktop background daemons and status components
+# ==============================================================================
+
+# 1. Desktop Wallpaper Daemon
+WALLPAPER="/usr/share/backgrounds/briskos/brisk-default.svg"
+if command -v swaybg >/dev/null 2>&1; then
+    if [ -f "$WALLPAPER" ]; then
+        swaybg -i "$WALLPAPER" -m fill &
+    else
+        swaybg -c '#0f172a' &
+    fi
+elif command -v wbg >/dev/null 2>&1 && [ -f "$WALLPAPER" ]; then
+    wbg "$WALLPAPER" &
+fi
+
+# 2. Status Bar and Panel (Waybar)
+if command -v waybar >/dev/null 2>&1; then
+    waybar &
+fi
+
+# 3. Notification Daemon (Mako)
+if command -v mako >/dev/null 2>&1; then
+    mako &
+fi
+
+# 4. PolicyKit Authentication Agent
+for agent in \
+    /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1 \
+    /usr/libexec/polkit-kde-authentication-agent-1 \
+    /usr/lib/polkit-kde-authentication-agent-1 \
+    /usr/libexec/polkit-gnome-authentication-agent-1 \
+    /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1; do
+    if [ -x "$agent" ]; then
+        "$agent" &
+        break
+    fi
+done
+
+# 5. Screen Idle Management and Screen Locker (Swayidle)
+if command -v swayidle >/dev/null 2>&1; then
+    swayidle -w \
+        timeout 600 'swaylock -f -c 0f172a' \
+        before-sleep 'swaylock -f -c 0f172a' &
+fi

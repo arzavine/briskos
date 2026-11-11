@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <core>
+    <!-- Server-side window decorations rendered by compositor -->
+    <decoration>server</decoration>
+    <gap>0</gap>
+    <adaptiveSync>no</adaptiveSync>
+  </core>
+
+  <!-- Window decorations and theme styling -->
+  <theme>
+    <name>Brisk-Dark</name>
+    <cornerRadius>8</cornerRadius>
+    <font place="ActiveWindow">
+      <name>Inter</name>
+      <size>10</size>
+      <weight>bold</weight>
+    </font>
+    <font place="InactiveWindow">
+      <name>Inter</name>
+      <size>10</size>
+      <weight>normal</weight>
+    </font>
+    <font place="MenuItem">
+      <name>Inter</name>
+      <size>10</size>
+    </font>
+    <font place="MenuHeader">
+      <name>Inter</name>
+      <size>10</size>
+      <weight>bold</weight>
+    </font>
+    <font place="OnScreenDisplay">
+      <name>Inter</name>
+      <size>10</size>
+      <weight>bold</weight>
+    </font>
+  </theme>
+
+  <!-- Window edge and region snapping -->
+  <snapping>
+    <range>10</range>
+  </snapping>
+
+  <!-- Window Rules -->
+  <windowRules>
+    <!-- Server-side decorations for standard windows -->
+    <windowRule identifier="*" serverDecoration="yes" />
+
+    <!-- File dialogs and transient windows -->
+    <windowRule type="dialog" serverDecoration="yes" />
+
+    <!-- Terminal styling -->
+    <windowRule identifier="foot" serverDecoration="yes" />
+    <windowRule identifier="org.codeberg.dnkl.foot" serverDecoration="yes" />
+
+    <!-- File manager -->
+    <windowRule identifier="thunar" serverDecoration="yes" />
+
+    <!-- Viewers -->
+    <windowRule identifier="viewnior" serverDecoration="yes" />
+    <windowRule identifier="evince" serverDecoration="yes" />
+
+    <!-- Windows compatibility layer (Wine) -->
+    <windowRule identifier="*.exe" serverDecoration="yes" />
+    <windowRule identifier="wine" serverDecoration="yes" />
+  </windowRules>
+
+  <!-- Keyboard Bindings -->
+  <keyboard>
+    <default />
+
+    <!-- Window Management Keybindings -->
+    <!-- Alt+F4: Close active window -->
+    <keybind key="A-F4">
+      <action name="Close" />
+    </keybind>
+
+    <!-- Alt+Tab / Alt+Shift+Tab: Window cycling -->
+    <keybind key="A-Tab">
+      <action name="NextWindow" />
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="PreviousWindow" />
+    </keybind>
+
+    <!-- Alt+Space: Window client operations menu -->
+    <keybind key="A-space">
+      <action name="ShowMenu" menu="client-menu" />
+    </keybind>
+
+    <!-- Application Launcher Shortcuts -->
+    <!-- Super+Return: Launch foot terminal -->
+    <keybind key="W-Return">
+      <action name="Execute" command="foot" />
+    </keybind>
+
+    <!-- Super+e: Launch Thunar file manager -->
+    <keybind key="W-e">
+      <action name="Execute" command="thunar" />
+    </keybind>
+
+    <!-- Super+d: Toggle Wofi application launcher -->
+    <keybind key="W-d">
+      <action name="Execute" command="pkill -x wofi || wofi --show drun" />
+    </keybind>
+
+    <!-- Super_L (standalone): Toggle Wofi application launcher on release -->
+    <keybind key="Super_L" onRelease="yes">
+      <action name="Execute" command="pkill -x wofi || wofi --show drun" />
+    </keybind>
+
+    <!-- Window Snapping and Geometry Keybindings -->
+    <!-- Super+Left: Snap window to left half of screen -->
+    <keybind key="W-Left">
+      <action name="SnapToEdge" direction="left" />
+    </keybind>
+
+    <!-- Super+Right: Snap window to right half of screen -->
+    <keybind key="W-Right">
+      <action name="SnapToEdge" direction="right" />
+    </keybind>
+
+    <!-- Super+Up: Maximize window -->
+    <keybind key="W-Up">
+      <action name="ToggleMaximize" />
+    </keybind>
+
+    <!-- Super+Down: Minimize / Iconify window -->
+    <keybind key="W-Down">
+      <action name="Iconify" />
+    </keybind>
+
+    <!-- Complementary Window Shortcuts -->
+    <!-- Super+Shift+Up: Fullscreen toggle -->
+    <keybind key="W-S-Up">
+      <action name="ToggleFullscreen" />
+    </keybind>
+
+    <!-- Super+Shift+c: Reload compositor config -->
+    <keybind key="W-S-c">
+      <action name="Reconfigure" />
+    </keybind>
+
+    <!-- Super+l: Lock screen -->
+    <keybind key="W-l">
+      <action name="Execute" command="swaylock -f -c 0f172a" />
+    </keybind>
+  </keyboard>
+
+  <!-- Mouse Bindings -->
+  <mouse>
+    <default />
+
+    <!-- Root Desktop Context -->
+    <context name="Root">
+      <!-- Right-click desktop background: Show root application menu -->
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu" menu="root-menu" />
+      </mousebind>
+    </context>
+
+    <!-- Window Titlebar Context -->
+    <context name="TitleBar">
+      <!-- Left-click and drag: Move window -->
+      <mousebind button="Left" action="Drag">
+        <action name="Move" />
+      </mousebind>
+
+      <!-- Left double-click: Toggle maximize -->
+      <mousebind button="Left" action="DoubleClick">
+        <action name="ToggleMaximize" />
+      </mousebind>
+
+      <!-- Right-click: Show window operations menu -->
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu" menu="client-menu" />
+      </mousebind>
+
+      <!-- Scroll on titlebar: Shade / Unshade (roll up / roll down) -->
+      <mousebind direction="Up" action="Scroll">
+        <action name="ToggleShade" />
+      </mousebind>
+      <mousebind direction="Down" action="Scroll">
+        <action name="ToggleShade" />
+      </mousebind>
+    </context>
+
+    <!-- Window Client / Content Context -->
+    <context name="Client">
+      <!-- Alt+Left-click drag: Interactive window move from anywhere -->
+      <mousebind button="A-Left" action="Drag">
+        <action name="Move" />
+      </mousebind>
+
+      <!-- Alt+Right-click drag: Interactive window resize from anywhere -->
+      <mousebind button="A-Right" action="Drag">
+        <action name="Resize" />
+      </mousebind>
+    </context>
+
+    <!-- Window Border Edges (Interactive Resizing) -->
+    <context name="Top">
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" direction="top" />
+      </mousebind>
+    </context>
+    <context name="Bottom">
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" direction="bottom" />
+      </mousebind>
+    </context>
+    <context name="Left">
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" direction="left" />
+      </mousebind>
+    </context>
+    <context name="Right">
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" direction="right" />
+      </mousebind>
+    </context>
+  </mouse>
+</labwc_config>

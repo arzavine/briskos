@@ -1,0 +1,44 @@
+# ==============================================================================
+# BriskOS Labwc Theme Overrides
+# Palette: Deep slate (#0f172a, #1e293b), high-contrast text (#f8fafc), Ice Cyan (#38bdf8)
+# ==============================================================================
+
+# Window Borders & Geometry
+border.width: 1
+window.active.border.color: #38bdf8
+window.inactive.border.color: #334155
+
+# Window Titlebar (Active Window)
+window.active.title.bg: Solid
+window.active.title.bg.color: #1e293b
+window.active.label.text.color: #f8fafc
+
+# Window Titlebar (Inactive Window)
+window.inactive.title.bg: Solid
+window.inactive.title.bg.color: #0f172a
+window.inactive.label.text.color: #94a3b8
+
+# Window Buttons
+window.active.button.unpressed.image.color: #f8fafc
+window.inactive.button.unpressed.image.color: #64748b
+window.active.button.hover.bg.color: #334155
+window.active.button.pressed.bg.color: #38bdf8
+
+# Snapping Overlay
+snapping.overlay.edge.bg.color: #38bdf833
+snapping.overlay.edge.border.color: #38bdf8
+snapping.overlay.region.bg.color: #38bdf833
+snapping.overlay.region.border.color: #38bdf8
+
+# Root and Window Menus
+menu.border.width: 1
+menu.border.color: #38bdf8
+menu.items.bg: Solid
+menu.items.bg.color: #1e293b
+menu.items.text.color: #f8fafc
+menu.items.active.bg: Solid
+menu.items.active.bg.color: #38bdf8
+menu.items.active.text.color: #0f172a
+menu.separator.color: #334155
+menu.overlap.x: 0
+menu.overlap.y: 0

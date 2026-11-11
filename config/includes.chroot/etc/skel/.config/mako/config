@@ -1,0 +1,51 @@
+# ==============================================================================
+# BriskOS Mako Notification Daemon Configuration
+# Modern, unobtrusive Wayland desktop notifications
+# ==============================================================================
+
+# Notification location: bottom-right (location=bottom-right)
+anchor=bottom-right
+
+# Dimensions & Layout
+margin=12
+padding=12
+width=340
+height=120
+border-size=1
+border-radius=8
+
+# Typography & Colors
+font=Inter 10
+background-color=#1e293be6
+text-color=#f8fafc
+border-color=#38bdf8
+progress-color=over #38bdf8
+
+# Behavior
+default-timeout=5000
+ignore-timeout=0
+max-visible=5
+sort=-time
+layer=overlay
+
+# Icons
+icons=1
+max-icon-size=36
+icon-location=left
+
+# Criteria: Low Urgency
+[urgency=low]
+border-color=#475569
+default-timeout=3000
+
+# Criteria: Normal Urgency
+[urgency=normal]
+border-color=#38bdf8
+default-timeout=5000
+
+# Criteria: Critical Urgency
+[urgency=critical]
+background-color=#1e293bee
+border-color=#f87171
+text-color=#fef2f2
+default-timeout=0
