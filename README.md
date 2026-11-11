@@ -15,12 +15,15 @@
 * **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian Bookworm Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
 * **Phase 5**: QEMU Virtual Machine Test Harness (`scripts/test-qemu.sh`, `scripts/test-qemu.bat`), Safe Interactive USB Flash Tool (`scripts/flash-usb.sh`), and Production Bare-Metal Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md)).
 * **Phase 6**: Out-of-the-box Calamares Graphical Installer featuring bespoke "Night Glass" Qt styling, custom vector artwork, passwordless polkit elevation, multi-entry live session integration (Waybar, Desktop, context menu), and automated live-build cleanup hooks.
+* **Phase 7**: System Resilience, Instant Time-Travel Rollback & Sentinel Laptop Power Engine featuring BTRFS/Rsync snapshot rollback (`brisk-timetravel`, `brisk-timetravel-gui`), zero-friction APT pre-update hooks (`DPkg::Pre-Invoke`), and TLP/ACPI dynamic laptop power optimization (`brisk-sentinel`, `brisk-sentinel-gui`) with 80% charge ceiling preservation mode.
 
 ---
 
 ## Key Features
 
 * **Out-of-the-Box Calamares Graphical Installer**: User-friendly, modern GUI installer styled with BriskOS "Night Glass" dark theme (`#0b1120` Midnight Slate, `#38bdf8` Ice Cyan accents), offering automated whole-disk erasure, manual partitioning (GPT/MBR, EFI/BIOS), user creation, bootloader deployment, and seamless post-installation cleanup.
+* **Brisk Time-Travel Instant System Rollback & Checkpoints**: Instantaneous system snapshot engine with BTRFS subvolume support and Rsync hardlink incremental fallback, automatic zero-friction pre-update APT hooks (`DPkg::Pre-Invoke`), pre-restore safety snapshots, and an intuitive Zenity GUI (`brisk-timetravel-gui`) accessible from the System menu.
+* **Brisk Battery Sentinel Laptop Power Optimization & Profiles**: Ultra-lean power and battery longevity daemon powered by TLP and ACPI, featuring 1-click dynamic profiles (🍃 ECO SAVER, ⚖️ BALANCED, ⚡ TURBO PERFORMANCE), hardware charge ceiling limiter (80% stop-charge to extend battery lifespan 3x), and deep integration into Waybar battery module and Labwc menus (`brisk-sentinel-gui`).
 * **Sub-512 MB Idle RAM Baseline**: Ultra-lean Wayland desktop footprint running Labwc stacking compositor and transparent `zstd` zram memory compression (50% RAM allocation).
 * **Multi-Entry Live Session Integration**: 1-click launch from the Waybar taskbar `💿 Install` module, Desktop shortcut icon, Labwc right-click root menu, and Wofi Start Menu.
 * **Seamless Windows Compatibility Layer**: Pre-configured Wine 64-bit runtime with 1-click execution for `.exe` and `.msi` installers and GUI prefix manager (`brisk-wine-config`).
@@ -46,9 +49,15 @@ d:/.Vibe Coder/OS/
 │   │       ├── 01-setup-services.hook.chroot # System & PipeWire/WirePlumber user services
 │   │       ├── 02-setup-zram.hook.chroot     # zram-tools configuration (zstd, 50% RAM)
 │   │       ├── 03-setup-wine-mime.hook.chroot # Wine desktop entry & Windows MIME associations
-│   │       └── 04-setup-installer.hook.chroot # Calamares permissions, polkit, sudoers & log setup
+│   │       ├── 04-setup-installer.hook.chroot # Calamares permissions, polkit, sudoers & log setup
+│   │       └── 05-setup-power-and-recovery.hook.chroot # TLP, ACPID, Sentinel & Time-Travel setup
 │   ├── includes.chroot/
 │   │   ├── etc/
+│   │   │   ├── apt/
+│   │   │   │   └── apt.conf.d/
+│   │   │   │       └── 80-brisk-timetravel       # Automatic APT pre-update checkpoint hook
+│   │   │   ├── brisk/
+│   │   │   │   └── timetravel.conf               # Time-Travel retention & backend configuration
 │   │   │   ├── calamares/                   # Calamares graphical installer configuration
 │   │   │   │   ├── branding/
 │   │   │   │   │   └── briskos/             # Night Glass styling (stylesheet.qss), logo & banner SVGs
@@ -94,7 +103,11 @@ d:/.Vibe Coder/OS/
 │   │   │   │           ├── config           # Floating Start Menu launcher configuration
 │   │   │   │           └── style.css        # Antislop-UI Start Menu stylesheet
 │   │   │   ├── sudoers.d/
+│   │   │   │   ├── brisk-sentinel           # Passwordless sudo elevation for Sentinel power profiles
+│   │   │   │   ├── brisk-timetravel         # Passwordless sudo elevation for Time-Travel checkpoints
 │   │   │   │   └── calamares                # Passwordless sudo elevation for live installer
+│   │   │   ├── tlp.d/
+│   │   │   │   └── 00-brisk-sentinel.conf   # High-efficiency laptop power profile & charge ceilings
 │   │   │   └── xdg/
 │   │   │       └── autostart/
 │   │   │           └── brisk-update-checker.desktop     # Background OTA update checker autostart
@@ -102,12 +115,18 @@ d:/.Vibe Coder/OS/
 │   │       ├── local/
 │   │       │   └── bin/
 │   │       │       ├── brisk-installer      # Calamares launcher wrapper (Wayland env & logging)
+│   │       │       ├── brisk-sentinel       # Laptop power optimizer CLI & profile controller
+│   │       │       ├── brisk-sentinel-gui   # Zenity graphical battery control panel & profile switcher
+│   │       │       ├── brisk-timetravel     # BTRFS/Rsync system snapshot & rollback engine
+│   │       │       ├── brisk-timetravel-gui # Zenity graphical system checkpoint & rollback manager
 │   │       │       ├── brisk-wine-runner    # 1-Click Windows binary & installer runner
 │   │       │       ├── brisk-wine-config    # Wine GUI control panel & prefix manager
 │   │       │       ├── brisk-update-checker # Serverless GitHub OTA update check daemon
 │   │       │       └── brisk-updater-gui    # Zenity graphical software updater frontend
 │   │       └── share/
 │   │           ├── applications/
+│   │           │   ├── brisk-sentinel.desktop           # Battery Sentinel launcher & Waybar handler
+│   │           │   ├── brisk-timetravel.desktop         # Time-Travel Recovery launcher
 │   │           │   ├── brisk-wine-runner.desktop        # File manager association for .exe/.msi
 │   │           │   ├── brisk-wine-config.desktop        # Wine configuration control panel launcher
 │   │           │   ├── brisk-updater.desktop            # Start Menu Software Updater launcher
@@ -121,7 +140,9 @@ d:/.Vibe Coder/OS/
 │       ├── 02-office-productivity.list.chroot # LibreOffice/ONLYOFFICE notes, Microsoft fonts, Evince
 │       ├── 03-windows-compat.list.chroot    # Wine, Wine64, Winetricks, Cabextract, Zenity
 │       ├── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
-│       └── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
+│       ├── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
+│       ├── 06-system-resilience.list.chroot # Timeshift, BTRFS tools, rsync, cron, libnotify
+│       └── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, cpupower, acpid
 ├── Dockerfile                               # Containerized Debian Bookworm build environment
 ├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
@@ -174,6 +195,15 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
   * **Bootloader & Firmware Utilities**: `efibootmgr`, `grub-efi-amd64-bin`, `grub-pc-bin`
   * **Image Extraction**: `squashfs-tools`
 
+* **`06-system-resilience.list.chroot`**:
+  * **Snapshot & Rollback Backends**: `timeshift`, `btrfs-progs`, `rsync`
+  * **Scheduling & Notifications**: `cron`, `libnotify-bin`
+
+* **`07-power-management.list.chroot`**:
+  * **Core Power Management**: `tlp`, `tlp-rdw`
+  * **Hardware Diagnostics & Metrics**: `powertop`, `upower`, `acpi`, `acpid`
+  * **CPU Frequency Scaling**: `linux-cpupower`
+
 ---
 
 ### 2. System Branding & Identity (`config/includes.chroot/etc/`)
@@ -204,6 +234,12 @@ All chroot hooks execute during live image assembly with strict `set -euo pipefa
   * Enforces root-owned restrictive permissions (`440` on `/etc/sudoers.d/calamares`, `644` on `/etc/polkit-1/rules.d/49-nopasswd_calamares.rules`).
   * Initializes world-writable installer log `/var/log/calamares-installer.log` (`666`) for live debugging.
   * Triggers desktop database update for instantaneous shortcut indexing.
+* **`05-setup-power-and-recovery.hook.chroot`**:
+  * Enables system power daemons (`tlp.service`, `acpid.service`) with explicit `multi-user.target.wants` symlinks for guaranteed activation.
+  * Sets executable permissions (`755`) on `/usr/local/bin/brisk-sentinel`, `/usr/local/bin/brisk-sentinel-gui`, `/usr/local/bin/brisk-timetravel`, and `/usr/local/bin/brisk-timetravel-gui`.
+  * Enforces root-owned restrictive permissions (`440`) on `/etc/sudoers.d/brisk-sentinel` and `/etc/sudoers.d/brisk-timetravel` with `visudo` validation.
+  * Configures `/etc/apt/apt.conf.d/80-brisk-timetravel` (`644`), initializes `/var/backups/brisk-timetravel/snapshots` (`750`), and configures `/etc/brisk/timetravel.conf` (`644`).
+  * Enforces `644` on desktop entries and triggers desktop database update.
 
 ---
 
@@ -461,6 +497,52 @@ Phase 6 incorporates a production-grade, graphical system installer powered by t
 
 ---
 
+### 12. Brisk Time-Travel Instant System Snapshot & Rollback Engine (Phase 7)
+
+Phase 7 introduces an instant system recovery and rollback engine designed to guarantee zero downtime and risk-free system updates:
+
+* **Dual BTRFS & Rsync Snapshot Engine (`/usr/local/bin/brisk-timetravel`)**:
+  * Auto-detects root mount filesystem backend.
+  * Creates instantaneous read-only BTRFS subvolume snapshots when installed on BTRFS.
+  * Automatically switches to incremental hardlink deduplication (`rsync -aAXH --link-dest`) on Ext4, XFS, and standard partitions, ensuring subsequent snapshots only occupy delta storage.
+  * Preserves full POSIX ACLs, extended attributes, and hardlinks.
+  * Automatically checks storage capacity ($\ge 500$ MB free required) and gracefully rotates oldest snapshots when retention exceeds limits (`MAX_SNAPSHOTS=10`).
+* **Zero-Friction Automated APT Protection (`/etc/apt/apt.conf.d/80-brisk-timetravel`)**:
+  * Integrates with `DPkg::Pre-Invoke` to automatically take a snapshot before package modifications.
+  * Gracefully suppresses execution during live-build chroots and low-disk conditions.
+* **Pre-Restore Safety Checkpoints**:
+  * Safeguards user state by capturing an automated `safety-pre-restore-...` snapshot before initiating any file restoration.
+  * Excludes virtual filesystems (`/proc`, `/sys`, `/dev`, `/run`, `/tmp`) and preserves essential boot configurations (`/etc/fstab`, `/boot/efi`) to ensure machine bootability.
+* **Zenity Graphical Interface (`/usr/local/bin/brisk-timetravel-gui`)**:
+  * Antislop-UI compliant interface featuring 1-click snapshot creation, radiolist checkpoint restoration with confirmation warnings, storage usage inspector with snapshot deletion, and APT automation toggle.
+  * Integrated into desktop menus via `/usr/share/applications/brisk-timetravel.desktop` and Labwc's right-click System menu.
+
+---
+
+### 13. Brisk Battery Sentinel Laptop Power Optimization & Lifespan Engine (Phase 7)
+
+Phase 7 integrates an intelligent power management suite engineered to maximize unplugged laptop autonomy and prolong battery lifespan:
+
+* **Fine-Tuned TLP Power Profile (`/etc/tlp.d/00-brisk-sentinel.conf`)**:
+  * **CPU Governor & EPP Tuning**: AC uses `performance` with Turbo Boost; Battery mode switches to `powersave` and `balance_power` with frequency ceilings.
+  * **Bus & Peripheral Optimization**: Configures PCIe ASPM to `powersupersave` on battery, runtime PM to `auto`, Wi-Fi power saving to `on`, and audio chip timeout to 1s.
+  * **Storage Power States**: Enforces APM level 128 and SATA link power min_power on battery.
+* **Dynamic Profile Switcher & CLI Controller (`/usr/local/bin/brisk-sentinel`)**:
+  * Supports 1-command switching: `brisk-sentinel profile [eco|balanced|turbo]`.
+  * **🍃 ECO SAVER**: Capped 70% CPU frequency ceiling, powersave governor, turbo boost disabled (+60% battery life).
+  * **⚖️ BALANCED**: Smart adaptive scaling for fluid 60 FPS everyday desktop usage.
+  * **⚡ TURBO PERFORMANCE**: Uncapped 100% CPU ceiling, active Turbo Boost, and maximum throughput.
+  * **Battery Health & Telemetry (`status` / `--raw`)**: Reports live battery capacity, health %, discharge wattage, temperature, and remaining runtime.
+* **Hardware Battery Lifespan Protector**:
+  * Prevents Li-Ion chemical wear by capping maximum charge at 80% (`threshold 80`).
+  * Integrates sysfs `charge_control_end_threshold`, Lenovo conservation mode, and TLP hardware threshold controls.
+* **Zenity GUI & Waybar Integration (`/usr/local/bin/brisk-sentinel-gui`)**:
+  * Connected directly to Waybar battery module `on-click` in `config.jsonc`.
+  * Added to Labwc desktop root menu under Preferences -> Hardware -> Battery Sentinel.
+  * Provides real-time metrics dashboard, 1-click profile switcher, and lifespan protection toggles.
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -494,6 +576,11 @@ Phase 6 incorporates a production-grade, graphical system installer powered by t
 | **Phase 5 Safe USB Flash Tool** | `scripts/flash-usb.sh` strict removable USB device filtering (`TRAN=usb` / `RM=1`), internal drive safety blocks, and synchronous `dd` writes | **PASS** |
 | **Phase 5 Installation Manual** | `INSTALL.md` comprehensive bare-metal deployment manual (System requirements, Windows/Linux/macOS USB prep, OEM boot keys, live testing, clean & dual-boot install, post-install tweaks) | **PASS** |
 | **Phase 5 Shell & Batch Syntax** | Strict static validation (`bash -n` on `.sh` scripts and CMD/PowerShell validation on `.bat` script) | **PASS** |
+| **Phase 7 Directory Structure** | `config/includes.chroot/etc/apt/apt.conf.d/`, `etc/tlp.d/`, `etc/brisk/`, `etc/sudoers.d/`, `usr/local/bin/`, `config/package-lists/` | **PASS** |
+| **Phase 7 Shell Script Strictness** | Strict `bash -n` validation across `brisk-timetravel`, `brisk-timetravel-gui`, `brisk-sentinel`, `brisk-sentinel-gui`, and hook 05 | **PASS** |
+| **Phase 7 Time-Travel Architecture** | BTRFS snapshot / Rsync hardlink hybrid fallback, pre-restore safety checkpoint, APT hook, and GUI | **PASS** |
+| **Phase 7 Battery Sentinel Architecture**| TLP drop-in configuration, 3-mode profile switcher, 80% charge ceiling limiter, Waybar click integration | **PASS** |
+| **Phase 7 Hook & Permissions** | `05-setup-power-and-recovery.hook.chroot`, sudoers 440 with visudo, binaries 755, systemd TLP/ACPID service links | **PASS** |
 | **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) on all `.sh` and `.md` files; Windows CRLF for `scripts/test-qemu.bat` | **PASS** |
 
 ---

@@ -1,0 +1,8 @@
+// ==============================================================================
+// BriskOS Time-Travel Automatic Pre-Update Snapshot Hook
+// Captures an instant system checkpoint prior to package modifications
+// ==============================================================================
+
+DPkg::Pre-Invoke {
+    "if [ -x /usr/local/bin/brisk-timetravel ]; then /usr/local/bin/brisk-timetravel auto-hook || true; fi";
+};

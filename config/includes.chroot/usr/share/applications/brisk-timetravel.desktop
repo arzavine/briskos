@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Brisk Time-Travel Recovery
+GenericName=System Rollback & Snapshots
+Comment=Instant system snapshot and time-travel rollback engine
+Exec=brisk-timetravel-gui
+Icon=document-revert
+Terminal=false
+Categories=System;Settings;Utility;
+Keywords=snapshot;restore;rollback;timetravel;timeshift;backup;recovery;
+StartupNotify=true

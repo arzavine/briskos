@@ -53,6 +53,9 @@
       <item label="Software Updater" icon="system-software-update">
         <action name="Execute" command="/usr/local/bin/brisk-updater-gui" />
       </item>
+      <item label="Brisk Time-Travel" icon="document-revert">
+        <action name="Execute" command="brisk-timetravel-gui" />
+      </item>
       <item label="Install BriskOS" icon="calamares">
         <action name="Execute" command="brisk-installer" />
       </item>
@@ -60,6 +63,15 @@
       <item label="Reload Compositor Config" icon="view-refresh">
         <action name="Reconfigure" />
       </item>
+    </menu>
+
+    <!-- Preferences & Hardware Settings -->
+    <menu id="preferences-menu" label="Preferences" icon="preferences-system">
+      <menu id="hardware-menu" label="Hardware" icon="preferences-system-power">
+        <item label="Battery Sentinel" icon="battery-good">
+          <action name="Execute" command="brisk-sentinel-gui" />
+        </item>
+      </menu>
     </menu>
 
     <separator />

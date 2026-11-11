@@ -42,6 +42,8 @@ This manual provides authoritative, step-by-step instructions for flashing, boot
    - [6.3 Office Font Compatibility Verification](#63-office-font-compatibility-verification)
    - [6.4 Keyboard Shortcut Cheat Sheet](#64-keyboard-shortcut-cheat-sheet)
    - [6.5 Dual-Boot Hardware Clock Fix (RTC UTC)](#65-dual-boot-hardware-clock-fix-rtc-utc)
+   - [6.6 Feature: Brisk Time-Travel Instant System Rollback & Checkpoints](#66-feature-brisk-time-travel-instant-system-rollback--checkpoints)
+   - [6.7 Feature: Brisk Battery Sentinel Laptop Power Optimization & Profiles](#67-feature-brisk-battery-sentinel-laptop-power-optimization--profiles)
 7. [Troubleshooting & FAQ](#7-troubleshooting--faq)
 
 ---
@@ -585,6 +587,132 @@ Verify the clock status:
 ```bash
 timedatectl status
 # Ensure "RTC in local TZ: yes" is displayed.
+```
+
+---
+
+### 6.6 Feature: Brisk Time-Travel Instant System Rollback & Checkpoints
+
+BriskOS includes an enterprise-grade, zero-friction system snapshot and rollback engine engineered to make breaking updates and unintended configuration errors completely reversible in seconds.
+
+#### A. Core Engine Capabilities
+- **Hybrid Snapshot Engine**:
+  - Automatically identifies root filesystem backend (`findmnt -n -o FSTYPE /`).
+  - **BTRFS Native Mode**: Instantaneous read-only subvolume copy-on-write snapshots (`btrfs subvolume snapshot -r`).
+  - **Rsync Hardlink Mode**: When running on Ext4, XFS, or standard filesystems, utilizes hardlink deduplication (`--link-dest`) against the most recent checkpoint. This ensures subsequent snapshots only consume storage for modified files.
+- **Automated APT Zero-Friction Hook**:
+  - Drops into `/etc/apt/apt.conf.d/80-brisk-timetravel` with `DPkg::Pre-Invoke`.
+  - Automatically generates an immutable checkpoint (`auto-apt-...`) right before any `apt upgrade`, `apt install`, or `apt remove` executes.
+  - Automatically checks available disk space (requiring $\ge 500$ MB free storage) and gracefully suppresses snapshot creation during live-build chroots or low disk space.
+- **Fail-Safe Pre-Restore Checkpoint**:
+  - Restoring a checkpoint never performs a destructive, non-reversible overwrite.
+  - Prior to syncing files back into `/`, Brisk Time-Travel creates a `safety-pre-restore-...` checkpoint containing the current running state.
+  - Preserves critical system paths during restore: `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/lost+found`, and preserves `/etc/fstab` and `/boot/efi` UUIDs to guarantee uncompromised hardware bootability.
+- **Snapshot Pruning & Retention**:
+  - Automatically retains up to 10 snapshots by default (configurable in `/etc/brisk/timetravel.conf`). Expired automated snapshots are pruned sequentially.
+
+#### B. Graphical Interface (`brisk-timetravel-gui`)
+Launch **Brisk Time-Travel Recovery** from:
+1. Start Menu: **System -> Brisk Time-Travel**
+2. Labwc Context Menu: **Right-Click Desktop -> System -> Brisk Time-Travel**
+3. Terminal / Runner: `brisk-timetravel-gui`
+
+**Operations Available in the GUI**:
+- **⚡ Create Instant Checkpoint**: Prompts for a descriptive comment (e.g., *"Before testing custom NVIDIA drivers"*), displays a pulsating progress dialog, and captures the system state.
+- **⏪ Restore to Previous Checkpoint**: Displays an interactive radio list of all captured checkpoints with dates, backend types, disk sizes, and descriptions. Prompts with a confirmation dialogue, creates a safety checkpoint, restores system state, and offers an optional system reboot.
+- **📜 View History & Storage Usage**: Generates a detailed audit of existing checkpoints, backend type, disk space utilization, and offers 1-click snapshot deletion.
+- **⚙️ Automatic APT Backup Settings**: Toggle automated pre-update APT snapshots on or off.
+
+#### C. Command-Line Interface (`brisk-timetravel`)
+The CLI engine can be invoked directly by users in the `sudo` group without password prompts:
+
+```bash
+# 1. Create a manual checkpoint with a descriptive comment
+brisk-timetravel create "Clean setup before installing custom packages"
+
+# 2. List all available checkpoints and storage telemetry
+brisk-timetravel list
+
+# 3. Restore system to a specific checkpoint ID
+sudo brisk-timetravel restore 2026-11-12_06-30-00
+
+# 4. Delete an old snapshot
+sudo brisk-timetravel delete 2026-11-12_06-30-00
+
+# 5. Output raw pipe-delimited data (for scripting/custom GUIs)
+brisk-timetravel list --raw
+```
+
+#### D. Configuration File (`/etc/brisk/timetravel.conf`)
+```bash
+# Enable or disable automated snapshots prior to APT operations
+AUTO_BACKUP_ENABLED=true
+
+# Number of snapshots to retain before rotating oldest
+MAX_SNAPSHOTS=10
+
+# Base backup storage directory
+BACKUP_DIR="/var/backups/brisk-timetravel/snapshots"
+
+# Backend selection: auto | btrfs | rsync
+SNAPSHOT_TYPE="auto"
+```
+
+---
+
+### 6.7 Feature: Brisk Battery Sentinel Laptop Power Optimization & Profiles
+
+Brisk Battery Sentinel is an ultra-lean power management and battery longevity engine designed to maximize unplugged battery runtime while tripling the physical lifespan of modern laptop lithium-ion battery cells.
+
+#### A. Power Optimization Architecture
+- **Drop-In TLP Configuration (`/etc/tlp.d/00-brisk-sentinel.conf`)**:
+  - Modern CPU frequency scaling governor profiles for Intel, AMD, and hybrid systems.
+  - Dynamic Energy Performance Preference (EPP):
+    - **AC Mode**: `CPU_SCALING_GOVERNOR_ON_AC="performance"`, `CPU_ENERGY_PERF_POLICY_ON_AC="performance"`, Turbo Boost enabled.
+    - **Battery Mode**: `CPU_SCALING_GOVERNOR_ON_BAT="powersave"`, `CPU_ENERGY_PERF_POLICY_ON_BAT="balance_power"`, PCIe ASPM `powersupersave`, Wi-Fi 802.11 power saving active, and audio chip timeout enabled (1s).
+- **1-Click Dynamic Profile Switching**:
+  - **🍃 ECO SAVER**: Capped CPU clock ceiling (70%), disabled turbo boost, maximum powersave governor, PCIe powersupersave, and extended background polling intervals (+60% battery life).
+  - **⚖️ BALANCED**: Smart on-demand adaptive scaling (schedutil / dynamic powersave) balancing fluid 60 FPS desktop fluidity with thermal efficiency.
+  - **⚡ TURBO PERFORMANCE**: 100% uncapped CPU clock ceiling, active Turbo Boost, and maximum PCIe throughput for compilation, gaming, and heavy computing workloads.
+- **Hardware Battery Lifespan Protector (Charge Ceiling)**:
+  - Continuously keeping lithium-ion batteries charged to 100% at high ambient temperatures accelerates cell chemical degradation.
+  - Brisk Battery Sentinel provides a 1-click toggle to enforce an **80% charge ceiling** (`STOP_CHARGE_THRESH_BAT0=80`, `START_CHARGE_THRESH_BAT0=75`).
+  - Supports modern Linux 5.14+ sysfs interfaces (`charge_control_end_threshold`), Lenovo IdeaPad conservation mode (`conservation_mode`), ASUS/ThinkPad charge thresholds, and standard TLP hardware controls.
+
+#### B. Graphical Interface (`brisk-sentinel-gui`)
+Accessible directly from:
+1. **Waybar Battery Module**: Simply left-click the battery icon in the right island.
+2. **Start Menu**: **Preferences -> Hardware -> Battery Sentinel**
+3. **Labwc Context Menu**: **Right-Click Desktop -> Preferences -> Hardware -> Battery Sentinel**
+4. **Terminal / Runner**: `brisk-sentinel-gui`
+
+**Control Panel Features**:
+- Real-time battery status header: Capacity (%), Charge state (Charging / Discharging / AC Connected), Battery Health (% of design capacity), Power Draw (instantaneous Watts), Temperature, and Remaining Runtime.
+- Active profile indicator & charge protection badge.
+- Instant 1-click profile selection: 🍃 ECO SAVER, ⚖️ BALANCED, or ⚡ TURBO PERFORMANCE.
+- Battery Lifespan Protector: Toggle 80% Preservation mode or 100% Travel mode.
+- Detailed power diagnostics modal displaying hardware vendor, cycle count, voltages, and TLP runtime status.
+
+#### C. Command-Line Interface (`brisk-sentinel`)
+The CLI controller executes power adjustments without password prompts for authorized users:
+
+```bash
+# 1. Switch power profiles dynamically
+brisk-sentinel profile eco
+brisk-sentinel profile balanced
+brisk-sentinel profile turbo
+
+# 2. View comprehensive battery metrics and telemetry
+brisk-sentinel status
+
+# 3. Query machine-readable porcelain status (for custom scripts or Waybar)
+brisk-sentinel status --raw
+
+# 4. Configure battery charge ceiling threshold (e.g., 80% stop-charge)
+sudo brisk-sentinel threshold 80
+
+# 5. Reset charge ceiling to 100% for long-distance travel
+sudo brisk-sentinel threshold 100
 ```
 
 ---

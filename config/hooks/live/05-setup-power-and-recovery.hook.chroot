@@ -1,0 +1,126 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Live Hook: 05-setup-power-and-recovery
+# Configures systemd power management daemons (TLP, ACPI),
+# executable permissions for Brisk Sentinel & Time-Travel Recovery,
+# and secure sudoers privilege policies.
+# ==============================================================================
+
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 05-setup-power-and-recovery: Configuring Power & Recovery"
+echo "=========================================================="
+
+# 1. Enable Core Power Management System Services
+POWER_SERVICES=(
+    "tlp.service"
+    "acpid.service"
+)
+
+echo "--> Enabling system power daemons (TLP & ACPID)..."
+for svc in "${POWER_SERVICES[@]}"; do
+    if systemctl list-unit-files "$svc" &>/dev/null || [ -f "/lib/systemd/system/$svc" ] || [ -f "/etc/systemd/system/$svc" ] || [ -f "/usr/lib/systemd/system/$svc" ]; then
+        echo "--> Enabling service: $svc"
+        systemctl enable "$svc" 2>/dev/null || true
+    else
+        echo "--> Notice: $svc unit file not found, creating multi-user target link if unit is discovered..."
+    fi
+
+    # Ensure explicit multi-user.target symlink for guaranteed activation in chroot
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    for unit_dir in /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system; do
+        if [ -f "$unit_dir/$svc" ]; then
+            ln -sf "$unit_dir/$svc" "/etc/systemd/system/multi-user.target.wants/$svc"
+            break
+        fi
+    done
+done
+
+# 2. Permissions for Battery Sentinel Binaries
+echo "--> Configuring Brisk Battery Sentinel executable permissions..."
+SENTINEL_BINS=(
+    "/usr/local/bin/brisk-sentinel"
+    "/usr/local/bin/brisk-sentinel-gui"
+)
+
+for bin_path in "${SENTINEL_BINS[@]}"; do
+    if [ -f "$bin_path" ]; then
+        echo "--> chmod 755 $bin_path"
+        chmod 755 "$bin_path"
+        chown root:root "$bin_path"
+    fi
+done
+
+# 3. Permissions for Time-Travel Recovery Binaries (if present)
+RECOVERY_BINS=(
+    "/usr/local/bin/brisk-timetravel"
+    "/usr/local/bin/brisk-timetravel-gui"
+)
+
+for rbin in "${RECOVERY_BINS[@]}"; do
+    if [ -f "$rbin" ]; then
+        echo "--> chmod 755 $rbin"
+        chmod 755 "$rbin"
+        chown root:root "$rbin"
+    fi
+done
+
+# 4. Configure Sudoers Permissions for Passwordless Execution
+echo "--> Setting up sudoers policies for Battery Sentinel & Recovery..."
+SUDOERS_FILES=(
+    "/etc/sudoers.d/brisk-sentinel"
+    "/etc/sudoers.d/brisk-timetravel"
+)
+
+for sfile in "${SUDOERS_FILES[@]}"; do
+    if [ -f "$sfile" ]; then
+        echo "--> Setting permissions on $sfile"
+        chown root:root "$sfile"
+        chmod 440 "$sfile"
+        if command -v visudo >/dev/null 2>&1; then
+            echo "--> Validating $sfile syntax..."
+            visudo -cf "$sfile" || {
+                echo "ERROR: Syntax error in $sfile" >&2
+                exit 1
+            }
+        fi
+    fi
+done
+
+# 5. Desktop Application Entry Permissions & Database Refresh
+echo "--> Updating desktop application permissions..."
+DESKTOP_FILES=(
+    "/usr/share/applications/brisk-sentinel.desktop"
+    "/usr/share/applications/brisk-timetravel.desktop"
+)
+
+for dfile in "${DESKTOP_FILES[@]}"; do
+    if [ -f "$dfile" ]; then
+        chmod 644 "$dfile"
+        chown root:root "$dfile"
+    fi
+done
+
+# 6. Time-Travel APT Pre-Invoke Hook & Storage Directory Initialization
+echo "--> Initializing Time-Travel storage directory & APT hook..."
+if [ -f "/etc/apt/apt.conf.d/80-brisk-timetravel" ]; then
+    chmod 644 /etc/apt/apt.conf.d/80-brisk-timetravel
+    chown root:root /etc/apt/apt.conf.d/80-brisk-timetravel
+fi
+
+mkdir -p /var/backups/brisk-timetravel/snapshots
+chmod 750 /var/backups/brisk-timetravel/snapshots
+chown root:root /var/backups/brisk-timetravel/snapshots
+
+mkdir -p /etc/brisk
+if [ -f "/etc/brisk/timetravel.conf" ]; then
+    chmod 644 /etc/brisk/timetravel.conf
+    chown root:root /etc/brisk/timetravel.conf
+fi
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications || true
+fi
+
+echo "--> [BriskOS Hook] 05-setup-power-and-recovery configuration complete."

@@ -1,0 +1,496 @@
+#!/bin/bash
+# ==============================================================================
+# Brisk Battery Sentinel - Ultra-Lean Laptop Power Optimization & Lifespan Engine
+# Command-Line Interface & Kernel Controller
+# ==============================================================================
+
+set -euo pipefail
+
+CONF_DIR="/etc/brisk"
+PROFILE_FILE="${CONF_DIR}/sentinel-profile"
+THRESHOLD_FILE="${CONF_DIR}/battery-threshold"
+TLP_SENTINEL_CONF="/etc/tlp.d/00-brisk-sentinel.conf"
+
+# Ensure configuration directory exists
+mkdir -p "$CONF_DIR" 2>/dev/null || true
+
+# Helper: Escalate to root if modifying hardware state
+ensure_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if sudo -n true 2>/dev/null; then
+            exec sudo "$0" "$@"
+        elif command -v pkexec >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            exec pkexec "$0" "$@"
+        else
+            exec sudo "$0" "$@"
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Hardware Discovery & Metrics Gathering
+# ------------------------------------------------------------------------------
+find_battery() {
+    for b in /sys/class/power_supply/BAT* /sys/class/power_supply/battery; do
+        if [ -d "$b" ]; then
+            echo "$b"
+            return 0
+        fi
+    done
+    return 1
+}
+
+get_active_profile() {
+    if [ -f "$PROFILE_FILE" ]; then
+        cat "$PROFILE_FILE" | tr -d '[:space:]'
+    else
+        echo "balanced"
+    fi
+}
+
+get_active_threshold() {
+    if [ -f "$THRESHOLD_FILE" ]; then
+        cat "$THRESHOLD_FILE" | tr -d '[:space:]'
+    elif [ -f "$TLP_SENTINEL_CONF" ] && grep -q '^STOP_CHARGE_THRESH_BAT0=' "$TLP_SENTINEL_CONF" 2>/dev/null; then
+        grep '^STOP_CHARGE_THRESH_BAT0=' "$TLP_SENTINEL_CONF" | head -n1 | cut -d= -f2 | tr -d '"'\'' '
+    else
+        echo "80"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Profile Switching Logic
+# ------------------------------------------------------------------------------
+set_power_profile() {
+    local target="${1:-balanced}"
+    target=$(echo "$target" | tr '[:upper:]' '[:lower:]')
+
+    ensure_root "$@"
+
+    case "$target" in
+        eco|saver|powersave)
+            target="eco"
+            # 1. CPU Scaling Governor -> powersave
+            for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+                if [ -f "$gov" ]; then
+                    echo "powersave" > "$gov" 2>/dev/null || true
+                fi
+            done
+
+            # 2. Energy Performance Preference -> power
+            for epp in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+                if [ -f "$epp" ]; then
+                    echo "power" > "$epp" 2>/dev/null || echo "balance_power" > "$epp" 2>/dev/null || true
+                fi
+            done
+
+            # 3. CPU Boost & Frequency Ceiling
+            if [ -f /sys/devices/system/cpu/cpufreq/boost ]; then
+                echo "0" > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+                echo "1" > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/max_perf_pct ]; then
+                echo "70" > /sys/devices/system/cpu/intel_pstate/max_perf_pct 2>/dev/null || true
+            fi
+
+            # 4. Trigger TLP battery profile
+            if command -v tlp >/dev/null 2>&1; then
+                tlp bat >/dev/null 2>&1 || true
+            fi
+
+            echo "$target" > "$PROFILE_FILE"
+            echo "🍃 Power Profile switched to [ECO SAVER]"
+            echo "   • CPU Governor     : powersave"
+            echo "   • Energy Preference: power (max efficiency)"
+            echo "   • CPU Frequency    : Capped at 70%, Turbo boost disabled"
+            echo "   • PCIe & Wi-Fi     : Aggressive power-save enabled"
+            ;;
+
+        turbo|performance|max)
+            target="turbo"
+            # 1. CPU Scaling Governor -> performance
+            for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+                if [ -f "$gov" ]; then
+                    echo "performance" > "$gov" 2>/dev/null || true
+                fi
+            done
+
+            # 2. Energy Performance Preference -> performance
+            for epp in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+                if [ -f "$epp" ]; then
+                    echo "performance" > "$epp" 2>/dev/null || true
+                fi
+            done
+
+            # 3. CPU Boost & Frequency Ceiling
+            if [ -f /sys/devices/system/cpu/cpufreq/boost ]; then
+                echo "1" > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+                echo "0" > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/max_perf_pct ]; then
+                echo "100" > /sys/devices/system/cpu/intel_pstate/max_perf_pct 2>/dev/null || true
+            fi
+
+            # 4. Trigger TLP AC mode
+            if command -v tlp >/dev/null 2>&1; then
+                tlp ac >/dev/null 2>&1 || true
+            fi
+
+            echo "$target" > "$PROFILE_FILE"
+            echo "⚡ Power Profile switched to [TURBO PERFORMANCE]"
+            echo "   • CPU Governor     : performance"
+            echo "   • Energy Preference: performance (maximum throughput)"
+            echo "   • CPU Frequency    : 100% uncapped with Turbo Boost"
+            echo "   • PCIe & Peripherals: Full throughput mode"
+            ;;
+
+        balanced|default|auto)
+            target="balanced"
+            # 1. CPU Scaling Governor -> powersave (dynamic on P-State) or schedutil
+            for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+                if [ -f "$gov" ]; then
+                    if grep -qw "powersave" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null; then
+                        echo "powersave" > "$gov" 2>/dev/null || true
+                    elif grep -qw "schedutil" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null; then
+                        echo "schedutil" > "$gov" 2>/dev/null || true
+                    fi
+                fi
+            done
+
+            # 2. Energy Performance Preference -> balance_power or balance_performance
+            for epp in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+                if [ -f "$epp" ]; then
+                    echo "balance_power" > "$epp" 2>/dev/null || echo "default" > "$epp" 2>/dev/null || true
+                fi
+            done
+
+            # 3. CPU Boost & Frequency Ceiling
+            if [ -f /sys/devices/system/cpu/cpufreq/boost ]; then
+                echo "1" > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+                echo "0" > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
+            fi
+            if [ -f /sys/devices/system/cpu/intel_pstate/max_perf_pct ]; then
+                echo "100" > /sys/devices/system/cpu/intel_pstate/max_perf_pct 2>/dev/null || true
+            fi
+
+            # 4. Trigger TLP automatic mode
+            if command -v tlp >/dev/null 2>&1; then
+                tlp auto >/dev/null 2>&1 || true
+            fi
+
+            echo "$target" > "$PROFILE_FILE"
+            echo "⚖️ Power Profile switched to [BALANCED]"
+            echo "   • CPU Governor     : dynamic adaptive scaling"
+            echo "   • Energy Preference: balance_power (smart on-demand)"
+            echo "   • Boost Capability : enabled dynamically"
+            echo "   • TLP Mode         : automatic AC/Battery detection"
+            ;;
+
+        *)
+            echo "Error: Unknown profile '$target'. Choose from: eco | balanced | turbo" >&2
+            exit 1
+            ;;
+    esac
+}
+
+# ------------------------------------------------------------------------------
+# Battery Charge Ceiling (Threshold) Configuration
+# ------------------------------------------------------------------------------
+set_battery_threshold() {
+    local thresh="${1:-}"
+    if [ -z "$thresh" ]; then
+        echo "Active charge ceiling: $(get_active_threshold)%"
+        return 0
+    fi
+
+    # Validate integer between 50 and 100
+    if ! [[ "$thresh" =~ ^[0-9]+$ ]] || [ "$thresh" -lt 50 ] || [ "$thresh" -gt 100 ]; then
+        echo "Error: Battery threshold must be an integer between 50 and 100." >&2
+        exit 1
+    fi
+
+    ensure_root "$@"
+
+    local applied=0
+    local bat_path
+    bat_path=$(find_battery || true)
+
+    # 1. Direct sysfs charge threshold interface (Linux 5.14+ standard & vendor drivers)
+    for b in /sys/class/power_supply/BAT*; do
+        if [ -d "$b" ]; then
+            if [ -f "$b/charge_control_end_threshold" ]; then
+                echo "$thresh" > "$b/charge_control_end_threshold" 2>/dev/null && applied=1 || true
+            fi
+            if [ -f "$b/charge_stop_threshold" ]; then
+                echo "$thresh" > "$b/charge_stop_threshold" 2>/dev/null && applied=1 || true
+            fi
+        fi
+    done
+
+    # Lenovo Ideapad conservation mode fallback (60-80% threshold = 1)
+    if [ -f "/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/conservation_mode" ]; then
+        if [ "$thresh" -le 85 ]; then
+            echo "1" > "/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/conservation_mode" 2>/dev/null && applied=1 || true
+        else
+            echo "0" > "/sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/conservation_mode" 2>/dev/null && applied=1 || true
+        fi
+    fi
+
+    # 2. TLP integration & configuration update
+    local start_thresh=$(( thresh > 5 ? thresh - 5 : thresh ))
+    if command -v tlp >/dev/null 2>&1; then
+        tlp setcharge "$start_thresh" "$thresh" BAT0 >/dev/null 2>&1 && applied=1 || true
+    fi
+
+    # Persist in TLP configuration file
+    if [ -f "$TLP_SENTINEL_CONF" ]; then
+        sed -i "s/^STOP_CHARGE_THRESH_BAT0=.*/STOP_CHARGE_THRESH_BAT0=${thresh}/" "$TLP_SENTINEL_CONF" 2>/dev/null || true
+        sed -i "s/^START_CHARGE_THRESH_BAT0=.*/START_CHARGE_THRESH_BAT0=${start_thresh}/" "$TLP_SENTINEL_CONF" 2>/dev/null || true
+    fi
+
+    # Save to Sentinel state
+    echo "$thresh" > "$THRESHOLD_FILE"
+
+    echo "🛡️ Battery Lifespan Protector: Charge ceiling set to ${thresh}%"
+    if [ "$applied" -eq 1 ]; then
+        echo "   ✓ Hardware charge control acknowledged and applied successfully."
+    else
+        echo "   ℹ Configured in Sentinel and TLP (Will apply whenever compatible hardware is present)."
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Status & Diagnostics Gathering
+# ------------------------------------------------------------------------------
+get_status() {
+    local raw_output=0
+    if [ "${1:-}" = "--porcelain" ] || [ "${1:-}" = "--raw" ]; then
+        raw_output=1
+    fi
+
+    local profile
+    profile="$(get_active_profile)"
+    local threshold
+    threshold="$(get_active_threshold)"
+
+    local bat_path
+    bat_path="$(find_battery || true)"
+
+    local capacity="N/A"
+    local status="AC Connected"
+    local health="100.0%"
+    local discharge_rate="0.00 W"
+    local temp="Normal"
+    local remaining="Connected to AC / Mains Power"
+    local full_design_mwh=""
+    local full_mwh=""
+
+    # 1. Thermal reading
+    for t in /sys/class/thermal/thermal_zone*/temp; do
+        if [ -f "$t" ]; then
+            local raw_t
+            raw_t=$(cat "$t" 2>/dev/null || true)
+            if [ -n "$raw_t" ] && [ "$raw_t" -gt 1000 ]; then
+                temp=$(awk -v v="$raw_t" 'BEGIN { printf "%.1f°C", v / 1000 }')
+                break
+            fi
+        fi
+    done
+
+    if [ -n "$bat_path" ] && [ -d "$bat_path" ]; then
+        # Capacity percentage
+        if [ -f "$bat_path/capacity" ]; then
+            capacity="$(cat "$bat_path/capacity" 2>/dev/null || echo "100")%"
+        fi
+
+        # Charge status
+        if [ -f "$bat_path/status" ]; then
+            status="$(cat "$bat_path/status" 2>/dev/null || echo "Unknown")"
+        fi
+
+        # Health calculation
+        local full_val=""
+        local design_val=""
+        if [ -f "$bat_path/energy_full" ] && [ -f "$bat_path/energy_full_design" ]; then
+            full_val=$(cat "$bat_path/energy_full" 2>/dev/null || true)
+            design_val=$(cat "$bat_path/energy_full_design" 2>/dev/null || true)
+        elif [ -f "$bat_path/charge_full" ] && [ -f "$bat_path/charge_full_design" ]; then
+            full_val=$(cat "$bat_path/charge_full" 2>/dev/null || true)
+            design_val=$(cat "$bat_path/charge_full_design" 2>/dev/null || true)
+        fi
+
+        if [ -n "$full_val" ] && [ -n "$design_val" ] && [ "$design_val" -gt 0 ] 2>/dev/null; then
+            health=$(awk -v f="$full_val" -v d="$design_val" 'BEGIN {
+                pct = (f * 100.0) / d;
+                if (pct > 100.0) pct = 100.0;
+                printf "%.1f%%", pct
+            }')
+            full_mwh=$(awk -v v="$full_val" 'BEGIN { printf "%d", v / 1000 }')
+            full_design_mwh=$(awk -v v="$design_val" 'BEGIN { printf "%d", v / 1000 }')
+        fi
+
+        # Discharge / Charge Rate (Watts)
+        local power_uW=""
+        if [ -f "$bat_path/power_now" ]; then
+            power_uW=$(cat "$bat_path/power_now" 2>/dev/null || true)
+        elif [ -f "$bat_path/current_now" ] && [ -f "$bat_path/voltage_now" ]; then
+            local curr volt
+            curr=$(cat "$bat_path/current_now" 2>/dev/null || echo "0")
+            volt=$(cat "$bat_path/voltage_now" 2>/dev/null || echo "0")
+            power_uW=$(awk -v c="$curr" -v v="$volt" 'BEGIN { printf "%.0f", (c * v) / 1000000 }')
+        fi
+
+        if [ -n "$power_uW" ] && [ "$power_uW" -gt 0 ] 2>/dev/null; then
+            local watts
+            watts=$(awk -v p="$power_uW" 'BEGIN { printf "%.2f", p / 1000000 }')
+            if [ "$status" = "Discharging" ]; then
+                discharge_rate="${watts} W (Discharging)"
+            elif [ "$status" = "Charging" ]; then
+                discharge_rate="${watts} W (Charging)"
+            else
+                discharge_rate="${watts} W"
+            fi
+
+            # Estimate remaining runtime
+            local energy_now=""
+            if [ -f "$bat_path/energy_now" ]; then
+                energy_now=$(cat "$bat_path/energy_now" 2>/dev/null || true)
+            elif [ -f "$bat_path/charge_now" ] && [ -f "$bat_path/voltage_now" ]; then
+                local c_now v_now
+                c_now=$(cat "$bat_path/charge_now" 2>/dev/null || echo "0")
+                v_now=$(cat "$bat_path/voltage_now" 2>/dev/null || echo "0")
+                energy_now=$(awk -v c="$c_now" -v v="$v_now" 'BEGIN { printf "%.0f", (c * v) / 1000000 }')
+            fi
+
+            if [ "$status" = "Discharging" ] && [ -n "$energy_now" ] && [ "$power_uW" -gt 0 ]; then
+                remaining=$(awk -v e="$energy_now" -v p="$power_uW" 'BEGIN {
+                    hours = e / p;
+                    h = int(hours);
+                    m = int((hours - h) * 60);
+                    printf "%dh %dm remaining", h, m
+                }')
+            elif [ "$status" = "Charging" ] && [ -n "$energy_now" ] && [ -n "$full_val" ] && [ "$full_val" -gt "$energy_now" ]; then
+                remaining=$(awk -v f="$full_val" -v e="$energy_now" -v p="$power_uW" 'BEGIN {
+                    needed = f - e;
+                    hours = needed / p;
+                    h = int(hours);
+                    m = int((hours - h) * 60);
+                    printf "%dh %dm until full", h, m
+                }')
+            elif [ "$status" = "Full" ]; then
+                remaining="Fully Charged (AC Connected)"
+            fi
+        else
+            if [ "$status" = "Full" ]; then
+                discharge_rate="0.00 W"
+                remaining="Fully Charged (AC Connected)"
+            elif [ "$status" = "Not charging" ]; then
+                discharge_rate="0.00 W"
+                remaining="Plugged in (Charge Ceiling Active)"
+            else
+                discharge_rate="0.00 W (Mains Power)"
+                remaining="Operating on AC Power"
+            fi
+        fi
+
+        # Battery temperature if exposed by ACPI battery
+        if [ -f "$bat_path/temp" ]; then
+            local b_temp
+            b_temp=$(cat "$bat_path/temp" 2>/dev/null || true)
+            if [ -n "$b_temp" ] && [ "$b_temp" -gt 0 ]; then
+                temp=$(awk -v t="$b_temp" 'BEGIN { printf "%.1f°C", t / 10 }')
+            fi
+        fi
+    else
+        capacity="100% (AC)"
+        status="Mains Powered"
+        health="100.0% (Desktop / VM)"
+        discharge_rate="0.00 W"
+        remaining="Mains Power / Continuous"
+    fi
+
+    # Output formatting
+    if [ "$raw_output" -eq 1 ]; then
+        echo "PROFILE=$profile"
+        echo "CAPACITY=$capacity"
+        echo "STATUS=$status"
+        echo "HEALTH=$health"
+        echo "DISCHARGE_RATE=$discharge_rate"
+        echo "TEMPERATURE=$temp"
+        echo "REMAINING=$remaining"
+        echo "THRESHOLD=$threshold"
+        return 0
+    fi
+
+    # Human-readable CLI card
+    local profile_label=""
+    case "$profile" in
+        eco) profile_label="🍃 ECO SAVER (Aggressive Battery Preservation)" ;;
+        turbo) profile_label="⚡ TURBO PERFORMANCE (Peak Frequency)" ;;
+        *) profile_label="⚖️ BALANCED (Intelligent Dynamic Scaling)" ;;
+    esac
+
+    echo "================================================================================"
+    echo "                   Brisk Battery Sentinel - System Diagnostics"
+    echo "================================================================================"
+    printf "  %-22s : %s\n" "Power Profile" "$profile_label"
+    printf "  %-22s : %s [%s]\n" "Battery Capacity" "$capacity" "$status"
+    if [ -n "$full_mwh" ] && [ -n "$full_design_mwh" ]; then
+        printf "  %-22s : %s (%s mWh / %s mWh)\n" "Battery Health" "$health" "$full_mwh" "$full_design_mwh"
+    else
+        printf "  %-22s : %s\n" "Battery Health" "$health"
+    fi
+    printf "  %-22s : %s\n" "Power Draw Rate" "$discharge_rate"
+    printf "  %-22s : %s\n" "Hardware Temperature" "$temp"
+    printf "  %-22s : %s\n" "Estimated Remaining" "$remaining"
+    printf "  %-22s : %s%% (Protects Li-Ion cells against degradation)\n" "Lifespan Ceiling" "$threshold"
+    echo "================================================================================"
+}
+
+# ------------------------------------------------------------------------------
+# Entrypoint & Command Routing
+# ------------------------------------------------------------------------------
+cmd="${1:-status}"
+shift || true
+
+case "$cmd" in
+    profile)
+        if [ $# -gt 0 ]; then
+            set_power_profile "$1"
+        else
+            get_active_profile
+        fi
+        ;;
+    status)
+        get_status "$@"
+        ;;
+    threshold)
+        if [ $# -gt 0 ]; then
+            set_battery_threshold "$1"
+        else
+            echo "Battery Charge Threshold: $(get_active_threshold)%"
+        fi
+        ;;
+    help|--help|-h)
+        echo "Brisk Battery Sentinel - Ultra-Lean Laptop Power Optimization"
+        echo ""
+        echo "Usage: brisk-sentinel [command] [options]"
+        echo ""
+        echo "Commands:"
+        echo "  profile [eco|balanced|turbo]  Switch active power profile"
+        echo "  status [--raw]                Display battery health, power rate & profile"
+        echo "  threshold [50-100]            Set maximum battery charge threshold (e.g. 80%)"
+        echo "  help                          Show this assistance manual"
+        ;;
+    *)
+        echo "Unknown command: $cmd" >&2
+        echo "Run 'brisk-sentinel help' for valid options." >&2
+        exit 1
+        ;;
+esac

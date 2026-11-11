@@ -131,7 +131,8 @@
         "format-plugged": "🔌 {capacity}%",
         "format-alt": "{icon} {time}",
         "format-icons": ["🪫", "🔋", "🔋"],
-        "tooltip-format": "Battery: {capacity}% ({time})"
+        "tooltip-format": "Battery: {capacity}% ({time})",
+        "on-click": "brisk-sentinel-gui"
     },
     "clock": {
         "interval": 1,

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Brisk Battery Sentinel
+GenericName=Power Management
+Comment=Intelligent laptop battery optimizer and profile switcher
+Exec=brisk-sentinel-gui
+Icon=battery-good
+Terminal=false
+Type=Application
+Categories=HardwareSettings;Settings;System;
+Keywords=battery;power;tlp;profile;energy;charger;saving;eco;turbo;
+StartupNotify=true

@@ -1,0 +1,430 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Time-Travel Instant System Snapshot & Rollback Engine
+# High-speed snapshot creation, validation, rollback, and APT automation.
+# Supports native BTRFS subvolumes with automated Rsync hardlink fallback.
+# ==============================================================================
+
+set -euo pipefail
+
+# Configuration defaults
+CONFIG_FILE="/etc/brisk/timetravel.conf"
+AUTO_BACKUP_ENABLED=true
+MAX_SNAPSHOTS=10
+BACKUP_DIR="/var/backups/brisk-timetravel/snapshots"
+SNAPSHOT_TYPE="auto"
+
+# Load persistent configuration if present
+if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$CONFIG_FILE"
+fi
+
+LOCK_FILE="/run/lock/brisk-timetravel.lock"
+[ -d "/run/lock" ] || mkdir -p "/run/lock"
+
+# Elevate privileges if invoked as standard user
+ensure_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            exec sudo "$0" "$@"
+        else
+            echo "Error: brisk-timetravel requires root privileges." >&2
+            exit 1
+        fi
+    fi
+}
+
+# Determine filesystem capabilities of root mount
+detect_backend() {
+    if [ "$SNAPSHOT_TYPE" != "auto" ]; then
+        echo "$SNAPSHOT_TYPE"
+        return
+    fi
+
+    local fstype
+    fstype=$(findmnt -n -o FSTYPE / 2>/dev/null || stat -f -c %T / 2>/dev/null || echo "generic")
+
+    if [ "$fstype" = "btrfs" ] && command -v btrfs >/dev/null 2>&1; then
+        if btrfs subvolume show / >/dev/null 2>&1; then
+            echo "btrfs"
+            return
+        fi
+    fi
+
+    echo "rsync"
+}
+
+# Acquire non-blocking flock to prevent race conditions
+acquire_lock() {
+    if [ "${_TIMETRAVEL_LOCKED:-0}" -eq 1 ]; then
+        return 0
+    fi
+    exec 200>"$LOCK_FILE"
+    if ! flock -n 200; then
+        echo "Error: Another brisk-timetravel process is currently running." >&2
+        exit 1
+    fi
+    export _TIMETRAVEL_LOCKED=1
+}
+
+# Check remaining disk space on target backup filesystem (require at least 500 MB)
+check_disk_space() {
+    local target_dir="$1"
+    mkdir -p "$target_dir"
+    local free_kb
+    free_kb=$(df -k --output=avail "$target_dir" 2>/dev/null | tail -n1 | tr -d ' ' || echo "0")
+    if [ "$free_kb" -lt 512000 ]; then
+        echo "Error: Insufficient disk space on backup target (${free_kb} KB available, 500 MB required)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Prune older automated snapshots when exceeding retention count
+prune_old_snapshots() {
+    local retention="${MAX_SNAPSHOTS:-10}"
+    [ -d "$BACKUP_DIR" ] || return 0
+
+    local auto_snaps
+    auto_snaps=$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort || true)
+    local count
+    count=$(echo "$auto_snaps" | grep -c . || echo "0")
+
+    if [ "$count" -gt "$retention" ]; then
+        local remove_count=$((count - retention))
+        echo "Notice: Pruning $remove_count oldest snapshots to satisfy retention policy ($retention max)..." >&2
+        echo "$auto_snaps" | head -n "$remove_count" | while read -r old_dir; do
+            if [ -n "$old_dir" ] && [ -d "$old_dir" ]; then
+                local old_id
+                old_id=$(basename "$old_dir")
+                echo "  -> Removing expired snapshot: $old_id" >&2
+                cmd_delete "$old_id" --quiet || rm -rf "$old_dir"
+            fi
+        done
+    fi
+}
+
+# Create a new system checkpoint
+cmd_create() {
+    local comment="${1:-Manual system checkpoint}"
+    local trigger="${2:-manual}"
+
+    acquire_lock
+    mkdir -p "$BACKUP_DIR"
+    check_disk_space "$BACKUP_DIR"
+
+    local snap_id
+    snap_id=$(date +"%Y-%m-%d_%H-%M-%S")
+    local snap_path="${BACKUP_DIR}/${snap_id}"
+    local backend
+    backend=$(detect_backend)
+
+    echo "================================================================================" >&2
+    echo " [Brisk Time-Travel] Creating System Checkpoint: ${snap_id}" >&2
+    echo "================================================================================" >&2
+    echo "  Timestamp : $(date +'%Y-%m-%d %H:%M:%S')" >&2
+    echo "  Backend   : ${backend^^}" >&2
+    echo "  Trigger   : ${trigger}" >&2
+    echo "  Comment   : ${comment}" >&2
+    echo "--------------------------------------------------------------------------------" >&2
+
+    mkdir -p "$snap_path"
+
+    if [ "$backend" = "btrfs" ]; then
+        echo "--> Creating instantaneous BTRFS read-only subvolume snapshot..." >&2
+        btrfs subvolume snapshot -r / "${snap_path}/rootfs"
+    else
+        echo "--> Creating synchronized file system snapshot using Rsync hardlinks..." >&2
+        mkdir -p "${snap_path}/rootfs"
+
+        # Locate latest previous snapshot for incremental hardlink deduplication
+        local latest_snap=""
+        latest_snap=$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d ! -name "$snap_id" 2>/dev/null | sort -r | head -n1 || true)
+        local link_dest_arg=()
+        if [ -n "$latest_snap" ] && [ -d "${latest_snap}/rootfs" ]; then
+            echo "--> Hardlinking unchanged files against previous checkpoint: $(basename "$latest_snap")" >&2
+            link_dest_arg=("--link-dest=${latest_snap}/rootfs")
+        fi
+
+        # Rsync core root system excluding transient files, swap, and backup storages
+        rsync -aAXH --delete \
+            "${link_dest_arg[@]}" \
+            --exclude={"/proc/*","/sys/*","/dev/*","/run/*","/tmp/*","/var/tmp/*"} \
+            --exclude={"/mnt/*","/media/*","/lost+found","/swapfile"} \
+            --exclude={"/var/backups/brisk-timetravel/*","/timeshift/*"} \
+            --exclude={"/var/cache/apt/archives/*"} \
+            / "${snap_path}/rootfs/"
+    fi
+
+    # Record snapshot metadata
+    local snap_size
+    snap_size=$(du -sh "${snap_path}" 2>/dev/null | cut -f1 || echo "unknown")
+
+    cat << EOF > "${snap_path}/info.conf"
+ID="${snap_id}"
+DATE="$(date +'%Y-%m-%d %H:%M:%S')"
+TIMESTAMP="$(date +%s)"
+TYPE="${backend}"
+TRIGGER="${trigger}"
+SIZE="${snap_size}"
+COMMENT="${comment}"
+EOF
+
+    echo "--------------------------------------------------------------------------------" >&2
+    echo " [SUCCESS] System checkpoint ${snap_id} created successfully (${snap_size})." >&2
+    echo "================================================================================" >&2
+
+    # Run background prune
+    prune_old_snapshots
+
+    echo "$snap_id"
+}
+
+# List all existing snapshots
+cmd_list() {
+    local mode="${1:-pretty}"
+
+    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]; then
+        if [ "$mode" = "--raw" ]; then
+            return 0
+        fi
+        echo "================================================================================"
+        echo "                       Brisk Time-Travel Snapshots"
+        echo "================================================================================"
+        echo "  No system checkpoints found in ${BACKUP_DIR}."
+        echo "  Run 'brisk-timetravel create [comment]' or use GUI to take a checkpoint."
+        echo "================================================================================"
+        return 0
+    fi
+
+    if [ "$mode" = "--raw" ]; then
+        for snap_dir in $(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort); do
+            local sid
+            sid=$(basename "$snap_dir")
+            local sdate="Unknown" stype="rsync" ssize="-" scomment="No comment"
+            if [ -f "${snap_dir}/info.conf" ]; then
+                # shellcheck disable=SC1090
+                source "${snap_dir}/info.conf"
+                sdate="${DATE:-$sdate}"
+                stype="${TYPE:-$stype}"
+                ssize="${SIZE:-$ssize}"
+                scomment="${COMMENT:-$scomment}"
+            fi
+            echo "${sid}|${sdate}|${stype}|${ssize}|${scomment}"
+        done
+        return 0
+    fi
+
+    echo "===================================================================================================="
+    echo "                                  Brisk Time-Travel System Snapshots"
+    echo "===================================================================================================="
+    printf "%-21s %-20s %-8s %-10s %s\n" "SNAPSHOT ID" "DATE & TIME" "TYPE" "SIZE" "COMMENT"
+    echo "----------------------------------------------------------------------------------------------------"
+
+    local total_count=0
+    for snap_dir in $(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort); do
+        local sid
+        sid=$(basename "$snap_dir")
+        local sdate="Unknown" stype="rsync" ssize="-" scomment="No comment"
+        if [ -f "${snap_dir}/info.conf" ]; then
+            # shellcheck disable=SC1090
+            source "${snap_dir}/info.conf"
+            sdate="${DATE:-$sdate}"
+            stype="${TYPE:-$stype}"
+            ssize="${SIZE:-$ssize}"
+            scomment="${COMMENT:-$scomment}"
+        fi
+        printf "%-21s %-20s %-8s %-10s %s\n" "$sid" "$sdate" "$stype" "$ssize" "$scomment"
+        total_count=$((total_count + 1))
+    done
+
+    echo "----------------------------------------------------------------------------------------------------"
+    local total_storage free_space
+    total_storage=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1 || echo "unknown")
+    free_space=$(df -h "$BACKUP_DIR" 2>/dev/null | tail -n1 | awk '{print $4}' || echo "unknown")
+    echo "Total Checkpoints: ${total_count} | Storage Used: ${total_storage} | Free Disk Space: ${free_space}"
+    echo "===================================================================================================="
+}
+
+# Restore system files from specified checkpoint
+cmd_restore() {
+    local target_id="${1:-}"
+    if [ -z "$target_id" ]; then
+        echo "Error: Snapshot ID required. Usage: brisk-timetravel restore [snapshot_id]" >&2
+        exit 1
+    fi
+
+    local snap_path="${BACKUP_DIR}/${target_id}"
+    if [ ! -d "$snap_path" ]; then
+        echo "Error: Snapshot '${target_id}' does not exist in ${BACKUP_DIR}." >&2
+        exit 1
+    fi
+
+    if [ ! -d "${snap_path}/rootfs" ]; then
+        echo "Error: Corrupted snapshot metadata: '${target_id}/rootfs' is missing." >&2
+        exit 1
+    fi
+
+    acquire_lock
+
+    echo "================================================================================"
+    echo " [Brisk Time-Travel] System Rollback Initialization"
+    echo "================================================================================"
+    echo " Target Checkpoint: ${target_id}"
+
+    local scomment="Pre-restore safety rollback"
+    if [ -f "${snap_path}/info.conf" ]; then
+        local snap_comment
+        snap_comment=$(grep -E '^COMMENT=' "${snap_path}/info.conf" | cut -d= -f2- | tr -d '"' || true)
+        [ -n "$snap_comment" ] && echo " Checkpoint Note  : ${snap_comment}"
+    fi
+
+    echo "--------------------------------------------------------------------------------"
+    echo "--> [Step 1/2] Generating automatic pre-restore safety checkpoint..."
+    local safety_id
+    safety_id=$(cmd_create "Safety checkpoint before restoring ${target_id}" "pre-restore-safety")
+
+    echo "--> [Step 2/2] Restoring system files from ${target_id}..."
+
+    # Sync snapshot files back to root filesystem
+    # Protect dynamic virtual mount points, kernel interfaces, and fstab UUIDs
+    rsync -aAXH --delete \
+        --exclude={"/proc/*","/sys/*","/dev/*","/run/*","/tmp/*","/var/tmp/*"} \
+        --exclude={"/mnt/*","/media/*","/lost+found","/swapfile"} \
+        --exclude={"/var/backups/brisk-timetravel/*","/timeshift/*"} \
+        --exclude={"/etc/fstab","/boot/efi/*"} \
+        "${snap_path}/rootfs/" /
+
+    echo "--> Flushing filesystem cache to physical storage (sync)..."
+    sync
+
+    echo "================================================================================"
+    echo " [SUCCESS] System restored successfully to checkpoint ${target_id}!"
+    echo " Safety fallback checkpoint preserved as: ${safety_id}"
+    echo " Recommended action: Reboot the machine to reload all kernel modules & daemons."
+    echo "================================================================================"
+}
+
+# Delete a specified snapshot
+cmd_delete() {
+    local target_id="${1:-}"
+    local quiet_flag="${2:-}"
+
+    if [ -z "$target_id" ]; then
+        echo "Error: Snapshot ID required. Usage: brisk-timetravel delete [snapshot_id]" >&2
+        exit 1
+    fi
+
+    local snap_path="${BACKUP_DIR}/${target_id}"
+    if [ ! -d "$snap_path" ]; then
+        echo "Error: Snapshot '${target_id}' does not exist in ${BACKUP_DIR}." >&2
+        exit 1
+    fi
+
+    # If it is a BTRFS subvolume, delete using btrfs command
+    if command -v btrfs >/dev/null 2>&1 && btrfs subvolume show "${snap_path}/rootfs" >/dev/null 2>&1; then
+        btrfs subvolume delete "${snap_path}/rootfs" >/dev/null 2>&1 || true
+    fi
+
+    rm -rf "$snap_path"
+
+    if [ "$quiet_flag" != "--quiet" ]; then
+        echo "Snapshot '${target_id}' has been permanently deleted."
+    fi
+}
+
+# Automated pre-update hook executed by APT DPkg::Pre-Invoke
+cmd_auto_hook() {
+    # Check if automatic backups are enabled
+    if [ "${AUTO_BACKUP_ENABLED:-true}" != "true" ]; then
+        exit 0
+    fi
+
+    # Detect live-build build environment or Debian installer chroot and exit gracefully
+    if [ -f "/var/run/live-build" ] || [ -f "/run/live-build" ] || [ -d "/live/image" ]; then
+        exit 0
+    fi
+
+    # Detect live ISO read-only squashfs environment without persistence
+    if [ -f "/run/live/medium" ] && [ ! -d "/live/persistence" ]; then
+        exit 0
+    fi
+
+    # Verify minimum disk space before attempting pre-update snapshot
+    local free_kb
+    free_kb=$(df -k --output=avail "$BACKUP_DIR" 2>/dev/null | tail -n1 | tr -d ' ' || echo "0")
+    if [ "$free_kb" -lt 1048576 ]; then
+        # Less than 1GB free: log notice and skip to avoid aborting package upgrade
+        echo "[Brisk Time-Travel] Notice: Low disk space (<1GB). Skipping automated pre-update checkpoint." >&2
+        exit 0
+    fi
+
+    # Execute snapshot creation
+    local snap_id
+    snap_id=$(cmd_create "Automatic pre-update checkpoint (APT)" "apt-hook" 2>&1 | tail -n1 || echo "")
+
+    # Broadcast notification to active user desktop sessions
+    if command -v notify-send >/dev/null 2>&1; then
+        for user_dir in /run/user/*; do
+            if [ -d "$user_dir" ]; then
+                local uid
+                uid=$(basename "$user_dir")
+                local uname
+                uname=$(id -nu "$uid" 2>/dev/null || true)
+                if [ -n "$uname" ]; then
+                    sudo -u "$uname" \
+                        DBUS_SESSION_BUS_ADDRESS="unix:path=${user_dir}/bus" \
+                        notify-send -i document-revert -u low \
+                        "Brisk Time-Travel Checkpoint" \
+                        "Captured system safety snapshot before applying package updates." 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
+
+    exit 0
+}
+
+# Parse help flags first without requiring root
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
+    echo "Brisk Time-Travel Recovery CLI"
+    echo "Usage: brisk-timetravel [command] [arguments]"
+    echo ""
+    echo "Commands:"
+    echo "  create [comment]     Create instant system checkpoint (BTRFS subvolume or Rsync)"
+    echo "  list [--raw]         Display table of existing system checkpoints"
+    echo "  restore [id]         Restore system files to specified checkpoint"
+    echo "  delete [id]          Permanently remove a checkpoint"
+    echo "  auto-hook            Automated APT pre-update invocation hook"
+    echo "  help                 Display this help dialog"
+    exit 0
+fi
+
+# Main command dispatcher
+ensure_root "$@"
+
+ACTION="${1:-list}"
+shift || true
+
+case "$ACTION" in
+    create)
+        cmd_create "$@"
+        ;;
+    list)
+        cmd_list "$@"
+        ;;
+    restore)
+        cmd_restore "$@"
+        ;;
+    delete)
+        cmd_delete "$@"
+        ;;
+    auto-hook)
+        cmd_auto_hook "$@"
+        ;;
+    *)
+        echo "Error: Unknown command '$ACTION'. Run 'brisk-timetravel --help' for usage." >&2
+        exit 1
+        ;;
+esac

@@ -1,0 +1,8 @@
+# ==============================================================================
+# BriskOS Time-Travel Sudo Privileges
+# Allows live session user and sudo group members to run brisk-timetravel
+# ==============================================================================
+
+live ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-timetravel, /usr/local/bin/brisk-timetravel-gui
+user ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-timetravel, /usr/local/bin/brisk-timetravel-gui
+%sudo ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-timetravel, /usr/local/bin/brisk-timetravel-gui

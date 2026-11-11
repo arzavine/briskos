@@ -1,0 +1,17 @@
+# ==============================================================================
+# BriskOS Power Management & Laptop Optimization Package Manifest
+# Ultra-Lean Laptop Power Optimization & Battery Lifespan Engine
+# ==============================================================================
+
+# Core power management daemon & network/radio power auto-switching
+tlp
+tlp-rdw
+
+# Advanced battery metrics, ACPI event routing & hardware power diagnostics
+powertop
+upower
+acpi
+acpid
+
+# CPU frequency scaling & energy performance preference management
+linux-cpupower
