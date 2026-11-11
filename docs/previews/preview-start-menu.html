@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>BriskOS 1.0 LTS - Wofi Start Menu</title>
+  <title>BriskOS 1.0 LTS - Wofi Start Menu (Night Glass)</title>
   <style>
     * {
       box-sizing: border-box;
@@ -14,16 +14,14 @@
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      background-color: #0f172a;
+      background-color: #0b1120;
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       position: relative;
     }
 
-    /* -------------------------------------------------------------------------
-     * Desktop Wallpaper SVG Layer
-     * ------------------------------------------------------------------------- */
+    /* Desktop Wallpaper SVG Layer */
     .wallpaper-container {
       position: absolute;
       top: 0;
@@ -33,14 +31,14 @@
       z-index: 0;
     }
 
-    /* Desktop Window Decorators (Background windows) */
+    /* Background Windows (Inactive, 10px radius) */
     .window {
       position: absolute;
-      border-radius: 8px;
+      border-radius: 10px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
       z-index: 10;
     }
     .window.inactive {
@@ -70,49 +68,51 @@
       gap: 6px;
     }
     .win-btn {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       background: transparent;
       border: none;
       color: #64748b;
+      font-size: 11px;
     }
 
     #window-bg-terminal {
-      left: 240px;
-      top: 100px;
-      width: 820px;
-      height: 540px;
+      left: 220px;
+      top: 90px;
+      width: 840px;
+      height: 560px;
+      opacity: 0.85;
     }
     #window-bg-thunar {
-      left: 820px;
-      top: 180px;
-      width: 900px;
-      height: 600px;
+      left: 780px;
+      top: 170px;
+      width: 920px;
+      height: 620px;
+      opacity: 0.85;
     }
 
     /* -------------------------------------------------------------------------
-     * Wofi Floating Start Menu (440x500px)
+     * Wofi Floating Start Menu (440x510px) - Night Glass Translucent Surface
      * Matches config/includes.chroot/etc/skel/.config/wofi/style.css
      * ------------------------------------------------------------------------- */
     #wofi-window {
       position: absolute;
-      bottom: 48px;
-      left: 12px;
+      bottom: 54px;
+      left: 8px;
       width: 440px;
       height: 510px;
-      background-color: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(56, 189, 248, 0.25);
+      background-color: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(56, 189, 248, 0.2);
       z-index: 500;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      animation: startFadeIn 0.15s ease-out;
     }
 
     .wofi-outer-box {
@@ -123,7 +123,7 @@
       overflow: hidden;
     }
 
-    /* Search Input Box */
+    /* Recessed Search Input Box (#0f172a with focused Ice Cyan outline #38bdf8) */
     .wofi-search-container {
       position: relative;
       margin-bottom: 12px;
@@ -133,12 +133,12 @@
       height: 42px;
       padding: 0 14px 0 40px;
       border: 1px solid #38bdf8;
-      border-radius: 7px;
-      background-color: #1e293b;
+      border-radius: 8px;
+      background-color: #0f172a;
       color: #f8fafc;
       font-size: 13px;
       font-weight: 500;
-      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px #38bdf8;
       display: flex;
       align-items: center;
     }
@@ -170,7 +170,7 @@
 
     /* Category Header */
     .wofi-category-header {
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
       color: #64748b;
       letter-spacing: 0.08em;
@@ -202,9 +202,10 @@
       background-color: rgba(30, 41, 59, 0.5);
       color: #f8fafc;
     }
+    /* Selected Item gets 3px #38bdf8 Left Indicator Bar */
     .wofi-entry.focused {
       background-color: #1e293b;
-      border: 1px solid rgba(56, 189, 248, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       border-left: 3px solid #38bdf8;
     }
 
@@ -257,8 +258,8 @@
 
     /* Bottom Power Bar & Session Profile */
     .wofi-power-bar {
-      height: 46px;
-      background-color: #162032;
+      height: 48px;
+      background-color: rgba(22, 32, 50, 0.95);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       align-items: center;
@@ -271,11 +272,11 @@
       gap: 10px;
     }
     .user-avatar {
-      width: 26px;
-      height: 26px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       background: #1e293b;
-      border: 1px solid #38bdf8;
+      border: 1.5px solid #38bdf8;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -326,220 +327,355 @@
       color: #ffffff;
     }
 
+
     /* -------------------------------------------------------------------------
-     * Waybar Bottom Taskbar (40px)
+     * Waybar Bottom Taskbar: Night Glass Floating 3-Island Architecture
      * Matches config/includes.chroot/etc/skel/.config/waybar/style.css
      * ------------------------------------------------------------------------- */
     #waybar {
       position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 1920px;
-      height: 40px;
-      background-color: #0f172a;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      bottom: 8px;
+      left: 8px;
+      right: 8px;
+      height: 38px;
+      background-color: transparent;
+      border: none;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 4px;
       z-index: 1000;
+      pointer-events: none;
     }
 
-    .modules-left {
+    .modules-left,
+    .modules-center,
+    .modules-right {
+      pointer-events: auto;
+      background-color: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+      padding: 2px 6px;
       display: flex;
       align-items: center;
-      height: 100%;
+      height: 38px;
     }
+
+    /* Left Island: Start Menu & Pinned Launchers */
     #custom-startmenu {
-      height: 32px;
-      /* Active / Pressed Start Menu Button Style */
+      height: 30px;
+      background-color: transparent;
+      color: #38bdf8;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 0 10px;
+      margin: 0 2px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    #custom-startmenu:hover,
+    #custom-startmenu.hovered {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    #custom-startmenu.active-state {
       background-color: #38bdf8;
       color: #0f172a;
-      border: 1px solid #38bdf8;
-      font-weight: 700;
-      font-size: 13px;
-      padding: 0 14px;
-      margin: 4px 4px 4px 6px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+      border-color: #38bdf8;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
     }
 
     .pinned-launcher {
       width: 32px;
-      height: 32px;
+      height: 30px;
       background-color: transparent;
       color: #94a3b8;
-      margin: 4px 2px;
+      margin: 0 1px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .pinned-launcher:hover,
+    .pinned-launcher.hovered {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border-color: rgba(255, 255, 255, 0.08);
     }
 
-    .modules-center {
-      display: flex;
-      align-items: center;
-      height: 100%;
-    }
+    /* Center Island: Window Taskbar */
     #taskbar {
       display: flex;
       align-items: center;
-      margin: 4px 6px;
-      gap: 6px;
+      gap: 4px;
+      margin: 0;
     }
     .taskbar-button {
-      height: 32px;
-      border-radius: 6px;
+      height: 30px;
+      border-radius: 8px 8px 6px 6px;
       padding: 0 12px;
+      margin: 0 2px;
       display: flex;
       align-items: center;
       gap: 8px;
       font-size: 12.5px;
       font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-bottom: 3px solid transparent;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     }
-    .taskbar-button.inactive {
-      background-color: rgba(30, 41, 59, 0.5);
-      color: #94a3b8;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .modules-right {
-      display: flex;
-      align-items: center;
-      height: 100%;
-    }
-    .tray-module {
-      height: 32px;
+    .taskbar-button.active {
       background-color: #1e293b;
       color: #f8fafc;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-bottom: 3px solid #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
+      font-weight: 600;
+    }
+    .taskbar-button.inactive {
+      background-color: transparent;
+      color: #94a3b8;
+      border: 1px solid transparent;
+      border-bottom: 3px solid transparent;
+    }
+    .taskbar-button.inactive:hover {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Right Island: Continuous Glass with Subtle 1px Internal Dividers */
+    .tray-module {
+      height: 30px;
+      background-color: transparent;
+      color: #f8fafc;
+      border: none;
       border-radius: 6px;
       padding: 0 10px;
-      margin: 4px 3px;
+      margin: 0;
       display: flex;
       align-items: center;
       gap: 6px;
       font-size: 12.5px;
       font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    #network, #battery, #clock, #custom-power {
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .tray-module:hover,
+    .tray-module.hovered {
+      background-color: rgba(255, 255, 255, 0.06);
     }
     .tray-module.charging {
       color: #38bdf8;
-      border-color: rgba(56, 189, 248, 0.3);
     }
-    .tray-module#clock {
+    #clock {
       font-weight: 600;
       padding: 0 12px;
     }
     #custom-power {
-      height: 32px;
-      background-color: #1e293b;
-      color: #f43f5e;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
+      color: #94a3b8;
       padding: 0 12px;
-      margin: 4px 6px 4px 3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
+    #custom-power:hover,
+    #custom-power.hovered {
+      background-color: #f43f5e;
+      color: #ffffff;
+      border-radius: 6px;
+    }
+
   </style>
 </head>
 <body>
 
-  <!-- =========================================================================
-   * Desktop Wallpaper Background (Full 1920x1080 SVG from brisk-default.svg)
-   * ========================================================================= -->
+  <!-- Desktop Wallpaper SVG Layer (brisk-default.svg) -->
   <div class="wallpaper-container">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
-      <defs>
-        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0b0f19"/><stop offset="45%" stop-color="#0f172a"/><stop offset="100%" stop-color="#080c14"/>
-        </linearGradient>
-        <radialGradient id="ambientGlow" cx="68%" cy="46%" r="55%" fx="68%" fy="46%">
-          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.07"/><stop offset="40%" stop-color="#0ea5e9" stop-opacity="0.025"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
-        </radialGradient>
-        <radialGradient id="subtleGlowLeft" cx="22%" cy="65%" r="40%">
-          <stop offset="0%" stop-color="#1e293b" stop-opacity="0.4"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="facetGrad1" x1="15%" y1="20%" x2="85%" y2="80%">
-          <stop offset="0%" stop-color="#1e293b" stop-opacity="0.6"/><stop offset="50%" stop-color="#162236" stop-opacity="0.4"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0.2"/>
-        </linearGradient>
-        <linearGradient id="facetGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#0f172a" stop-opacity="0.5"/><stop offset="50%" stop-color="#1e293b" stop-opacity="0.3"/><stop offset="100%" stop-color="#334155" stop-opacity="0.15"/>
-        </linearGradient>
-        <linearGradient id="facetGrad3" x1="100%" y1="100%" x2="0%" y2="0%">
-          <stop offset="0%" stop-color="#0a0f1d" stop-opacity="0.7"/><stop offset="60%" stop-color="#131e33" stop-opacity="0.35"/><stop offset="100%" stop-color="#1e293b" stop-opacity="0.1"/>
-        </linearGradient>
-        <linearGradient id="cyanStrokeGrad" x1="0%" y1="30%" x2="100%" y2="70%">
-          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0"/><stop offset="25%" stop-color="#38bdf8" stop-opacity="0.4"/><stop offset="60%" stop-color="#38bdf8" stop-opacity="0.9"/><stop offset="85%" stop-color="#0ea5e9" stop-opacity="0.5"/><stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="crestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#0284c7"/>
-        </linearGradient>
-        <pattern id="gridPattern" width="80" height="80" patternUnits="userSpaceOnUse">
-          <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.03"/>
-          <circle cx="80" cy="80" r="1" fill="#38bdf8" fill-opacity="0.07"/>
-        </pattern>
-        <radialGradient id="gridMaskGrad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/><stop offset="60%" stop-color="#ffffff" stop-opacity="0.25"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-        </radialGradient>
-        <mask id="gridMask"><rect width="1920" height="1080" fill="url(#gridMaskGrad)"/></mask>
-      </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Base Floor Gradient: Deep Midnight Slate (#0b1120) with subtle peripheral depth -->
+    <linearGradient id="baseFloorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080d18"/>
+      <stop offset="50%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#0a0f1d"/>
+    </linearGradient>
 
-      <rect width="1920" height="1080" fill="url(#bgGrad)"/>
-      <rect width="1920" height="1080" fill="url(#ambientGlow)"/>
-      <rect width="1920" height="1080" fill="url(#subtleGlowLeft)"/>
-      <rect width="1920" height="1080" fill="url(#gridPattern)" mask="url(#gridMask)"/>
+    <!-- Luminous Ambient Field: Single soft cyan light source low on the right/center -->
+    <!-- Positioned to give floating glass taskbar islands and windows an atmospheric glow plane -->
+    <radialGradient id="luminousAmbient" cx="64%" cy="68%" r="58%" fx="64%" fy="68%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.12"/>
+      <stop offset="25%" stop-color="#38bdf8" stop-opacity="0.07"/>
+      <stop offset="55%" stop-color="#0ea5e9" stop-opacity="0.025"/>
+      <stop offset="80%" stop-color="#0369a1" stop-opacity="0.006"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
 
-      <polygon points="-100,1080 480,720 1280,860 2020,1080" fill="url(#facetGrad3)"/>
-      <polygon points="-80,640 680,480 1480,540 2040,320 2040,680 1340,780 520,760 -80,920" fill="url(#facetGrad1)" stroke="#38bdf8" stroke-opacity="0.08" stroke-width="1"/>
-      <polygon points="120,0 880,320 1680,260 2040,120 2040,0" fill="url(#facetGrad2)" stroke="#38bdf8" stroke-opacity="0.06" stroke-width="1"/>
-      <path d="M -60 420 Q 520 460 1080 380 T 2020 240 L 1980 340 Q 1120 480 480 540 Z" fill="#1e293b" fill-opacity="0.25" stroke="#38bdf8" stroke-opacity="0.12" stroke-width="1"/>
+    <!-- Secondary Soft Core Diffusion to prevent any banding -->
+    <radialGradient id="coreAmbientBloom" cx="60%" cy="72%" r="28%" fx="60%" fy="72%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.05"/>
+      <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.015"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
 
-      <path d="M -40 510 C 440 550, 820 430, 1360 410 S 1820 320, 2000 290" fill="none" stroke="url(#cyanStrokeGrad)" stroke-width="2.5" stroke-linecap="round"/>
-      <circle cx="1360" cy="410" r="3" fill="#38bdf8"/>
-      <circle cx="1360" cy="410" r="8" fill="none" stroke="#38bdf8" stroke-opacity="0.4" stroke-width="1"/>
+    <!-- Supersonic Geometric Facet Gradients (Deep Slate Flow Surfaces) -->
+    <linearGradient id="facetGradA" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#1e293b" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#334155" stop-opacity="0.08"/>
+    </linearGradient>
 
-      <g stroke="#94a3b8" stroke-opacity="0.2" stroke-width="1" fill="none">
-        <path d="M 64 88 L 64 64 L 88 64"/><path d="M 1832 64 L 1856 64 L 1856 88"/>
-      </g>
-      <g font-family="Inter, sans-serif" font-size="9" fill="#64748b" letter-spacing="2">
-        <text x="96" y="73" fill-opacity="0.6">BRISK-OS // VECTOR-DESKTOP</text>
-        <text x="1710" y="73" fill-opacity="0.4" text-anchor="end">SYS.WAYLAND.64BIT</text>
-      </g>
+    <linearGradient id="facetGradB" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.30"/>
+      <stop offset="50%" stop-color="#162236" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0.05"/>
+    </linearGradient>
 
-      <g transform="translate(100, 116)">
-        <polygon points="0,4 28,14 18,18 0,11" fill="url(#crestGrad)"/>
-        <polygon points="8,17 32,25 24,28 8,22" fill="#38bdf8" fill-opacity="0.6"/>
-        <polygon points="16,27 36,33 30,35 16,31" fill="#0ea5e9" fill-opacity="0.4"/>
-        <text x="50" y="24" font-family="Inter, sans-serif" font-size="18" font-weight="700" letter-spacing="5" fill="#f8fafc">BRISK<tspan fill="#38bdf8">OS</tspan></text>
-        <text x="52" y="36" font-family="Inter, sans-serif" font-size="8" font-weight="500" letter-spacing="2.5" fill="#94a3b8">MINIMALIST WAYLAND WORKSPACE</text>
-      </g>
-    </svg>
+    <linearGradient id="facetGradC" x1="100%" y1="80%" x2="0%" y2="20%">
+      <stop offset="0%" stop-color="#0a0f1d" stop-opacity="0.50"/>
+      <stop offset="60%" stop-color="#131e33" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#1e293b" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <!-- Aerodynamic Streamline Gradients -->
+    <linearGradient id="streamlineGradCyan" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0"/>
+      <stop offset="20%" stop-color="#38bdf8" stop-opacity="0.09"/>
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.12"/>
+      <stop offset="80%" stop-color="#38bdf8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="streamlineGradSubtle" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Base Floor Layer (Deep midnight slate #0b1120) -->
+  <rect width="1920" height="1080" fill="url(#baseFloorGrad)"/>
+
+  <!-- 2. Luminous Ambient Field (Single soft cyan light source low on right/center) -->
+  <rect width="1920" height="1080" fill="url(#luminousAmbient)"/>
+  <rect width="1920" height="1080" fill="url(#coreAmbientBloom)"/>
+
+  <!-- 3. Minimalist Aerodynamic Contours & Supersonic Geometric Facets -->
+  <!-- Lower sweeping supersonic keel plane -->
+  <polygon points="-80,1080 500,760 1320,830 2000,1080" 
+           fill="url(#facetGradC)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.05" 
+           stroke-width="1"/>
+
+  <!-- Main sweeping supersonic delta wedge -->
+  <polygon points="-60,680 660,510 1440,490 2000,320 1880,590 1280,730 480,780 -60,920" 
+           fill="url(#facetGradA)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.08" 
+           stroke-width="1"/>
+
+  <!-- Upper transonic flow facet -->
+  <polygon points="160,0 840,340 1640,280 2020,130 2020,0" 
+           fill="url(#facetGradB)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.06" 
+           stroke-width="1"/>
+
+  <!-- Mid-chord compression facet -->
+  <polygon points="480,780 660,510 1440,490 1280,730" 
+           fill="#1e293b" 
+           fill-opacity="0.12" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.10" 
+           stroke-width="1"/>
+
+  <!-- Forward supersonic chine line -->
+  <polygon points="-40,520 660,510 1160,410 1820,260 1440,490" 
+           fill="#0f172a" 
+           fill-opacity="0.20" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.09" 
+           stroke-width="1"/>
+
+  <!-- 4. Aerodynamic Streamlines & Vector Flow Contours -->
+  <!-- Primary supersonic chord streamline -->
+  <path d="M -40 560 C 440 600, 860 480, 1360 450 S 1800 350, 2000 310" 
+        fill="none" 
+        stroke="url(#streamlineGradCyan)" 
+        stroke-width="1.2"/>
+
+  <!-- Secondary boundary layer streamline -->
+  <path d="M -40 600 C 460 640, 890 520, 1390 484 S 1830 384, 2000 348" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.07" 
+        stroke-width="1"/>
+
+  <!-- Tertiary laminar flow contour -->
+  <path d="M 120 680 C 580 700, 960 590, 1440 550 S 1860 460, 2000 430" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.05" 
+        stroke-width="1"/>
+
+  <!-- High-altitude transonic flow line -->
+  <path d="M 240 240 C 700 300, 1120 220, 1600 190 S 1920 140, 2020 120" 
+        fill="none" 
+        stroke="url(#streamlineGradSubtle)" 
+        stroke-width="1"/>
+
+  <!-- Supersonic Mach vector lines -->
+  <line x1="660" y1="510" x2="1440" y2="490" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.11" 
+        stroke-width="1"/>
+
+  <line x1="840" y1="340" x2="1640" y2="280" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.07" 
+        stroke-width="1"/>
+
+  <line x1="500" y1="760" x2="1280" y2="730" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.06" 
+        stroke-width="1"/>
+
+  <!-- Subtle lower atmospheric horizon guide line -->
+  <path d="M 80 970 C 600 950, 1180 960, 1840 940" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.04" 
+        stroke-width="1"/>
+</svg>
   </div>
 
-  <!-- Background Desktop Windows -->
+  <!-- Background Inactive Windows -->
   <div id="window-bg-terminal" class="window inactive">
     <div class="titlebar">
       <div class="titlebar-left">
-        <span class="titlebar-title">foot: user@briskos:~</span>
+        <span class="titlebar-title">user@briskos: ~ (foot)</span>
       </div>
       <div class="window-controls">
-        <button class="win-btn">─</button><button class="win-btn">□</button><button class="win-btn">✕</button>
+        <button class="win-btn">─</button>
+        <button class="win-btn">□</button>
+        <button class="win-btn">✕</button>
       </div>
     </div>
-    <div style="flex:1; background:rgba(15,23,42,0.96); padding:16px; font-family:monospace; color:#64748b; font-size:12px;">
-      user@briskos:~$ uptime<br>
-      14:30:12 up 2:14, 1 user, load average: 0.08, 0.04, 0.01<br>
-      user@briskos:~$ free -m<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;total&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;used&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shared&nbsp;&nbsp;buff/cache&nbsp;&nbsp;&nbsp;available<br>
-      Mem:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3912&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;178&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3120&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;32&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;614&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3640<br>
-      Swap:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3912&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3912
+    <div style="flex:1; background-color: rgba(15,23,42,0.94); padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #94a3b8;">
+      <div>user@briskos:~$ neofetch</div>
+      <div style="color: #38bdf8; margin-top: 10px;">BriskOS 1.0 LTS x86_64 // Wayland</div>
     </div>
   </div>
 
@@ -549,158 +685,161 @@
         <span class="titlebar-title">Documents — File Manager</span>
       </div>
       <div class="window-controls">
-        <button class="win-btn">─</button><button class="win-btn">□</button><button class="win-btn">✕</button>
+        <button class="win-btn">─</button>
+        <button class="win-btn">□</button>
+        <button class="win-btn">✕</button>
       </div>
     </div>
-    <div style="flex:1; background:#0f172a;"></div>
+    <div style="flex:1; background-color: #0f172a; display: flex;">
+      <div style="width: 180px; background-color: #162032; border-right: 1px solid rgba(255,255,255,0.06);"></div>
+      <div style="flex:1; padding: 20px;"></div>
+    </div>
   </div>
 
-  <!-- =========================================================================
-   * Wofi Floating Start Menu (440x500px)
-   * Matches config/includes.chroot/etc/skel/.config/wofi/style.css
-   * ========================================================================= -->
+  <!-- Wofi Floating Start Menu (440x510px, 14px radius, subtle top highlight, recessed search) -->
   <div id="wofi-window">
     <div class="wofi-outer-box">
-      <!-- Search Input with active focus -->
+      <!-- Search Input Box -->
       <div class="wofi-search-container">
-        <svg class="wofi-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
         <div class="wofi-input">
-          <span class="search-text">Search apps, documents...</span>
+          <svg class="wofi-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span class="search-text">foot</span>
           <span class="search-cursor"></span>
         </div>
       </div>
 
-      <!-- Category Label -->
-      <div class="wofi-category-header">System Applications & Tools</div>
+      <!-- Category Header -->
+      <div class="wofi-category-header">Applications & Utilities</div>
 
-      <!-- Categorized Application List -->
+      <!-- Application Entries List -->
       <div class="wofi-app-list">
-        <!-- 1. ONLYOFFICE (Focused / Selected Item) -->
+        <!-- Entry 1 (Selected): Foot Terminal with 3px cyan indicator bar -->
         <div class="wofi-entry focused">
           <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <rect x="2" y="2" width="28" height="28" rx="6" fill="#f97316"/>
-              <path d="M8 9h16M8 15h16M8 21h10" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="entry-content">
-            <span class="entry-title">ONLYOFFICE Desktop Editors</span>
-            <span class="entry-desc">Word, spreadsheets, and presentation suite</span>
-          </div>
-          <span class="entry-badge">Default</span>
-        </div>
-
-        <!-- 2. Firefox Web Browser -->
-        <div class="wofi-entry">
-          <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <circle cx="16" cy="16" r="14" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
-              <circle cx="16" cy="16" r="8" fill="#0ea5e9"/>
-              <path d="M16 2a14 14 0 0 1 10 24A14 14 0 0 1 6 10" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="entry-content">
-            <span class="entry-title">Firefox Web Browser</span>
-            <span class="entry-desc">High-performance private web browsing</span>
-          </div>
-        </div>
-
-        <!-- 3. Thunar File Manager -->
-        <div class="wofi-entry">
-          <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <path d="M3 6a2 2 0 0 1 2-2h6.172a2 2 0 0 1 1.414.586l1.828 1.828A2 2 0 0 0 15.828 7H27a2 2 0 0 1 2 2v3H3V6z" fill="#0284c7"/>
-              <path d="M3 10h26v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" fill="#38bdf8"/>
-            </svg>
-          </div>
-          <div class="entry-content">
-            <span class="entry-title">Files (Thunar)</span>
-            <span class="entry-desc">Browse local drives, USB, and network shares</span>
-          </div>
-        </div>
-
-        <!-- 4. Terminal (Foot) -->
-        <div class="wofi-entry">
-          <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <rect x="2" y="3" width="28" height="26" rx="5" fill="#1e293b" stroke="#38bdf8" stroke-width="1.8"/>
-              <polyline points="7 11 13 16 7 21" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <line x1="16" y1="21" x2="23" y2="21" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+              <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
             </svg>
           </div>
           <div class="entry-content">
             <span class="entry-title">Terminal (Foot)</span>
-            <span class="entry-desc">Ultra-fast Wayland terminal emulator</span>
+            <span class="entry-desc">Fast, lightweight Wayland terminal emulator</span>
           </div>
+          <span class="entry-badge">SYSTEM</span>
         </div>
 
-        <!-- 5. Wine Control Panel -->
+        <!-- Entry 2: Firefox -->
         <div class="wofi-entry">
           <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <rect x="2" y="2" width="28" height="28" rx="6" fill="#1e293b" stroke="#f43f5e" stroke-width="1.5"/>
-              <path d="M11 26h10M16 18v8M16 18a6 6 0 0 0 6-6V6H10v6a6 6 0 0 0 6 6z" stroke="#f43f5e" stroke-width="2" stroke-linecap="round"/>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="10" stroke="#38bdf8"/>
+              <line x1="2" y1="12" x2="22" y2="12" stroke="#38bdf8"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="#38bdf8"/>
             </svg>
           </div>
           <div class="entry-content">
-            <span class="entry-title">Wine Control Panel</span>
-            <span class="entry-desc">Manage Windows compatibility prefixes & runtime</span>
+            <span class="entry-title">Firefox ESR</span>
+            <span class="entry-desc">Browse the World Wide Web privately</span>
           </div>
-          <span class="entry-badge" style="color:#f43f5e; border-color:rgba(244,63,94,0.3); background:rgba(244,63,94,0.12)">Wine 9.0</span>
+          <span class="entry-badge" style="color: #60a5fa; border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.1);">WEB</span>
         </div>
 
-        <!-- 6. Software Updater -->
+        <!-- Entry 3: Thunar -->
         <div class="wofi-entry">
           <div class="entry-icon">
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
-              <circle cx="16" cy="16" r="14" fill="#1e293b" stroke="#10b981" stroke-width="1.5"/>
-              <path d="M22 16a6 6 0 1 1-1.76-4.24L23 14" stroke="#10b981" stroke-width="2.2" stroke-linecap="round"/>
-              <polyline points="23 8 23 14 17 14" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
+              <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
             </svg>
           </div>
           <div class="entry-content">
-            <span class="entry-title">Software Updater</span>
-            <span class="entry-desc">Serverless OTA updates & security patches</span>
+            <span class="entry-title">File Manager (Thunar)</span>
+            <span class="entry-desc">Manage files, folders, and removable drives</span>
           </div>
+          <span class="entry-badge" style="color: #34d399; border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.1);">FILES</span>
+        </div>
+
+        <!-- Entry 4: ONLYOFFICE -->
+        <div class="wofi-entry">
+          <div class="entry-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="3" fill="#f97316"/>
+              <path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="entry-content">
+            <span class="entry-title">ONLYOFFICE Desktop Editors</span>
+            <span class="entry-desc">Full-featured Word, Excel, and PowerPoint suite</span>
+          </div>
+          <span class="entry-badge" style="color: #fb923c; border-color: rgba(251,146,60,0.25); background: rgba(251,146,60,0.1);">OFFICE</span>
+        </div>
+
+        <!-- Entry 5: GIMP -->
+        <div class="wofi-entry">
+          <div class="entry-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="4" fill="#1e293b" stroke="#a78bfa" stroke-width="1.5"/>
+              <circle cx="8" cy="8" r="2" fill="#a78bfa"/>
+              <path d="M3 16l5-5 4 4 5-5 4 4" stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="entry-content">
+            <span class="entry-title">GNU Image Manipulation (GIMP)</span>
+            <span class="entry-desc">Create and edit bitmap graphics and photos</span>
+          </div>
+          <span class="entry-badge" style="color: #a78bfa; border-color: rgba(167,139,250,0.25); background: rgba(167,139,250,0.1);">GRAPHICS</span>
+        </div>
+
+        <!-- Entry 6: Settings -->
+        <div class="wofi-entry">
+          <div class="entry-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </div>
+          <div class="entry-content">
+            <span class="entry-title">Settings & Personalization</span>
+            <span class="entry-desc">Displays, theme overrides, audio, and network</span>
+          </div>
+          <span class="entry-badge" style="color: #94a3b8; border-color: rgba(148,163,184,0.25); background: rgba(148,163,184,0.1);">CONFIG</span>
         </div>
       </div>
     </div>
 
-    <!-- Bottom Power Buttons & Session Profile -->
+    <!-- Bottom Session Section -->
     <div class="wofi-power-bar">
       <div class="user-profile">
-        <div class="user-avatar">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-          </svg>
-        </div>
+        <div class="user-avatar">U</div>
         <div class="user-info">
-          <span class="user-name">user</span>
-          <span class="user-session">BriskOS 1.0 LTS</span>
+          <span class="user-name">user@briskos</span>
+          <span class="user-session">Wayland (Labwc)</span>
         </div>
       </div>
-
       <div class="power-actions">
-        <!-- Lock -->
-        <button class="power-btn" title="Lock Screen (Super+L)">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+        <button class="power-btn" title="Lock Screen">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
         </button>
-        <!-- Restart -->
-        <button class="power-btn" title="Restart System">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+        <button class="power-btn" title="Suspend Session">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <button class="power-btn" title="Restart / Reboot">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"/>
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
           </svg>
         </button>
-        <!-- Shutdown -->
-        <button class="power-btn shutdown" title="Power Off (System Shutdown)">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <button class="power-btn shutdown" title="Power Off">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
             <line x1="12" y1="2" x2="12" y2="12"/>
           </svg>
@@ -709,62 +848,63 @@
     </div>
   </div>
 
-  <!-- =========================================================================
-   * Waybar Bottom Taskbar (40px)
-   * ========================================================================= -->
   <div id="waybar">
-    <!-- Left: Active Start Button -->
+    <!-- Left Island: Start Menu & Pinned Items -->
     <div class="modules-left">
-      <div id="custom-startmenu">
+      <div id="custom-startmenu" class="active-state" title="Applications (Super_L)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-          <polygon points="0,4 20,11 13,14 0,9" fill="#0f172a"/>
-          <polygon points="6,13 23,19 17,21 6,17" fill="#0f172a" fill-opacity="0.8"/>
-          <polygon points="12,21 26,25 21,27 12,24" fill="#0f172a" fill-opacity="0.6"/>
+          <polygon points="2,4 22,12 14,15 2,9" fill="#38bdf8"/>
+          <polygon points="8,14 24,20 18,22 8,18" fill="#38bdf8" fill-opacity="0.75"/>
+          <polygon points="14,21 26,25 21,27 14,24" fill="#0ea5e9" fill-opacity="0.5"/>
         </svg>
-        <span>❖ Brisk</span>
+        <span>❖</span>
       </div>
 
-      <div class="pinned-launcher" title="Web Browser">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+      <div class="pinned-launcher" id="custom-browser" title="Web Browser (Firefox)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="12" cy="12" r="10" stroke="#38bdf8"/>
           <line x1="2" y1="12" x2="22" y2="12" stroke="#38bdf8"/>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="#38bdf8"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" stroke="#38bdf8"/>
         </svg>
       </div>
-      <div class="pinned-launcher" title="Files">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+
+      <div class="pinned-launcher" id="custom-files" title="File Manager (Thunar)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
           <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
           <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
         </svg>
       </div>
-      <div class="pinned-launcher" title="Terminal">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+
+      <div class="pinned-launcher" id="custom-terminal" title="Terminal (Foot)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
           <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
           <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
-      <div class="pinned-launcher" title="Office">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+
+      <div class="pinned-launcher" id="custom-office" title="Productivity Suite (ONLYOFFICE)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
           <rect x="3" y="3" width="18" height="18" rx="3" fill="#f97316"/>
           <path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
     </div>
 
-    <!-- Center: Tasks -->
+    <!-- Center Island: Window Tasks -->
     <div class="modules-center">
       <div id="taskbar">
-        <div class="taskbar-button inactive">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+        <div class="taskbar-button active" title="foot: user@briskos:~">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none">
             <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
             <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
           </svg>
           <span>foot: user@briskos:~</span>
         </div>
-        <div class="taskbar-button inactive">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+
+        <div class="taskbar-button inactive" title="Documents — File Manager">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none">
             <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
             <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
           </svg>
@@ -773,9 +913,9 @@
       </div>
     </div>
 
-    <!-- Right: Indicators -->
+    <!-- Right Island: Continuous Glass with Subtle 1px Internal Dividers -->
     <div class="modules-right">
-      <div class="tray-module">
+      <div class="tray-module " id="pulseaudio" title="PipeWire Volume (85%)">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" stroke-linecap="round"/>
@@ -783,14 +923,14 @@
         <span>85%</span>
       </div>
 
-      <div class="tray-module">
+      <div class="tray-module" id="network" title="Wi-Fi (Brisk-Mesh, 100%)">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" stroke-linecap="round"/>
         </svg>
-        <span>📶 Brisk-Mesh (92%)</span>
+        <span>📶 Brisk-Mesh 100%</span>
       </div>
 
-      <div class="tray-module charging">
+      <div class="tray-module charging" id="battery" title="Battery (98% Charging)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
           <rect x="2" y="7" width="17" height="10" rx="2" stroke="currentColor"/>
           <line x1="21" y1="11" x2="21" y2="13" stroke="currentColor" stroke-linecap="round"/>
@@ -799,16 +939,16 @@
         <span>⚡ 98%</span>
       </div>
 
-      <div class="tray-module" id="clock">
+      <div class="tray-module" id="clock" title="Date & Time">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="9"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span>14:30</span>
+        <span>14:30  Wed 11 Nov</span>
       </div>
 
-      <div id="custom-power">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#f43f5e" stroke-width="2.2" stroke-linecap="round">
+      <div class="tray-module " id="custom-power" title="Exit / Power Off">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
           <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
           <line x1="12" y1="2" x2="12" y2="12"/>
         </svg>

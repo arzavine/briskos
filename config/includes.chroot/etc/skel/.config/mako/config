@@ -1,9 +1,9 @@
 # ==============================================================================
 # BriskOS Mako Notification Daemon Configuration
-# Modern, unobtrusive Wayland desktop notifications
+# Night Glass: 14px radius, translucent surface, Ice Cyan focus
 # ==============================================================================
 
-# Notification location: bottom-right (location=bottom-right)
+# Notification location: bottom-right
 anchor=bottom-right
 
 # Dimensions & Layout
@@ -12,11 +12,11 @@ padding=12
 width=340
 height=120
 border-size=1
-border-radius=8
+border-radius=14
 
-# Typography & Colors
+# Typography & Colors (0.88 alpha = E0)
 font=Inter 10
-background-color=#1e293be6
+background-color=#0f172ae0
 text-color=#f8fafc
 border-color=#38bdf8
 progress-color=over #38bdf8
@@ -46,6 +46,6 @@ default-timeout=5000
 # Criteria: Critical Urgency
 [urgency=critical]
 background-color=#1e293bee
-border-color=#f87171
+border-color=#f43f5e
 text-color=#fef2f2
 default-timeout=0

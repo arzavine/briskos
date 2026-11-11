@@ -1,14 +1,17 @@
 {
     // =========================================================================
     // BriskOS Waybar Bottom Taskbar Configuration
-    // Antislop UI: Slate & Ice Cyan aerodynamic system shell
+    // Night Glass Design System: Floating 3-Island Architecture
     // =========================================================================
     "layer": "top",
     "position": "bottom",
     "height": 40,
-    "spacing": 4,
+    "margin-bottom": 8,
+    "margin-left": 8,
+    "margin-right": 8,
+    "spacing": 0,
 
-    // Module Layout
+    // Module Layout - 3-Island Architecture
     "modules-left": [
         "custom/startmenu",
         "custom/browser",
@@ -28,10 +31,10 @@
     ],
 
     // -------------------------------------------------------------------------
-    // Modules Left: Application Launcher & Quick-Launch Pinned Items
+    // Left Island: Start Menu & Quick-Launch Pinned Items
     // -------------------------------------------------------------------------
     "custom/startmenu": {
-        "format": "❖ Brisk",
+        "format": "❖",
         "tooltip-format": "Applications & Search (Super)",
         "on-click": "pkill -x wofi || wofi --show drun",
         "escape": true
@@ -62,7 +65,7 @@
     },
 
     // -------------------------------------------------------------------------
-    // Modules Center: Window Taskbar
+    // Center Island: Window Taskbar
     // -------------------------------------------------------------------------
     "wlr/taskbar": {
         "format": "{icon} {title}",
@@ -79,7 +82,7 @@
     },
 
     // -------------------------------------------------------------------------
-    // Modules Right: System Indicators & Session Controls
+    // Right Island: System Indicators & Session Controls
     // -------------------------------------------------------------------------
     "pulseaudio": {
         "format": "{icon} {volume}%",

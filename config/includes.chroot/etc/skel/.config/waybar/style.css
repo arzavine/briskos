@@ -1,8 +1,8 @@
 /* =============================================================================
  * BriskOS Waybar Bottom Taskbar Stylesheet
- * Antislop UI Design System: Deep Slate (#0f172a, #1e293b), High-Contrast
- * Typography (#f8fafc, #94a3b8), Purposeful Brisk Ice Cyan Accent (#38bdf8).
- * Subtle 1px elevation borders (rgba(255,255,255,0.08)), restrained geometry.
+ * Night Glass Design System: Floating 3-Island Architecture
+ * Translucent glass: rgba(15, 23, 42, 0.88), 14px radius, 1px highlight edge,
+ * and the single Ice Cyan focus glow: box-shadow 0 0 12px rgba(56, 189, 248, 0.45).
  * ============================================================================= */
 
 * {
@@ -14,27 +14,55 @@
     min-height: 0;
 }
 
+/* Base transparent layer for detached floating islands */
 window#waybar {
-    background-color: #0f172a;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: transparent;
+    border: none;
     color: #f8fafc;
 }
 
 /* -----------------------------------------------------------------------------
- * Left Modules: Start Menu & Pinned Quick Launchers
+ * Floating Glass Islands (Left, Center, Right)
+ * ----------------------------------------------------------------------------- */
+.modules-left,
+.modules-center,
+.modules-right {
+    background-color: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+    padding: 2px 6px;
+}
+
+/* Hide center container when no windows are open */
+.modules-center:empty {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Left Island: Start Menu & Quick-Launch Pinned Items
  * ----------------------------------------------------------------------------- */
 #custom-startmenu {
-    background-color: #1e293b;
+    background-color: transparent;
     color: #38bdf8;
-    font-weight: 600;
-    padding: 0 14px;
-    margin: 4px 4px 4px 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
+    font-size: 15px;
+    padding: 0 10px;
+    margin: 2px 2px;
+    border: 1px solid transparent;
+    border-radius: 8px;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 #custom-startmenu:hover {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+#custom-startmenu:active {
     background-color: #38bdf8;
     color: #0f172a;
     border-color: #38bdf8;
@@ -47,9 +75,9 @@ window#waybar {
     background-color: transparent;
     color: #94a3b8;
     padding: 0 8px;
-    margin: 4px 2px;
+    margin: 2px 1px;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 14px;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
@@ -60,91 +88,101 @@ window#waybar {
 #custom-office:hover {
     background-color: #1e293b;
     color: #f8fafc;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* -----------------------------------------------------------------------------
- * Center Module: Window Taskbar
+ * Center Island: Window Taskbar
+ * Active task gets 3px rounded Ice Cyan underline with the ONE glow.
  * ----------------------------------------------------------------------------- */
 #taskbar {
-    margin: 4px 6px;
+    margin: 0;
 }
 
 #taskbar button {
-    background-color: rgba(30, 41, 59, 0.5);
+    background-color: transparent;
     color: #94a3b8;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 6px;
+    border: 1px solid transparent;
+    border-bottom: 3px solid transparent;
+    border-radius: 8px 8px 6px 6px;
     padding: 0 12px;
-    margin: 0 3px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    margin: 2px 2px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 #taskbar button:hover {
     background-color: #1e293b;
     color: #f8fafc;
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.08);
+    border-bottom: 3px solid transparent;
 }
 
 #taskbar button.active {
     background-color: #1e293b;
     color: #f8fafc;
     border: 1px solid rgba(56, 189, 248, 0.35);
-    border-bottom: 2px solid #38bdf8;
+    border-bottom: 3px solid #38bdf8;
+    border-radius: 8px 8px 6px 6px;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
 }
 
 #taskbar button.minimized {
     background-color: transparent;
     color: #64748b;
     border: 1px dashed rgba(255, 255, 255, 0.06);
+    border-bottom: 3px solid transparent;
 }
 
 /* -----------------------------------------------------------------------------
- * Right Modules: System Indicators & Session Controls
+ * Right Island: Continuous Glass with Subtle 1px Vertical Dividers
  * ----------------------------------------------------------------------------- */
 #pulseaudio,
 #network,
 #battery,
-#clock {
-    background-color: #1e293b;
+#clock,
+#custom-power {
+    background-color: transparent;
     color: #f8fafc;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: none;
     border-radius: 6px;
     padding: 0 10px;
-    margin: 4px 3px;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    margin: 2px 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#network,
+#battery,
+#clock,
+#custom-power {
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 #pulseaudio:hover,
 #network:hover,
 #battery:hover,
 #clock:hover {
-    border-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #f8fafc;
 }
 
 #pulseaudio.muted {
     color: #94a3b8;
-    background-color: rgba(30, 41, 59, 0.5);
 }
 
 #network.disconnected {
     color: #f43f5e;
-    border-color: rgba(244, 63, 94, 0.3);
 }
 
 #battery.warning:not(.charging) {
     color: #f59e0b;
-    border-color: rgba(245, 158, 11, 0.3);
 }
 
 #battery.critical:not(.charging) {
     color: #f43f5e;
-    border-color: rgba(244, 63, 94, 0.5);
 }
 
 #battery.charging {
     color: #38bdf8;
-    border-color: rgba(56, 189, 248, 0.3);
 }
 
 #clock {
@@ -152,31 +190,28 @@ window#waybar {
     padding: 0 12px;
 }
 
+/* Power button: muted at rest, red ONLY on hover */
 #custom-power {
-    background-color: #1e293b;
-    color: #f43f5e;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
-    padding: 0 12px;
-    margin: 4px 6px 4px 3px;
+    color: #94a3b8;
     font-size: 14px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    padding: 0 12px;
 }
 
 #custom-power:hover {
     background-color: #f43f5e;
     color: #ffffff;
-    border-color: #f43f5e;
+    border-radius: 6px;
 }
 
 /* -----------------------------------------------------------------------------
  * Tooltips & Popovers
  * ----------------------------------------------------------------------------- */
 tooltip {
-    background-color: #0f172a;
+    background-color: rgba(15, 23, 42, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 8px 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 tooltip label {

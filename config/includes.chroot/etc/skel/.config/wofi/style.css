@@ -1,8 +1,8 @@
 /* =============================================================================
  * BriskOS Wofi Floating Start Menu Stylesheet
- * Antislop UI Design System: Deep Slate (#0f172a, #1e293b), High-Contrast
- * Typography (#f8fafc, #94a3b8), Purposeful Brisk Ice Cyan Accent (#38bdf8).
- * Clean search input, focused state indicator, 1px subtle elevation borders.
+ * Night Glass Design System: Translucent surface rgba(15, 23, 42, 0.88),
+ * 14px border-radius, recessed search input (#0f172a) with Ice Cyan focus,
+ * 3px left indicator bar for selected item.
  * ============================================================================= */
 
 * {
@@ -12,9 +12,10 @@
 }
 
 #window {
-    background-color: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    background-color: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
     color: #f8fafc;
 }
 
@@ -24,21 +25,23 @@
 }
 
 /* -----------------------------------------------------------------------------
- * Clean Search Input Box
+ * Recessed Search Input Box (#0f172a with focused Ice Cyan outline #38bdf8)
  * ----------------------------------------------------------------------------- */
 #input {
     margin-bottom: 12px;
     padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    background-color: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background-color: #0f172a;
     color: #f8fafc;
     font-size: 13px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 #input:focus {
     border: 1px solid #38bdf8;
     outline: none;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px #38bdf8;
 }
 
 /* -----------------------------------------------------------------------------
@@ -47,6 +50,7 @@
 #scroll {
     margin: 0;
     border: none;
+    background-color: transparent;
 }
 
 #inner-box {
@@ -55,7 +59,7 @@
 }
 
 /* -----------------------------------------------------------------------------
- * Application List Items & Focused State Indicator
+ * Application List Items: 3px #38bdf8 Left Indicator Bar on Selection
  * ----------------------------------------------------------------------------- */
 #entry {
     padding: 8px 10px;
@@ -76,7 +80,7 @@
 #entry:focus,
 #entry:selected {
     background-color: #1e293b;
-    border: 1px solid rgba(56, 189, 248, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-left: 3px solid #38bdf8;
     color: #f8fafc;
 }
@@ -89,7 +93,7 @@
 
 #entry:focus #text,
 #entry:selected #text {
-    color: #38bdf8;
+    color: #f8fafc;
     font-weight: 600;
 }
 

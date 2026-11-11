@@ -1,6 +1,7 @@
 # ==============================================================================
 # BriskOS Wofi Start Menu Launcher Configuration
-# Antislop UI: Slate & Ice Cyan aerodynamic system shell
+# Night Glass Design System: Translucent glass surface, 14px radius,
+# anchored 8px above the Waybar floating start button.
 # ==============================================================================
 
 # Operating Mode
@@ -9,13 +10,13 @@ show=drun
 
 # Geometry & Dimensions
 width=440
-height=500
+height=510
 location=bottom_left
-xoffset=12
-yoffset=-52
+xoffset=8
+yoffset=-56
 
 # Appearance & Behavior
-prompt=Search apps, documents...
+prompt=Search applications...
 allow_images=true
 image_size=28
 insensitive=true

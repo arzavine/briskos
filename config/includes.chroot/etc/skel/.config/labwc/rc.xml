@@ -10,7 +10,8 @@
   <!-- Window decorations and theme styling -->
   <theme>
     <name>Brisk-Dark</name>
-    <cornerRadius>8</cornerRadius>
+    <cornerRadius>10</cornerRadius>
+    <dropShadow>yes</dropShadow>
     <font place="ActiveWindow">
       <name>Inter</name>
       <size>10</size>

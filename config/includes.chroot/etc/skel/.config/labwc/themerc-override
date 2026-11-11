@@ -1,12 +1,19 @@
 # ==============================================================================
-# BriskOS Labwc Theme Overrides
-# Palette: Deep slate (#0f172a, #1e293b), high-contrast text (#f8fafc), Ice Cyan (#38bdf8)
+# BriskOS Labwc Theme Overrides - Night Glass Design
+# Window decorations with 10px radius, 1px active border #38bdf8,
+# inactive #334155, subtle window drop shadow, circular button hover states.
 # ==============================================================================
 
 # Window Borders & Geometry
 border.width: 1
 window.active.border.color: #38bdf8
 window.inactive.border.color: #334155
+
+# Window Drop Shadow (Subtle elevation)
+window.active.shadow.size: 16
+window.active.shadow.color: #00000059
+window.inactive.shadow.size: 10
+window.inactive.shadow.color: #00000033
 
 # Window Titlebar (Active Window)
 window.active.title.bg: Solid
@@ -18,11 +25,18 @@ window.inactive.title.bg: Solid
 window.inactive.title.bg.color: #0f172a
 window.inactive.label.text.color: #94a3b8
 
-# Window Buttons
+# Window Buttons & Circular Hover States
+window.button.spacing: 6
 window.active.button.unpressed.image.color: #f8fafc
 window.inactive.button.unpressed.image.color: #64748b
 window.active.button.hover.bg.color: #334155
+window.active.button.hover.image.color: #f8fafc
+window.inactive.button.hover.bg.color: #1e293b
+window.inactive.button.hover.image.color: #f8fafc
 window.active.button.pressed.bg.color: #38bdf8
+window.active.button.pressed.image.color: #0f172a
+window.inactive.button.pressed.bg.color: #38bdf8
+window.inactive.button.pressed.image.color: #0f172a
 
 # Snapping Overlay
 snapping.overlay.edge.bg.color: #38bdf833
