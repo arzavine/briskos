@@ -1,0 +1,162 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Wine Control Panel
+# Quick GUI control panel for Wine configuration, winetricks, and prefix management.
+# ==============================================================================
+set -euo pipefail
+
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+
+# Check for zenity and graphical display
+if ! command -v zenity &>/dev/null || [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    echo "ERROR: Graphical environment or zenity is not available." >&2
+    echo "Run 'winecfg' directly from the terminal." >&2
+    exit 1
+fi
+
+notify() {
+    local msg="$1"
+    if command -v notify-send &>/dev/null; then
+        notify-send -i wine "BriskOS Windows Layer" "$msg" 2>/dev/null || true
+    fi
+}
+
+show_error() {
+    local msg="$1"
+    zenity --error --title="Wine Control Panel" --text="$msg" --width=380 2>/dev/null || true
+}
+
+reset_wine_prefix() {
+    if zenity --question \
+        --title="Reset Wine Prefix" \
+        --text="Are you sure you want to reset your Wine environment (~/.wine)?\n\nThis will backup your existing prefix and initialize a clean 64-bit Windows environment.\n\nInstalled Windows applications and settings in ~/.wine will be archived." \
+        --width=420 \
+        --ok-label="Reset Prefix" \
+        --cancel-label="Cancel"; then
+
+        local backup_dir="$HOME/.wine.backup.$(date +%Y%m%d_%H%M%S)"
+        
+        # Kill running wine processes
+        if command -v wineserver &>/dev/null; then
+            wineserver -k 2>/dev/null || true
+            sleep 1
+        fi
+
+        if [ -d "$WINEPREFIX" ]; then
+            mv "$WINEPREFIX" "$backup_dir"
+        fi
+
+        # Re-initialize clean 64-bit prefix with prompts suppressed
+        export WINEARCH="win64"
+        export WINEDLLOVERRIDES="mscoree,mshtml="
+        notify "Initializing clean 64-bit Wine prefix..."
+        wineboot --init 2>/dev/null || true
+
+        zenity --info \
+            --title="Wine Prefix Reset Complete" \
+            --text="Wine environment has been reset to clean factory defaults.\n\nPrevious prefix backup saved to:\n$backup_dir" \
+            --width=420 2>/dev/null || true
+    fi
+}
+
+open_winetricks() {
+    if ! command -v winetricks &>/dev/null; then
+        show_error "Winetricks is not installed.\n\nYou can install it with:\nsudo apt install winetricks"
+        return
+    fi
+    notify "Launching Winetricks..."
+    winetricks --gui 2>/dev/null &
+}
+
+open_winecfg() {
+    if ! command -v winecfg &>/dev/null; then
+        show_error "winecfg is not installed or not in PATH.\nPlease ensure Wine is properly installed."
+        return
+    fi
+    notify "Launching Wine Configuration..."
+    winecfg 2>/dev/null &
+}
+
+open_taskmgr() {
+    if ! command -v wine &>/dev/null; then
+        show_error "Wine is not installed."
+        return
+    fi
+    notify "Launching Windows Task Manager..."
+    wine taskmgr 2>/dev/null &
+}
+
+open_regedit() {
+    if ! command -v wine &>/dev/null; then
+        show_error "Wine is not installed."
+        return
+    fi
+    notify "Launching Windows Registry Editor..."
+    wine regedit 2>/dev/null &
+}
+
+kill_wineserver() {
+    if command -v wineserver &>/dev/null; then
+        wineserver -k 2>/dev/null || true
+        zenity --info \
+            --title="Wine Processes Terminated" \
+            --text="All running Wine processes and background servers have been stopped." \
+            --width=350 2>/dev/null || true
+    else
+        show_error "wineserver command not found."
+    fi
+}
+
+# Main Control Panel Loop
+while true; do
+    ACTION=$(zenity --list \
+        --title="BriskOS Wine Control Panel" \
+        --text="Select a Windows Compatibility tool or maintenance task:" \
+        --width=560 \
+        --height=400 \
+        --column="ID" \
+        --column="Tool" \
+        --column="Description" \
+        --hide-column=1 \
+        "winecfg" "Wine Configuration (winecfg)" "Configure audio, graphics, desktop integration & Windows version" \
+        "winetricks" "Install Windows DLLs (winetricks)" "Install DirectX, Visual C++ runtimes, MS fonts & core components" \
+        "reset" "Reset Wine Prefix" "Reset ~/.wine to factory clean state with automatic backup" \
+        "taskmgr" "Windows Task Manager" "View and manage active Windows processes" \
+        "regedit" "Windows Registry Editor" "Inspect and edit Wine Windows registry entries" \
+        "kill" "Stop All Wine Processes" "Force close hanging Windows applications (wineserver -k)" \
+        2>/dev/null) || break
+
+    if [ -z "$ACTION" ]; then
+        break
+    fi
+
+    case "$ACTION" in
+        winecfg)
+            open_winecfg
+            break
+            ;;
+        winetricks)
+            open_winetricks
+            break
+            ;;
+        reset)
+            reset_wine_prefix
+            ;;
+        taskmgr)
+            open_taskmgr
+            break
+            ;;
+        regedit)
+            open_regedit
+            break
+            ;;
+        kill)
+            kill_wineserver
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+exit 0

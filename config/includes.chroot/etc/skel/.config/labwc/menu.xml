@@ -44,6 +44,12 @@
       <item label="Audio Volume Control" icon="multimedia-volume-control">
         <action name="Execute" command="pavucontrol" />
       </item>
+      <item label="Wine Control Panel" icon="wine">
+        <action name="Execute" command="/usr/local/bin/brisk-wine-config" />
+      </item>
+      <item label="Software Updater" icon="system-software-update">
+        <action name="Execute" command="/usr/local/bin/brisk-updater-gui" />
+      </item>
       <separator />
       <item label="Reload Compositor Config" icon="view-refresh">
         <action name="Reconfigure" />

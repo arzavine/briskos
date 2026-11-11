@@ -61,6 +61,7 @@ for mdir in "${MIME_DIRS[@]}"; do
         "application/x-ms-dos-executable" \
         "application/x-msi" \
         "application/x-msdownload" \
+        "application/x-msdos-program" \
         "application/x-wine-extension-exe" \
         "application/x-wine-extension-msi" \
         "application/x-ms-shortcut"; do
@@ -72,7 +73,7 @@ for mdir in "${MIME_DIRS[@]}"; do
 
         # Remove existing association if present, then add under [Default Applications]
         sed -i "/^${mime_type}=/d" "$MIME_FILE"
-        sed -i "/^\[Default Applications\]/a ${mime_type}=wine.desktop" "$MIME_FILE"
+        sed -i "/^\[Default Applications\]/a ${mime_type}=brisk-wine-runner.desktop;wine.desktop" "$MIME_FILE"
 
         # Ensure [Added Associations] section exists
         if ! grep -q "^\[Added Associations\]" "$MIME_FILE"; then
@@ -80,7 +81,7 @@ for mdir in "${MIME_DIRS[@]}"; do
         fi
 
         # Add under [Added Associations]
-        sed -i "/^\[Added Associations\]/a ${mime_type}=wine.desktop;" "$MIME_FILE"
+        sed -i "/^\[Added Associations\]/a ${mime_type}=brisk-wine-runner.desktop;wine.desktop;" "$MIME_FILE"
     done
 done
 

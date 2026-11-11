@@ -1,0 +1,92 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS 1-Click Windows Application Runner
+# Seamlessly executes Windows executables (.exe) and installers (.msi) via Wine.
+# ==============================================================================
+set -euo pipefail
+
+# Helper function to show graphical error dialog if running in graphical session
+show_error() {
+    local error_msg="$1"
+    echo "ERROR [BriskOS Wine]: $error_msg" >&2
+    if command -v zenity &>/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        zenity --error \
+            --title="Windows Compatibility Layer" \
+            --text="$error_msg" \
+            --width=380 2>/dev/null || true
+    fi
+}
+
+# 1. Validate argument
+if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
+    show_error "No Windows executable specified.\n\nPlease provide a .exe or .msi file to run."
+    exit 1
+fi
+
+TARGET="$1"
+
+# Strip file:// URI scheme if passed by desktop file managers
+if [[ "$TARGET" =~ ^file:// ]]; then
+    TARGET="${TARGET#file://}"
+fi
+
+# Check if target file exists
+if [ ! -f "$TARGET" ]; then
+    show_error "File not found:\n\n$TARGET"
+    exit 1
+fi
+
+# Verify wine is installed
+if ! command -v wine &>/dev/null; then
+    show_error "Wine compatibility layer is not installed.\n\nPlease install wine using:\nsudo apt install wine wine64"
+    exit 1
+fi
+
+# 2. Check and initialize WINEPREFIX if not already initialized
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+
+if [ ! -d "$WINEPREFIX" ] || [ ! -f "$WINEPREFIX/system.reg" ]; then
+    export WINEARCH="win64"
+    # Suppress automatic prompt dialogs for Mono and Gecko during prefix creation
+    export WINEDLLOVERRIDES="mscoree,mshtml="
+
+    if command -v notify-send &>/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        notify-send -i wine "BriskOS Windows Layer" "First run setup: initializing 64-bit Windows environment..." 2>/dev/null || true
+    fi
+
+    # Initialize wine prefix structure
+    wineboot --init 2>/dev/null || true
+fi
+
+# 3. Detect file extension
+TARGET_NAME="$(basename "$TARGET")"
+EXT="${TARGET##*.}"
+EXT="$(printf '%s' "$EXT" | tr '[:upper:]' '[:lower:]')"
+
+# 4. Send desktop notification
+if command -v notify-send &>/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    notify-send -i wine "BriskOS Windows Layer" "Launching $(basename "$1")..." 2>/dev/null || true
+fi
+
+# 5. Execute target
+# Update first argument to cleaned TARGET while preserving any subsequent arguments
+set -- "$TARGET" "${@:2}"
+EXIT_CODE=0
+
+set +e
+if [ "$EXT" = "msi" ]; then
+    wine msiexec /i "$@"
+    EXIT_CODE=$?
+else
+    wine start /unix "$@"
+    EXIT_CODE=$?
+fi
+set -e
+
+# 6. Error handling
+if [ "$EXIT_CODE" -ne 0 ]; then
+    show_error "Failed to launch '${TARGET_NAME}'.\n\nWine exited with error code: ${EXIT_CODE}.\nRun in terminal for diagnostic output."
+    exit "$EXIT_CODE"
+fi
+
+exit 0

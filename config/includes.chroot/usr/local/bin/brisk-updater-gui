@@ -1,0 +1,219 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Graphical Software Updater
+# Zenity-based frontend for GitHub OTA releases and APT upgrades
+# ==============================================================================
+
+set -euo pipefail
+
+# Configuration
+GITHUB_REPO="briskos/briskos"
+API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+CACHE_FILE="/tmp/brisk-latest-release.json"
+APP_TITLE="BriskOS Software Updater"
+APP_ICON="system-software-update"
+
+# Check for Zenity
+if ! command -v zenity >/dev/null 2>&1; then
+    echo "Error: zenity is required for BriskOS Software Updater." >&2
+    exit 1
+fi
+
+# Determine local OS version
+get_local_version() {
+    local version="1.0"
+    if [ -f /etc/os-release ]; then
+        local parsed
+        parsed=$(grep -E '^VERSION_ID=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"'\'' ' || true)
+        if [ -n "$parsed" ]; then
+            version="$parsed"
+        fi
+    fi
+    echo "$version"
+}
+
+LOCAL_VERSION="$(get_local_version)"
+REMOTE_VERSION=""
+RELEASE_NAME=""
+RELEASE_NOTES=""
+
+# Try reading from recent cache first or query GitHub API
+if [ -s "$CACHE_FILE" ]; then
+    RELEASE_JSON="$(cat "$CACHE_FILE")"
+else
+    # Fetch with 5-second timeout
+    RELEASE_JSON="$(curl -sSL --connect-timeout 5 --max-time 8 \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "User-Agent: BriskOS-Software-Updater" \
+        "$API_URL" 2>/dev/null || true)"
+fi
+
+# Parse release info if available
+if [ -n "$RELEASE_JSON" ]; then
+    if command -v jq >/dev/null 2>&1; then
+        REMOTE_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty' 2>/dev/null || true)
+        RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r '.name // empty' 2>/dev/null || true)
+        RELEASE_NOTES=$(echo "$RELEASE_JSON" | jq -r '.body // empty' 2>/dev/null || true)
+    else
+        REMOTE_TAG=$(echo "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+        RELEASE_NAME=$(echo "$RELEASE_JSON" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+        RELEASE_NOTES=$(echo "$RELEASE_JSON" | sed -n 's/.*"body"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    fi
+    if [ -n "$REMOTE_TAG" ]; then
+        REMOTE_VERSION="${REMOTE_TAG#[vV]}"
+    fi
+fi
+
+# Prepare temporary file for Changelog display
+CHANGELOG_TMP="$(mktemp /tmp/brisk-changelog-XXXXXX.txt 2>/dev/null || echo "/tmp/brisk-changelog-$$.txt")"
+trap 'rm -f "$CHANGELOG_TMP"' EXIT
+
+{
+    echo "================================================================================"
+    echo "                    BriskOS Software Updater"
+    echo "================================================================================"
+    echo ""
+    echo "  Installed OS Version : ${LOCAL_VERSION}"
+    if [ -n "$REMOTE_VERSION" ]; then
+        echo "  Latest Remote Release: ${REMOTE_VERSION} (${RELEASE_NAME:-BriskOS Update})"
+    else
+        echo "  Target Release       : Debian Bookworm / BriskOS Rolling Updates"
+    fi
+    echo ""
+    echo "================================================================================"
+    echo " Release Notes & Highlights"
+    echo "================================================================================"
+    echo ""
+    if [ -n "$RELEASE_NOTES" ] && [ "$RELEASE_NOTES" != "null" ]; then
+        printf '%b\n' "$RELEASE_NOTES"
+    else
+        cat << 'EOF'
+- Comprehensive system security and stability enhancements.
+- Wayland desktop environment (labwc, waybar, wofi) optimizations.
+- Hardware driver, firmware, and kernel patch synchronization.
+- Office document rendering and font fidelity updates.
+- Windows application compatibility runtime refinements.
+
+Local package repositories will be synchronized and all installed
+components will be upgraded to their latest stable releases.
+EOF
+    fi
+    echo ""
+    echo "================================================================================"
+    echo "Click [Update Now] to proceed, or [Cancel] to exit."
+    echo "================================================================================"
+} > "$CHANGELOG_TMP"
+
+# Display changelog and prompt confirmation [Update Now] or [Cancel]
+if ! zenity --text-info \
+    --title="$APP_TITLE" \
+    --window-icon="$APP_ICON" \
+    --filename="$CHANGELOG_TMP" \
+    --ok-label="Update Now" \
+    --cancel-label="Cancel" \
+    --width=620 \
+    --height=480; then
+    echo "Update cancelled by user."
+    exit 0
+fi
+
+# Check if foot is available and if the user requested terminal mode, or offer execution mode
+CHOSEN_MODE="gui"
+if [ "${1:-}" = "--terminal" ] || [ "${1:-}" = "-t" ]; then
+    CHOSEN_MODE="terminal"
+elif [ -n "${BRISK_UPDATE_TERMINAL:-}" ]; then
+    CHOSEN_MODE="terminal"
+fi
+
+perform_update_gui() {
+    # Run pkexec apt update && pkexec apt upgrade with zenity progress bar
+    (
+        echo "10"; echo "# Synchronizing package repositories (apt update)..."
+        pkexec apt-get update -y
+        
+        echo "40"; echo "# Calculating upgrade dependencies..."
+        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y --download-only dist-upgrade
+        
+        echo "70"; echo "# Installing and configuring system packages..."
+        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y \
+            -o Dpkg::Options::="--force-confdef" \
+            -o Dpkg::Options::="--force-confold" \
+            dist-upgrade
+            
+        echo "90"; echo "# Cleaning temporary package archives..."
+        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y autoremove
+        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y clean
+        
+        echo "100"; echo "# Update complete!"
+    ) | zenity --progress \
+        --title="$APP_TITLE" \
+        --window-icon="$APP_ICON" \
+        --text="Preparing to check and apply updates..." \
+        --percentage=0 \
+        --auto-close \
+        --width=500
+}
+
+perform_update_terminal() {
+    # Spawns terminal foot with interactive update session
+    if command -v foot >/dev/null 2>&1; then
+        foot --title="$APP_TITLE - Terminal View" bash -c '
+            echo "============================================================"
+            echo "               BriskOS Software Updater"
+            echo "============================================================"
+            echo ""
+            echo "Synchronizing package repositories and applying upgrades..."
+            echo ""
+            if pkexec bash -c "apt-get update && apt-get dist-upgrade -y"; then
+                echo ""
+                echo "============================================================"
+                echo " [SUCCESS] System updates installed successfully."
+                echo "============================================================"
+            else
+                echo ""
+                echo "============================================================"
+                echo " [ERROR] Update process encountered an issue or was cancelled."
+                echo "============================================================"
+            fi
+            echo ""
+            read -rp "Press Enter to finish..."
+        '
+    else
+        # Fallback to GUI if foot is not installed
+        perform_update_gui
+    fi
+}
+
+# Execute update based on selected mode
+UPDATE_SUCCESS=true
+if [ "$CHOSEN_MODE" = "terminal" ]; then
+    perform_update_terminal || UPDATE_SUCCESS=false
+else
+    if ! perform_update_gui; then
+        UPDATE_SUCCESS=false
+    fi
+fi
+
+if [ "$UPDATE_SUCCESS" = true ]; then
+    # Notification that restart is optional
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -i "$APP_ICON" -u normal \
+            "BriskOS Update Complete" \
+            "Your system is now up to date. System restart is optional."
+    fi
+
+    # Completion message dialog
+    zenity --info \
+        --title="$APP_TITLE" \
+        --window-icon="$APP_ICON" \
+        --width=450 \
+        --text="All system components and packages have been successfully updated!\n\nA system restart is optional, but recommended if kernel or driver updates were installed."
+else
+    zenity --warning \
+        --title="$APP_TITLE" \
+        --window-icon="$APP_ICON" \
+        --width=450 \
+        --text="The update process was cancelled or encountered an error.\nPlease check your network connection and administrator authentication."
+fi
+
+exit 0

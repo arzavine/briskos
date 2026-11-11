@@ -1,0 +1,160 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS GitHub OTA Update Checker Daemon
+# Serverless update detection querying GitHub Releases API
+# ==============================================================================
+
+set -euo pipefail
+
+# Configuration
+GITHUB_REPO="briskos/briskos"
+API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+LOG_FILE="/tmp/brisk-update-checker.log"
+CACHE_FILE="/tmp/brisk-latest-release.json"
+CHECK_INTERVAL="${BRISK_UPDATE_INTERVAL:-21600}" # 6 hours default
+STARTUP_DELAY=45
+
+# Logging helper
+log() {
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[${timestamp}] $*" | tee -a "$LOG_FILE"
+}
+
+# Determine local OS version from /etc/os-release
+get_local_version() {
+    local version="1.0"
+    if [ -f /etc/os-release ]; then
+        local parsed
+        parsed=$(grep -E '^VERSION_ID=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"'\'' ' || true)
+        if [ -n "$parsed" ]; then
+            version="$parsed"
+        fi
+    fi
+    echo "$version"
+}
+
+# Compare semantic/Debian versions (returns 0 if $1 > $2)
+is_newer_version() {
+    local v_remote="$1"
+    local v_local="$2"
+
+    if [ "$v_remote" = "$v_local" ]; then
+        return 1
+    fi
+
+    # Use dpkg --compare-versions if available (Debian standard)
+    if command -v dpkg >/dev/null 2>&1; then
+        if dpkg --compare-versions "$v_remote" gt "$v_local" 2>/dev/null; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # Fallback to sort -V
+    if [ "$(printf '%s\n%s\n' "$v_local" "$v_remote" | sort -V | head -n1)" = "$v_local" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Perform single update check
+check_for_updates() {
+    local local_ver
+    local_ver="$(get_local_version)"
+    log "Checking for updates (Local Version: ${local_ver})..."
+
+    local tmp_response
+    tmp_response="$(mktemp /tmp/brisk-release-XXXXXX.json 2>/dev/null || echo "/tmp/brisk-release-$$.json")"
+
+    # Query GitHub API with 5-second connection timeout and HTTP response validation
+    local http_status
+    http_status=$(curl -sSL -w "%{http_code}" -o "$tmp_response" \
+        --connect-timeout 5 \
+        --max-time 10 \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "User-Agent: BriskOS-Update-Checker" \
+        "$API_URL" 2>/dev/null || echo "000")
+
+    if [ "$http_status" != "200" ]; then
+        log "Update check skipped: GitHub API returned HTTP status ${http_status} (offline or rate limited)."
+        rm -f "$tmp_response"
+        return 0
+    fi
+
+    # Validate response payload
+    if [ ! -s "$tmp_response" ]; then
+        log "Update check skipped: Empty payload received from API."
+        rm -f "$tmp_response"
+        return 0
+    fi
+
+    # Extract tag_name from release JSON
+    local remote_tag=""
+    if command -v jq >/dev/null 2>&1; then
+        remote_tag=$(jq -r '.tag_name // empty' "$tmp_response" 2>/dev/null || true)
+    fi
+
+    if [ -z "$remote_tag" ]; then
+        # POSIX sed extraction fallback
+        remote_tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp_response" | head -n1)
+    fi
+
+    if [ -z "$remote_tag" ]; then
+        log "Warning: Could not parse tag_name from GitHub release payload."
+        rm -f "$tmp_response"
+        return 0
+    fi
+
+    # Normalize version string (strip leading 'v' or 'V')
+    local remote_version="${remote_tag#[vV]}"
+    log "Remote release detected: ${remote_tag} (Version: ${remote_version})"
+
+    # Save validated release metadata to cache for GUI updater
+    mv -f "$tmp_response" "$CACHE_FILE" 2>/dev/null || rm -f "$tmp_response"
+
+    # Compare versions
+    if is_newer_version "$remote_version" "$local_ver"; then
+        log "Update detected: New version ${remote_version} is available (Current: ${local_ver})."
+        
+        # Send actionable desktop notification
+        if command -v notify-send >/dev/null 2>&1; then
+            notify-send -i system-software-update -u normal \
+                "BriskOS Update Available" \
+                "Version $remote_version is ready. Launch Software Updater to install."
+            log "Notification dispatched via notify-send."
+        else
+            log "Notice: notify-send not found in PATH; notification skipped."
+        fi
+    else
+        log "System is up to date (Local: ${local_ver}, Remote: ${remote_version})."
+    fi
+}
+
+# Entrypoint
+main() {
+    log "Starting BriskOS Update Checker daemon (PID: $$)..."
+
+    # Support immediate one-shot check via CLI argument
+    if [ "${1:-}" = "--now" ] || [ "${1:-}" = "--check-once" ]; then
+        log "Running single check (--now specified)..."
+        check_for_updates
+        exit 0
+    fi
+
+    # Sleep 45s on session start to avoid boot-time contention
+    log "Session start: sleeping ${STARTUP_DELAY}s to avoid boot-time contention..."
+    sleep "$STARTUP_DELAY"
+
+    # Periodic background daemon loop
+    while true; do
+        check_for_updates
+        log "Next update check in ${CHECK_INTERVAL} seconds."
+        sleep "$CHECK_INTERVAL"
+    done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Windows Application Runner
+GenericName=Windows Compatibility Layer
+Comment=Run Windows applications (.exe, .msi) seamlessly on BriskOS
+Exec=/usr/local/bin/brisk-wine-runner %f
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msdos-program;application/x-msi;
+Icon=wine
+Terminal=false
+StartupNotify=true
+NoDisplay=false
+Categories=System;Utility;

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Wine Configuration
+GenericName=Windows Compatibility Control Panel
+Comment=Configure Wine settings, install Windows DLLs, and manage compatibility prefix
+Exec=/usr/local/bin/brisk-wine-config
+Icon=wine
+Terminal=false
+StartupNotify=true
+NoDisplay=false
+Categories=System;Settings;Utility;

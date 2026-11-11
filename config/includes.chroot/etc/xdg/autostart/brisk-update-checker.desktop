@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=BriskOS Update Checker
+Comment=Check for system updates in the background
+Exec=/usr/local/bin/brisk-update-checker
+Icon=system-software-update
+Terminal=false
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

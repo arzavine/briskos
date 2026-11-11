@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Software Updater
+GenericName=System Updater
+Comment=Check for and install system updates
+Exec=/usr/local/bin/brisk-updater-gui
+Icon=system-software-update
+Terminal=false
+Categories=System;Settings;PackageManager;
+Keywords=update;updater;upgrade;package;packages;software;
+StartupNotify=true
