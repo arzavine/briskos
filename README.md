@@ -13,6 +13,7 @@
 * **Phase 2**: Complete Desktop Shell & UI Architecture featuring the Labwc Wayland compositor, Waybar bottom taskbar, Wofi Start Menu launcher, Foot terminal, Mako notifications, GTK theming, and aerodynamic vector artwork—strictly governed by antislop-ui design principles.
 * **Phase 3**: Seamless Windows Application Compatibility Layer (1-click runner, prefix management control panel), Microsoft Office metric-compatible font substitutions & subpixel rendering optimizations, and Serverless GitHub OTA Update Infrastructure (background daemon, Zenity GUI updater).
 * **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian Bookworm Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
+* **Phase 5**: QEMU Virtual Machine Test Harness (`scripts/test-qemu.sh`, `scripts/test-qemu.bat`), Safe Interactive USB Flash Tool (`scripts/flash-usb.sh`), and Production Bare-Metal Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md)).
 
 ---
 
@@ -23,6 +24,7 @@ d:/.Vibe Coder/OS/
 ├── .github/
 │   └── workflows/
 │       └── build-iso.yml                    # Production GitHub Actions CI/CD workflow
+├── .gitattributes                           # Line ending governance (*.sh, *.md text eol=lf; *.bat eol=crlf)
 ├── .gitignore                               # Git ignore rules (build trees, caches, ISOs, checksums)
 ├── auto/
 │   └── config                               # live-build automation configuration
@@ -93,9 +95,13 @@ d:/.Vibe Coder/OS/
 │       ├── 03-windows-compat.list.chroot    # Wine, Wine64, Winetricks, Cabextract, Zenity
 │       └── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
 ├── Dockerfile                               # Containerized Debian Bookworm build environment
+├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
 │   ├── build-docker.sh                      # Cross-platform Docker build harness (Linux, Windows, WSL2)
-│   └── build-iso.sh                         # Hardened native ISO build harness with telemetry & checksums
+│   ├── build-iso.sh                         # Hardened native ISO build harness with telemetry & checksums
+│   ├── flash-usb.sh                         # Safe, interactive bootable USB flash utility
+│   ├── test-qemu.bat                        # Native Windows QEMU VM test harness (CMD/PowerShell)
+│   └── test-qemu.sh                         # Linux, WSL2, and macOS QEMU VM test harness
 └── README.md                                # Project documentation & technical specifications
 ```
 
@@ -313,6 +319,74 @@ Phase 4 establishes an industrial-grade, multi-tier build and release architectu
 
 ---
 
+### 10. QEMU Virtual Machine Testing & Bare-Metal Installation (Phase 5)
+
+Phase 5 delivers comprehensive virtualization test harnesses, a foolproof USB writing utility with strict device protections, and an authoritative bare-metal deployment manual:
+
+* **Authoritative Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md))**:
+  * A comprehensive deployment manual built following antislop documentation principles (direct, structured, zero AI filler).
+  * **System Requirements**: Minimal hardware baseline (1.0 GHz x86_64, 1 GB physical RAM, 16 GB storage) vs Recommended specification (2.0+ GHz multi-core, 2+ GB RAM, 32+ GB SSD).
+  * **Cross-Platform USB Preparation**: Complete workflows for Windows (Rufus ISO mode vs Ventoy vs BalenaEtcher), Linux (`scripts/flash-usb.sh`, Ventoy, `dd`), and macOS (`diskutil` + `dd`).
+  * **Motherboard & OEM Boot Menu Keys**: Quick-reference table for Lenovo (F12/Novo), Dell (F12), HP (F9/Esc), ASUS (F8/Esc), Acer (F12), MSI (F11), Apple Mac (Option/Alt), and Surface (Vol Down + Power).
+  * **Firmware Configuration**: UEFI vs Legacy BIOS setup, Secure Boot guidance (Debian Bookworm signed shim), AHCI disk controller configuration, and Windows Fast Startup & BitLocker notices.
+  * **Non-Destructive Live Session**: Verifying Wayland graphics (Labwc), network connectivity (`nmtui` / NetworkManager), and PipeWire sound (`pavucontrol` / WirePlumber) before committing to disk.
+  * **Installation Walkthrough**: Step-by-step procedures for Clean Drive Installation and Dual-Boot alongside Windows (partition shrinking, EFI system partition preservation, `os-prober` GRUB detection).
+  * **Post-Installation Tuning**: Software updates, 1-click Wine application launcher, Office font substitutions, keyboard shortcut cheat sheet, and RTC local time clock synchronization.
+
+* **QEMU Virtual Machine Test Harnesses (`scripts/test-qemu.sh` & `scripts/test-qemu.bat`)**:
+  * **Linux, WSL2, and macOS Harness (`scripts/test-qemu.sh`)**:
+    * POSIX bash harness executing under `set -euo pipefail` with ANSI terminal banners and diagnostic logging.
+    * **Automatic ISO Discovery**: Resolves `BriskOS-1.0-amd64.iso` in the project root or current working directory, or accepts `-i` / `--iso <path>`.
+    * **Hardware Acceleration**: Auto-detects `/dev/kvm` availability and permissions on Linux/WSL2; detects macOS Hypervisor Framework (`-accel hvf`); provides seamless fallback to TCG software emulation (`--tcg`).
+    * **UEFI & Legacy BIOS**: Auto-detects OVMF firmware across Debian/Ubuntu, Arch, Fedora, and macOS (`/usr/share/OVMF/OVMF_CODE.fd`), or boots via default Legacy BIOS.
+    * **Optimized Emulated Hardware**: VirtIO VGA acceleration (`-vga virtio`), absolute tablet pointer (`-device virtio-tablet-pci`), Intel HDA duplex audio (`-device intel-hda -device hda-duplex`), and user-mode networking with SSH forwarding to localhost:2222.
+    * **Automated Test Storage**: Optional `--create-disk [size]` creates a sparse 20 GB `qcow2` virtual drive for partition and installation testing.
+    * **Example Commands**:
+      ```bash
+      # Launch BriskOS ISO with auto-detected KVM, 2GB RAM, and 2 vCPUs
+      ./scripts/test-qemu.sh
+
+      # Test UEFI booting via OVMF firmware
+      ./scripts/test-qemu.sh --uefi
+
+      # Attach a 20GB test disk to verify installer workflows
+      ./scripts/test-qemu.sh --create-disk
+
+      # Dry-run audit of QEMU flags and host capabilities without launching
+      ./scripts/test-qemu.sh --dry-run
+      ```
+  * **Native Windows Harness (`scripts/test-qemu.bat`)**:
+    * CMD and PowerShell compatible batch script with Windows CRLF line endings.
+    * Proactively scans `%PATH%`, `C:\Program Files\qemu\`, `%ProgramFiles%\qemu\`, `%ProgramW6432%\qemu\`, and `%LOCALAPPDATA%\Programs\qemu\` for `qemu-system-x86_64.exe`.
+    * Provides clear installation instructions with direct download links (`https://www.qemu.org/download/#windows`) and package manager commands (`winget install SoftwareFreedomConservancy.QEMU`, `choco install qemu`) if missing.
+    * Configured with Windows Hypervisor Platform (WHPX) acceleration with TCG fallback, 2 GB RAM, 2 CPUs, VirtIO VGA, and Intel HDA audio over DirectSound.
+    * **Example Commands**:
+      ```cmd
+      scripts\test-qemu.bat
+      scripts\test-qemu.bat "D:\iso\BriskOS-1.0-amd64.iso"
+      ```
+
+* **Safe USB Flash Utility (`scripts/flash-usb.sh`)**:
+  * Interactive, foolproof raw disk writer with strict `set -euo pipefail` error handling.
+  * **Strict Hardware Safety Filtering**: Queries `lsblk` and mandates that target storage devices have `TRAN=usb`, `RM=1`, or `HOTPLUG=1`.
+  * **Zero-Overwriting Protection**: Strictly refuses internal SATA disks, NVMe drives, optical drives, loop devices, zram devices, and any disk containing active `/`, `/boot`, `/boot/efi`, `/home`, or swap mounts.
+  * **Automated Clean Unmounting**: Detects and unmounts all active partitions on the target USB media before raw writes.
+  * **Destructive Operation Warning & Confirmation**: Requires explicit typed confirmation of the target device node (e.g., `sdb`) before invoking `dd`.
+  * **Synchronous Safe Writes**: Executes `dd if=... of=/dev/... bs=4M status=progress oflag=sync conv=fsync` followed by explicit `sync` and partition table reload (`partprobe` / `blockdev --rereadpt`).
+  * **Example Commands**:
+    ```bash
+    # List detected removable USB drives safely
+    sudo ./scripts/flash-usb.sh --list
+
+    # Interactive flash mode with auto-detected ISO
+    sudo ./scripts/flash-usb.sh
+
+    # Explicit ISO and target drive specification
+    sudo ./scripts/flash-usb.sh --iso BriskOS-1.0-amd64.iso --device sdb
+    ```
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -337,7 +411,13 @@ Phase 4 establishes an industrial-grade, multi-tier build and release architectu
 | **Phase 4 Mount Cleanup & Signals** | Reverse unmounting (`cleanup_mounts`) and `ERR`/`INT`/`TERM` signal traps verified | **PASS** |
 | **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian Bookworm with non-interactive flags, `MSYS_NO_PATHCONV=1`, and host UID mapping | **PASS** |
 | **Phase 4 CI/CD Workflow Schema** | Valid GitHub Actions workflow with runner storage optimization, comprehensive script syntax audits, failure log capture, and release automation | **PASS** |
-| **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) verified across all files and scripts | **PASS** |
+| **Phase 5 Directory Structure** | `scripts/test-qemu.sh`, `scripts/test-qemu.bat`, `scripts/flash-usb.sh`, `INSTALL.md` present | **PASS** |
+| **Phase 5 QEMU Test Harness (Linux/macOS)** | `scripts/test-qemu.sh` KVM/HVF/TCG acceleration, OVMF UEFI auto-detection, VirtIO VGA, Intel HDA sound, sparse qcow2 disk creation | **PASS** |
+| **Phase 5 QEMU Test Harness (Windows)** | `scripts/test-qemu.bat` multi-path QEMU discovery, WHPX acceleration, VirtIO VGA, Intel HDA audio, and CRLF format | **PASS** |
+| **Phase 5 Safe USB Flash Tool** | `scripts/flash-usb.sh` strict removable USB device filtering (`TRAN=usb` / `RM=1`), internal drive safety blocks, and synchronous `dd` writes | **PASS** |
+| **Phase 5 Installation Manual** | `INSTALL.md` comprehensive bare-metal deployment manual (System requirements, Windows/Linux/macOS USB prep, OEM boot keys, live testing, clean & dual-boot install, post-install tweaks) | **PASS** |
+| **Phase 5 Shell & Batch Syntax** | Strict static validation (`bash -n` on `.sh` scripts and CMD/PowerShell validation on `.bat` script) | **PASS** |
+| **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) on all `.sh` and `.md` files; Windows CRLF for `scripts/test-qemu.bat` | **PASS** |
 
 ---
 
