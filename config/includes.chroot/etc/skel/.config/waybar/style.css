@@ -68,6 +68,31 @@ window#waybar {
     border-color: #38bdf8;
 }
 
+#custom-store {
+    background-color: rgba(30, 41, 59, 0.40);
+    color: #f8fafc;
+    padding: 0 10px;
+    margin: 2px 2px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#custom-store:hover {
+    background-color: #1e293b;
+    color: #38bdf8;
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+#custom-store:active {
+    background-color: #38bdf8;
+    color: #0f172a;
+    border-color: #38bdf8;
+}
+
 #custom-installer {
     background-color: rgba(56, 189, 248, 0.10);
     color: #38bdf8;

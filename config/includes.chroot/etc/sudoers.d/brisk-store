@@ -1,0 +1,9 @@
+# ==============================================================================
+# Brisk Store Backend Sudo Privileges
+# Allow live session user, standard user, and sudo group to manage packages
+# without password prompt via the backend engine.
+# ==============================================================================
+
+live ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-store-backend
+user ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-store-backend
+%sudo ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-store-backend

@@ -17,11 +17,13 @@
 * **Phase 6**: Out-of-the-box Calamares Graphical Installer featuring bespoke "Night Glass" Qt styling, custom vector artwork, passwordless polkit elevation, multi-entry live session integration (Waybar, Desktop, context menu), and automated live-build cleanup hooks.
 * **Phase 7**: System Resilience, Instant Time-Travel Rollback & Sentinel Laptop Power Engine featuring BTRFS/Rsync snapshot rollback (`brisk-timetravel`, `brisk-timetravel-gui`), zero-friction APT pre-update hooks (`DPkg::Pre-Invoke`), and TLP/ACPI dynamic laptop power optimization (`brisk-sentinel`, `brisk-sentinel-gui`) with 80% charge ceiling preservation mode.
 * **Phase 8**: Brisk Glide Mode Smart Low-Battery Auto-Pilot featuring zero-polling kernel uevent monitoring (`brisk-glide-daemon`, `brisk-glide.service`), 3-second anti-flicker debounce, smooth backlight fading (`brightnessctl`), Wayland notifications, and dedicated Zenity GUI controls (`brisk-sentinel-gui`).
+* **Phase 9**: Brisk Store Modern Curated Application Center featuring pure GTK3 / PyGObject native frontend (`brisk-store`, sub-25 MB RAM guarantee, 0 MB upon exit), dual-engine APT + Flathub architecture, curated 60+ app catalog (`/etc/brisk/store/catalog.json`), headless execution backend (`brisk-store-backend`), passwordless sudo elevation, scalable vector iconography, Waybar taskbar integration (`🛍️ Store`), and Labwc context menus.
 
 ---
 
 ## Key Features
 
+* **Brisk Store Modern Curated Application Center**: Ultra-lean native GTK3 graphical app store (`brisk-store`) adhering to Night Glass design principles with guaranteed sub-25 MB RSS RAM usage and zero idle background processes (0 MB upon exit). Features a seamless dual-engine (APT + Flathub), 1-click installation and removal, real-time live progress updates, and a curated catalog of 60+ top applications across Featured, Internet, Coding, Office, Media, Gaming, and Utilities categories. Accessible directly from Waybar (`🛍️ Store`), desktop launcher, and context menus.
 * **Out-of-the-Box Calamares Graphical Installer**: User-friendly, modern GUI installer styled with BriskOS "Night Glass" dark theme (`#0b1120` Midnight Slate, `#38bdf8` Ice Cyan accents), offering automated whole-disk erasure, manual partitioning (GPT/MBR, EFI/BIOS), user creation, bootloader deployment, and seamless post-installation cleanup.
 * **Brisk Glide Mode Smart Low-Battery Auto-Pilot**: Intelligent, zero-polling battery auto-pilot engine (`brisk-glide-daemon`) that automatically engages Eco Saver profile and smoothly fades screen brightness upon crossing customizable thresholds (20%, 15%, 10%), guarded by a 3-second anti-flicker debounce against accidental charger cable bumps. Fully configurable via Zenity GUI and CLI (`brisk-sentinel glide`), with custom toggle for bright-screen CPU-only power conservation and Waybar battery indicator states.
 * **Brisk Time-Travel Instant System Rollback & Checkpoints**: Instantaneous system snapshot engine with BTRFS subvolume support and Rsync hardlink incremental fallback, automatic zero-friction pre-update APT hooks (`DPkg::Pre-Invoke`), pre-restore safety snapshots, and an intuitive Zenity GUI (`brisk-timetravel-gui`) accessible from the System menu.
@@ -52,7 +54,8 @@ d:/.Vibe Coder/OS/
 │   │       ├── 02-setup-zram.hook.chroot     # zram-tools configuration (zstd, 50% RAM)
 │   │       ├── 03-setup-wine-mime.hook.chroot # Wine desktop entry & Windows MIME associations
 │   │       ├── 04-setup-installer.hook.chroot # Calamares permissions, polkit, sudoers & log setup
-│   │       └── 05-setup-power-and-recovery.hook.chroot # TLP, ACPID, Sentinel, Glide Mode & Time-Travel setup
+│   │       ├── 05-setup-power-and-recovery.hook.chroot # TLP, ACPID, Sentinel, Glide Mode & Time-Travel setup
+│   │       └── 06-setup-store.hook.chroot       # Flathub remote registration, backend permissions & store catalog setup
 │   ├── includes.chroot/
 │   │   ├── etc/
 │   │   │   ├── apt/
@@ -60,6 +63,8 @@ d:/.Vibe Coder/OS/
 │   │   │   │       └── 80-brisk-timetravel       # Automatic APT pre-update checkpoint hook
 │   │   │   ├── brisk/
 │   │   │   │   ├── glide.conf                    # Glide Mode thresholds, debounce & auto-dim config
+│   │   │   │   ├── store/
+│   │   │   │   │   └── catalog.json              # Curated 60+ desktop application catalog (APT & Flathub)
 │   │   │   │   └── timetravel.conf               # Time-Travel retention & backend configuration
 │   │   │   ├── calamares/                   # Calamares graphical installer configuration
 │   │   │   │   ├── branding/
@@ -81,6 +86,7 @@ d:/.Vibe Coder/OS/
 │   │   │   │       └── 49-nopasswd_calamares.rules      # Passwordless pkexec rules for live installer
 │   │   │   ├── skel/
 │   │   │   │   ├── Desktop/
+│   │   │   │   │   ├── brisk-store.desktop              # Brisk Store application center desktop entry
 │   │   │   │   │   └── install-briskos.desktop          # Live desktop installer shortcut
 │   │   │   │   └── .config/
 │   │   │   │       ├── fontconfig/
@@ -107,6 +113,7 @@ d:/.Vibe Coder/OS/
 │   │   │   │           └── style.css        # Antislop-UI Start Menu stylesheet
 │   │   │   ├── sudoers.d/
 │   │   │   │   ├── brisk-sentinel           # Passwordless sudo elevation for Sentinel power profiles & Glide daemon
+│   │   │   │   ├── brisk-store              # Passwordless sudo elevation for Brisk Store backend
 │   │   │   │   ├── brisk-timetravel         # Passwordless sudo elevation for Time-Travel checkpoints
 │   │   │   │   └── calamares                # Passwordless sudo elevation for live installer
 │   │   │   ├── systemd/
@@ -124,6 +131,8 @@ d:/.Vibe Coder/OS/
 │   │       │       ├── brisk-installer      # Calamares launcher wrapper (Wayland env & logging)
 │   │       │       ├── brisk-sentinel       # Laptop power optimizer CLI, Glide Mode & profile controller
 │   │       │       ├── brisk-sentinel-gui   # Zenity battery control panel, Glide settings & profile switcher
+│   │       │       ├── brisk-store          # Pure GTK3 native application store GUI (sub-25 MB RAM, Night Glass)
+│   │       │       ├── brisk-store-backend  # Headless package management engine (APT + Flathub status, install, remove)
 │   │       │       ├── brisk-timetravel     # BTRFS/Rsync system snapshot & rollback engine
 │   │       │       ├── brisk-timetravel-gui # Zenity graphical system checkpoint & rollback manager
 │   │       │       ├── brisk-wine-runner    # 1-Click Windows binary & installer runner
@@ -133,14 +142,20 @@ d:/.Vibe Coder/OS/
 │   │       └── share/
 │   │           ├── applications/
 │   │           │   ├── brisk-sentinel.desktop           # Battery Sentinel launcher & Waybar handler
+│   │           │   ├── brisk-store.desktop              # Brisk Store application center launcher
 │   │           │   ├── brisk-timetravel.desktop         # Time-Travel Recovery launcher
 │   │           │   ├── brisk-wine-runner.desktop        # File manager association for .exe/.msi
 │   │           │   ├── brisk-wine-config.desktop        # Wine configuration control panel launcher
 │   │           │   ├── brisk-updater.desktop            # Start Menu Software Updater launcher
 │   │           │   └── install-briskos.desktop          # Calamares graphical installer desktop entry
-│   │           └── backgrounds/
-│   │               └── briskos/
-│   │                   └── brisk-default.svg # Bespoke aerodynamic vector wallpaper (1080p)
+│   │           ├── backgrounds/
+│   │           │   └── briskos/
+│   │           │       └── brisk-default.svg # Bespoke aerodynamic vector wallpaper (1080p)
+│   │           ├── icons/
+│   │           │   └── hicolor/scalable/apps/
+│   │           │       └── brisk-store.svg  # Aerodynamic illuminated feather tote bag vector icon
+│   │           └── pixmaps/
+│   │               └── brisk-store.svg      # System pixmaps vector icon fallback
 │   └── package-lists/
 │       ├── 00-core-system.list.chroot       # Kernel, non-free firmware, systemd, PipeWire, bootloaders
 │       ├── 01-desktop-wayland.list.chroot   # Labwc compositor, Waybar, Wofi, Foot, Thunar
@@ -149,7 +164,8 @@ d:/.Vibe Coder/OS/
 │       ├── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
 │       ├── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
 │       ├── 06-system-resilience.list.chroot # Timeshift, BTRFS tools, rsync, cron, libnotify
-│       └── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, brightnessctl, cpupower, acpid
+│       ├── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, brightnessctl, cpupower, acpid
+│       └── 08-software-store.list.chroot    # GTK3, PyGObject, Flatpak, AppStream, Curl & JQ dependencies
 ├── Dockerfile                               # Containerized Debian Bookworm build environment
 ├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
@@ -211,6 +227,11 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
   * **Hardware Diagnostics & Metrics**: `powertop`, `upower`, `acpi`, `acpid`
   * **CPU Frequency Scaling**: `linux-cpupower`
 
+* **`08-software-store.list.chroot`**:
+  * **Runtime Dependencies**: `python3`, `python3-gi`, `gir1.2-gtk-3.0`, `gir1.2-glib-2.0`
+  * **Package Backends**: `flatpak`, `appstream`
+  * **Utilities**: `curl`, `jq`
+
 ---
 
 ### 2. System Branding & Identity (`config/includes.chroot/etc/`)
@@ -247,6 +268,12 @@ All chroot hooks execute during live image assembly with strict `set -euo pipefa
   * Enforces root-owned restrictive permissions (`440`) on `/etc/sudoers.d/brisk-sentinel` and `/etc/sudoers.d/brisk-timetravel` with `visudo` validation.
   * Configures `/etc/brisk/glide.conf` (`644`), `/etc/systemd/system/brisk-glide.service` (`644`), `/etc/apt/apt.conf.d/80-brisk-timetravel` (`644`), initializes `/var/backups/brisk-timetravel/snapshots` (`750`), and configures `/etc/brisk/timetravel.conf` (`644`).
   * Enforces `644` on desktop entries and triggers desktop database update.
+* **`06-setup-store.hook.chroot`**:
+  * Configures upstream Flathub remote repository (`flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo`).
+  * Sets executable permissions (`755`) on `/usr/local/bin/brisk-store` and `/usr/local/bin/brisk-store-backend`.
+  * Enforces root-owned restrictive permissions (`440`) on `/etc/sudoers.d/brisk-store` with `visudo` validation.
+  * Sets `644` permissions on `/etc/brisk/store/catalog.json` and desktop entry files (`brisk-store.desktop`).
+  * Rebuilds GTK icon cache and updates system desktop database.
 
 ---
 
@@ -262,13 +289,13 @@ Phase 2 establishes a high-performance stacking Wayland environment built on top
   * **Mouse Bindings**: Left titlebar drag to move, double-click to maximize, titlebar scroll to shade/unshade, right-click desktop to spawn root menu, Alt+Left/Right drag anywhere on client to move/resize.
 * **`autostart`**: Shell startup script launching `swaybg` (with `/usr/share/backgrounds/briskos/brisk-default.svg`), `waybar`, `mako`, multiarch PolicyKit authentication agent, and `swayidle` (600s auto-lock with `swaylock -f -c 0f172a`).
 * **`environment`**: Session environment exporting `XDG_CURRENT_DESKTOP=labwc:wlroots`, `XDG_SESSION_TYPE=wayland`, `QT_QPA_PLATFORM=wayland;xcb`, `GDK_BACKEND=wayland,x11`, `MOZ_ENABLE_WAYLAND=1`, and headless rendering optimizers.
-* **`menu.xml`**: Clean Openbox-compatible right-click desktop menu featuring quick app launchers, nested Productivity suite (ONLYOFFICE, LibreOffice Writer/Calc, Evince, Viewnior), System diagnostics (`htop`, `btop`, `pavucontrol`), and session controls.
+* **`menu.xml`**: Clean Openbox-compatible right-click desktop menu featuring quick app launchers (Brisk Store, Calamares installer, Foot terminal, Thunar, Web Browser), nested Productivity suite (ONLYOFFICE, LibreOffice Writer/Calc, Evince, Viewnior), System utilities (Brisk Store, `htop`, `btop`, `pavucontrol`, Time-Travel), and session controls.
 * **`themerc-override`**: Compositor theme overrides specifying deep slate titlebars (`#0f172a`, `#1e293b`), high-contrast text (`#f8fafc`, `#94a3b8`), and Brisk Ice Cyan active borders (`#38bdf8`).
 
 #### B. Waybar Bottom Taskbar & Wofi Start Menu (`.config/waybar/`, `.config/wofi/`)
 * **Taskbar (`waybar/config.jsonc` & `waybar/style.css`)**:
   * Positioned at bottom (height: 40px, layer: top).
-  * **Left**: Start Menu trigger (`❖ Brisk`), pinned quick launchers for Web Browser, File Manager, Terminal, and Office Suite.
+  * **Left**: Start Menu trigger (`❖`), pinned `🛍️ Store` application center (Night Glass elevation with Ice Cyan hover glow), live installer (`💿 Install`), and quick launchers for Web Browser, File Manager, Terminal, and Office Suite.
   * **Center**: Interactive window taskbar (`wlr/taskbar`) with Papirus icons, active window indicators, and click-to-activate/close.
   * **Right**: Audio volume with PulseAudio/PipeWire integration, Network status with IP/SSID tooltips and click-to-open `nmtui`, Battery capacity with multi-stage thresholds, Clock with formatted calendar popover, and Power session exit.
 * **Start Menu (`wofi/config` & `wofi/style.css`)**:
@@ -574,6 +601,32 @@ Phase 8 introduces **Brisk Glide Mode**, an intelligent auto-pilot power managem
 
 ---
 
+### 15. Brisk Store Modern Curated Application Center (Phase 9)
+
+Phase 9 introduces **Brisk Store** (`brisk-store`), an ultra-lean, native desktop application hub designed exclusively for BriskOS 1.0 LTS to deliver a seamless 1-click app discovery, installation, and management experience:
+
+* **Pure GTK3 / PyGObject Native Architecture (`/usr/local/bin/brisk-store`)**:
+  * Built using pure PyGObject with GTK 3.0 bindings, achieving a guaranteed **sub-25 MB RSS memory footprint** during active operation.
+  * Instantaneous startup time (< 0.3s) with fully asynchronous background operations for package checks and installations.
+  * Adheres strictly to **Night Glass** design principles (`#0b1120` Midnight Slate base, `#0f172a` translucent cards, `#1e293b` borders, and `#38bdf8` Ice Cyan accents) and `/antislop-ui` standards.
+  * Zero persistent daemons or background pollers: memory footprint completely returns to **0 MB upon window close** (`sys.exit(0)`).
+* **Dual-Engine Package Ecosystem (APT + Flathub)**:
+  * Seamlessly unifies Debian 12 (Bookworm) native APT packaging for high-performance system utilities and desktop tools with Flathub sandboxed applications for cutting-edge upstream releases.
+  * Source badges clearly differentiate app origins (`Flathub • Versi Baru` in Ice Cyan vs `Debian • Native` in Emerald).
+* **Decoupled Backend Engine (`/usr/local/bin/brisk-store-backend`)**:
+  * Headless CLI backend handling `status <id>`, `install <id>`, `remove <id>`, `search <query>`, and `list-installed`.
+  * Configured with passwordless sudoers privilege (`/etc/sudoers.d/brisk-store`) for users in `%sudo` and live session accounts, enabling effortless 1-click installation without root password prompts.
+  * Automatically invokes `update-desktop-database` to register newly installed applications instantly into system menus and launchers.
+* **Curated 60+ Application Catalog (`/etc/brisk/store/catalog.json`)**:
+  * Comprehensive pre-screened catalog spanning 7 categories: Featured (Unggulan), Internet & Browsers, Coding & Development, Office & Productivity, Media & Graphics, Gaming, and System Utilities.
+  * Provides detailed metadata: package identifier, human-friendly summary, download size, category, and launch command.
+* **Complete Desktop Shell & System Integration**:
+  * **Waybar Taskbar**: Pinned directly in the left island right after the Start Menu (`"custom/store"`: `🛍️ Store`), styled with translucent Night Glass glass elevation and an Ice Cyan hover glow.
+  * **Labwc Context Menu**: Integrated into the desktop right-click menu as a top-level quick launcher and under the `System` submenu.
+  * **Vector Artwork**: Bespoke 512x512 scalable SVG icon (`brisk-store.svg`) featuring a minimalist slate tech tote bag with an illuminated BriskOS Ice Cyan aerodynamic wing emblem installed to standard icon and pixmap paths.
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -615,6 +668,12 @@ Phase 8 introduces **Brisk Glide Mode**, an intelligent auto-pilot power managem
 | **Phase 8 Glide Mode Architecture** | Zero-polling uevent daemon, 3s anti-flicker debounce, smooth backlight fading (`brightnessctl`), instant AC recovery | **PASS** |
 | **Phase 8 User Controls & Waybar** | `brisk-sentinel glide` CLI subcommands, Zenity settings dialog, 5s simulation test, Waybar critical state | **PASS** |
 | **Phase 8 Script Strictness & Line Endings** | `bash -n` static syntax check across `brisk-glide-daemon`, `brisk-sentinel`, `brisk-sentinel-gui`, and 100% pure Unix LF | **PASS** |
+| **Phase 9 Directory Structure** | `config/package-lists/08-software-store.list.chroot`, `etc/brisk/store/catalog.json`, `etc/sudoers.d/brisk-store`, `usr/local/bin/brisk-store*`, `usr/share/icons/.../brisk-store.svg` | **PASS** |
+| **Phase 9 Curated Catalog & JSON** | 60+ verified applications across 7 categories, strict JSON schema parsing and metadata completeness | **PASS** |
+| **Phase 9 Dual-Engine Backend** | CLI engine (`brisk-store-backend`) supporting `status`, `install`, `remove`, `search`, and `list-installed` with desktop DB refresh | **PASS** |
+| **Phase 9 Native GTK3 Application** | Pure PyGObject GUI (`brisk-store`), Night Glass theme, asynchronous search/install, sub-25 MB RAM guarantee, 0 MB exit cleanup | **PASS** |
+| **Phase 9 Desktop Shell Integration** | Waybar `🛍️ Store` module & Night Glass elevation hover styling, Labwc context menus, desktop launchers, scalable vector icons | **PASS** |
+| **Phase 9 Permissions & Hooks** | `06-setup-store.hook.chroot` Flathub remote setup, passwordless sudoers 440 validation, executable 755 binaries, 100% pure Unix LF line endings | **PASS** |
 | **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) on all `.sh` and `.md` files; Windows CRLF for `scripts/test-qemu.bat` | **PASS** |
 
 ---

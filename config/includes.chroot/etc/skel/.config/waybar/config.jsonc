@@ -14,6 +14,7 @@
     // Module Layout - 3-Island Architecture
     "modules-left": [
         "custom/startmenu",
+        "custom/store",
         "custom/installer",
         "custom/browser",
         "custom/files",
@@ -38,6 +39,12 @@
         "format": "❖",
         "tooltip-format": "Applications & Search (Super)",
         "on-click": "pkill -x wofi || wofi --show drun",
+        "escape": true
+    },
+    "custom/store": {
+        "format": "🛍️ Store",
+        "tooltip-format": "Brisk Store (Pusat Aplikasi Modern)",
+        "on-click": "brisk-store",
         "escape": true
     },
     "custom/installer": {

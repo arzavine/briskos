@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Brisk Store
+GenericName=Pusat Aplikasi
+Comment=Pusat aplikasi modern, ringan, dan terkurasi untuk BriskOS
+Exec=brisk-store
+Icon=brisk-store
+Terminal=false
+StartupNotify=true
+Categories=System;PackageManager;Utility;
+Keywords=store;software;apps;package;flathub;flatpak;apt;install;pusat;aplikasi;

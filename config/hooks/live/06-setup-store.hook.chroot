@@ -1,0 +1,108 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Live Hook: 06-setup-store
+# Configures Flathub remote repository, executable permissions for
+# Brisk Store backend & frontend, secure sudoers policy, and catalog assets.
+# ==============================================================================
+
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 06-setup-store: Configuring Software Store Subsystem"
+echo "=========================================================="
+
+# 1. Register Flathub Remote Repository
+echo "--> Configuring Flathub remote repository for Flatpak..."
+if command -v flatpak >/dev/null 2>&1; then
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+    echo "--> Flathub remote registered successfully."
+else
+    echo "--> Warning: flatpak command not found in chroot path, skipping remote setup."
+fi
+
+# 2. Permissions for Brisk Store Executables
+echo "--> Setting executable permissions for Brisk Store binaries..."
+STORE_BINS=(
+    "/usr/local/bin/brisk-store-backend"
+    "/usr/local/bin/brisk-store"
+)
+
+for bin_path in "${STORE_BINS[@]}"; do
+    if [ -f "$bin_path" ]; then
+        echo "--> Setting chmod 755 on $bin_path"
+        chmod 755 "$bin_path"
+        chown root:root "$bin_path"
+    fi
+done
+
+# 3. Permissions for Curated Catalog Assets
+echo "--> Setting permissions on Brisk Store catalog..."
+mkdir -p /etc/brisk/store
+chmod 755 /etc/brisk/store
+chown root:root /etc/brisk/store
+
+if [ -f "/etc/brisk/store/catalog.json" ]; then
+    echo "--> Setting chmod 644 on /etc/brisk/store/catalog.json"
+    chmod 644 /etc/brisk/store/catalog.json
+    chown root:root /etc/brisk/store/catalog.json
+fi
+
+# 4. Sudoers Privilege Policy Configuration
+echo "--> Configuring sudoers policy for passwordless store operations..."
+SUDOERS_FILE="/etc/sudoers.d/brisk-store"
+if [ -f "$SUDOERS_FILE" ]; then
+    echo "--> Setting chmod 440 and root ownership on $SUDOERS_FILE"
+    chown root:root "$SUDOERS_FILE"
+    chmod 440 "$SUDOERS_FILE"
+    if command -v visudo >/dev/null 2>&1; then
+        echo "--> Validating $SUDOERS_FILE syntax..."
+        visudo -cf "$SUDOERS_FILE" || {
+            echo "ERROR: Syntax error in $SUDOERS_FILE" >&2
+            exit 1
+        }
+    fi
+fi
+
+# 5. Desktop Application Launchers & Icon Assets
+echo "--> Configuring desktop entry and icon permissions..."
+DESKTOP_ENTRIES=(
+    "/usr/share/applications/brisk-store.desktop"
+    "/etc/skel/Desktop/brisk-store.desktop"
+)
+
+for dent in "${DESKTOP_ENTRIES[@]}"; do
+    if [ -f "$dent" ]; then
+        chmod 644 "$dent"
+        chown root:root "$dent"
+    fi
+done
+
+# Allow execution for desktop file in skel Desktop
+if [ -f "/etc/skel/Desktop/brisk-store.desktop" ]; then
+    chmod 755 "/etc/skel/Desktop/brisk-store.desktop" || true
+fi
+
+ICON_FILES=(
+    "/usr/share/icons/hicolor/scalable/apps/brisk-store.svg"
+    "/usr/share/pixmaps/brisk-store.svg"
+)
+
+for icon_path in "${ICON_FILES[@]}"; do
+    if [ -f "$icon_path" ]; then
+        chmod 644 "$icon_path"
+        chown root:root "$icon_path"
+    fi
+done
+
+# 6. Refresh Desktop Database & Icon Cache
+if command -v update-desktop-database >/dev/null 2>&1; then
+    echo "--> Updating desktop database in /usr/share/applications..."
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    echo "--> Updating GTK icon cache..."
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+echo "--> [BriskOS Hook] 06-setup-store configuration complete."

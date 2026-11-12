@@ -2,6 +2,9 @@
 <openbox_menu>
   <menu id="root-menu" label="BriskOS Menu">
     <!-- Quick Launch Applications -->
+    <item label="Brisk Store" icon="brisk-store">
+      <action name="Execute" command="brisk-store" />
+    </item>
     <item label="Install BriskOS 1.0 LTS" icon="calamares">
       <action name="Execute" command="brisk-installer" />
     </item>
@@ -38,6 +41,9 @@
 
     <!-- System Utilities -->
     <menu id="system-menu" label="System" icon="applications-system">
+      <item label="Brisk Store" icon="brisk-store">
+        <action name="Execute" command="brisk-store" />
+      </item>
       <item label="Task Manager (htop)" icon="utilities-system-monitor">
         <action name="Execute" command="foot -T 'Task Manager' htop" />
       </item>

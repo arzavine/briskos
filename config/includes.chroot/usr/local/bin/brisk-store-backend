@@ -1,0 +1,820 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Curated Software Store Backend Engine
+# High-speed package management layer interfacing Flatpak and APT.
+# Supports querying catalog metadata, status checks, noninteractive installs,
+# safe removals, search, and desktop database synchronization.
+# ==============================================================================
+
+set -euo pipefail
+
+VERSION="1.0.0"
+CATALOG_FILE="${BRISK_CATALOG_FILE:-/etc/brisk/store/catalog.json}"
+FLATHUB_REMOTE="flathub"
+FLATHUB_URL="https://dl.flathub.org/repo/flathub.flatpakrepo"
+LOCK_FILE="${BRISK_LOCK_FILE:-/run/lock/brisk-store.lock}"
+
+# ------------------------------------------------------------------------------
+# Helper: Display Usage Information
+# ------------------------------------------------------------------------------
+show_help() {
+    cat << 'EOF'
+Brisk Store Backend Engine - Unified Flatpak & APT Management CLI
+
+Usage:
+  brisk-store-backend <command> [arguments...] [options]
+
+Commands:
+  status <id> [--json]       Check if an application is installed
+  install <id>               Install an application from Flathub or APT
+  remove <id>                Uninstall an application
+  search <query> [--json]    Search the curated catalog and Flathub
+  list-installed [--json]    List IDs of all currently installed catalog apps
+  info <id> [--json]         Display catalog details for a specific app
+  catalog [--json]           Output entire curated catalog
+  version                    Display engine version
+  help                       Display this help message
+
+Options:
+  --json                     Format output as JSON where applicable
+
+Examples:
+  brisk-store-backend status vlc
+  brisk-store-backend install google-chrome
+  brisk-store-backend remove spotify
+  brisk-store-backend search "markdown"
+  brisk-store-backend list-installed --json
+EOF
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Privilege Escalation
+# ------------------------------------------------------------------------------
+ensure_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            exec sudo "$0" "$@"
+        else
+            echo "Error: Root privileges required for package installation/removal." >&2
+            exit 1
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Acquire Lock
+# ------------------------------------------------------------------------------
+acquire_lock() {
+    local lock_dir
+    lock_dir=$(dirname "$LOCK_FILE")
+    [ -d "$lock_dir" ] || mkdir -p "$lock_dir" 2>/dev/null || true
+    if command -v flock >/dev/null 2>&1; then
+        exec 200>"$LOCK_FILE"
+        if ! flock -n 200; then
+            echo "Error: Another package transaction is currently in progress." >&2
+            exit 1
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Update Desktop Database
+# ------------------------------------------------------------------------------
+refresh_desktop_database() {
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        echo "--> Refreshing system desktop application database..."
+        update-desktop-database /usr/share/applications 2>/dev/null || true
+        if [ -d "/var/lib/flatpak/exports/share/applications" ]; then
+            update-desktop-database /var/lib/flatpak/exports/share/applications 2>/dev/null || true
+        fi
+        if [ -n "${SUDO_USER:-}" ]; then
+            local user_home
+            user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6 2>/dev/null || echo "")
+            if [ -n "$user_home" ] && [ -d "$user_home/.local/share/flatpak/exports/share/applications" ]; then
+                update-desktop-database "$user_home/.local/share/flatpak/exports/share/applications" 2>/dev/null || true
+            fi
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Extract Single Field From JSON Object
+# ------------------------------------------------------------------------------
+extract_field() {
+    local json_obj="$1"
+    local field_name="$2"
+    local default_value="${3:-}"
+
+    if [ -z "$json_obj" ] || [ "$json_obj" = "{}" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    if command -v jq >/dev/null 2>&1; then
+        local res
+        res=$(echo "$json_obj" | jq -r ".${field_name} // empty" 2>/dev/null || true)
+        if [ -n "$res" ]; then
+            echo "$res"
+        else
+            echo "$default_value"
+        fi
+        return
+    fi
+
+    # Fallback via Python
+    local py_bin=""
+    if command -v python3 >/dev/null 2>&1; then
+        py_bin="python3"
+    elif command -v python >/dev/null 2>&1; then
+        py_bin="python"
+    fi
+
+    if [ -n "$py_bin" ]; then
+        "$py_bin" -c "
+import sys, json
+try:
+    obj = json.loads(sys.argv[1])
+    val = obj.get(sys.argv[2])
+    print(val if val is not None else sys.argv[3])
+except Exception:
+    print(sys.argv[3])
+" "$json_obj" "$field_name" "$default_value" 2>/dev/null || echo "$default_value"
+        return
+    fi
+
+    echo "$default_value"
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Locate Catalog App
+# ------------------------------------------------------------------------------
+find_app_json() {
+    local target_id="$1"
+    if [ ! -f "$CATALOG_FILE" ]; then
+        echo "{}"
+        return
+    fi
+
+    if command -v jq >/dev/null 2>&1; then
+        local match
+        match=$(jq -c --arg id "$target_id" '.[] | select(.id == $id or .package == $id)' "$CATALOG_FILE" 2>/dev/null | head -n 1)
+        if [ -n "$match" ]; then
+            echo "$match"
+            return
+        fi
+    fi
+
+    # Python Fallback
+    local py_bin=""
+    if command -v python3 >/dev/null 2>&1; then
+        py_bin="python3"
+    elif command -v python >/dev/null 2>&1; then
+        py_bin="python"
+    fi
+
+    if [ -n "$py_bin" ]; then
+        local match
+        match=$("$py_bin" -c "
+import sys, json
+try:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    t = sys.argv[2]
+    for app in data:
+        if app.get('id') == t or app.get('package') == t:
+            print(json.dumps(app))
+            sys.exit(0)
+except Exception:
+    pass
+" "$CATALOG_FILE" "$target_id" 2>/dev/null || true)
+        if [ -n "$match" ]; then
+            echo "$match"
+            return
+        fi
+    fi
+
+    echo "{}"
+}
+
+# ------------------------------------------------------------------------------
+# Helper: Check App Installation Status
+# ------------------------------------------------------------------------------
+check_is_installed() {
+    local source="$1"
+    local package="$2"
+    local command_str="${3:-}"
+
+    if [ "$source" = "flathub" ]; then
+        if command -v flatpak >/dev/null 2>&1; then
+            if flatpak info "$package" >/dev/null 2>&1; then
+                return 0
+            fi
+            if flatpak list --app --columns=application 2>/dev/null | grep -Fxq "$package"; then
+                return 0
+            fi
+        fi
+    elif [ "$source" = "apt" ]; then
+        if command -v dpkg-query >/dev/null 2>&1; then
+            local dpkg_status
+            dpkg_status=$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)
+            if [ "$dpkg_status" = "install ok installed" ]; then
+                return 0
+            fi
+        fi
+    fi
+
+    # Fallback verification by binary name
+    if [ -n "$command_str" ]; then
+        local bin_name
+        bin_name=$(echo "$command_str" | awk '{print $1}')
+        if [ "$bin_name" != "flatpak" ] && command -v "$bin_name" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# ------------------------------------------------------------------------------
+# Command: status <id> [--json]
+# ------------------------------------------------------------------------------
+cmd_status() {
+    local app_id="${1:-}"
+    local output_json=false
+
+    if [ -z "$app_id" ]; then
+        echo "Error: Missing application ID for 'status'." >&2
+        echo "Usage: brisk-store-backend status <id> [--json]" >&2
+        exit 1
+    fi
+
+    shift
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --json) output_json=true ;;
+        esac
+        shift
+    done
+
+    local app_json
+    app_json=$(find_app_json "$app_id")
+
+    local source="flathub"
+    local package="$app_id"
+    local name="$app_id"
+    local cmd=""
+
+    if [ "$app_json" != "{}" ]; then
+        source=$(extract_field "$app_json" "source" "flathub")
+        package=$(extract_field "$app_json" "package" "$app_id")
+        name=$(extract_field "$app_json" "name" "$app_id")
+        cmd=$(extract_field "$app_json" "command" "")
+    fi
+
+    if check_is_installed "$source" "$package" "$cmd"; then
+        if [ "$output_json" = true ]; then
+            if command -v jq >/dev/null 2>&1; then
+                jq -n \
+                    --arg id "$app_id" \
+                    --arg name "$name" \
+                    --arg status "installed" \
+                    --arg source "$source" \
+                    --arg package "$package" \
+                    '{id: $id, name: $name, status: $status, source: $source, package: $package}'
+            else
+                printf '{"id":"%s","name":"%s","status":"installed","source":"%s","package":"%s"}\n' "$app_id" "$name" "$source" "$package"
+            fi
+        else
+            echo "installed"
+        fi
+        exit 0
+    else
+        if [ "$output_json" = true ]; then
+            if command -v jq >/dev/null 2>&1; then
+                jq -n \
+                    --arg id "$app_id" \
+                    --arg name "$name" \
+                    --arg status "not-installed" \
+                    --arg source "$source" \
+                    --arg package "$package" \
+                    '{id: $id, name: $name, status: $status, source: $source, package: $package}'
+            else
+                printf '{"id":"%s","name":"%s","status":"not-installed","source":"%s","package":"%s"}\n' "$app_id" "$name" "$source" "$package"
+            fi
+        else
+            echo "not-installed"
+        fi
+        exit 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Command: install <id>
+# ------------------------------------------------------------------------------
+cmd_install() {
+    local app_id="${1:-}"
+    if [ -z "$app_id" ]; then
+        echo "Error: Missing application ID for 'install'." >&2
+        echo "Usage: brisk-store-backend install <id>" >&2
+        exit 1
+    fi
+
+    ensure_root "$@"
+    acquire_lock
+
+    local app_json
+    app_json=$(find_app_json "$app_id")
+
+    local source="flathub"
+    local package="$app_id"
+    local name="$app_id"
+
+    if [ "$app_json" != "{}" ]; then
+        source=$(extract_field "$app_json" "source" "flathub")
+        package=$(extract_field "$app_json" "package" "$app_id")
+        name=$(extract_field "$app_json" "name" "$app_id")
+    fi
+
+    echo "=========================================================="
+    echo " [Brisk Store Engine] Installing: $name ($app_id)"
+    echo " Package Source: $source ($package)"
+    echo "=========================================================="
+
+    if [ "$source" = "flathub" ]; then
+        if ! command -v flatpak >/dev/null 2>&1; then
+            echo "Error: Flatpak runtime is not installed." >&2
+            exit 1
+        fi
+
+        # Ensure Flathub repository is registered
+        echo "--> Verifying Flathub remote repository..."
+        flatpak remote-add --if-not-exists "$FLATHUB_REMOTE" "$FLATHUB_URL" 2>/dev/null || true
+
+        echo "--> Running Flatpak installation for $package..."
+        flatpak install -y --noninteractive "$FLATHUB_REMOTE" "$package"
+    elif [ "$source" = "apt" ]; then
+        echo "--> Synchronizing APT package index..."
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq || true
+
+        echo "--> Running APT installation for $package..."
+        apt-get install -y --no-install-recommends "$package"
+    else
+        echo "Error: Unknown package source: $source" >&2
+        exit 1
+    fi
+
+    refresh_desktop_database
+    echo "=========================================================="
+    echo " [Brisk Store Engine] Successfully installed: $name"
+    echo "=========================================================="
+}
+
+# ------------------------------------------------------------------------------
+# Command: remove <id>
+# ------------------------------------------------------------------------------
+cmd_remove() {
+    local app_id="${1:-}"
+    if [ -z "$app_id" ]; then
+        echo "Error: Missing application ID for 'remove'." >&2
+        echo "Usage: brisk-store-backend remove <id>" >&2
+        exit 1
+    fi
+
+    ensure_root "$@"
+    acquire_lock
+
+    local app_json
+    app_json=$(find_app_json "$app_id")
+
+    local source="flathub"
+    local package="$app_id"
+    local name="$app_id"
+
+    if [ "$app_json" != "{}" ]; then
+        source=$(extract_field "$app_json" "source" "flathub")
+        package=$(extract_field "$app_json" "package" "$app_id")
+        name=$(extract_field "$app_json" "name" "$app_id")
+    fi
+
+    echo "=========================================================="
+    echo " [Brisk Store Engine] Removing: $name ($app_id)"
+    echo " Package Source: $source ($package)"
+    echo "=========================================================="
+
+    if [ "$source" = "flathub" ]; then
+        if ! command -v flatpak >/dev/null 2>&1; then
+            echo "Error: Flatpak runtime is not installed." >&2
+            exit 1
+        fi
+
+        echo "--> Running Flatpak removal for $package..."
+        flatpak uninstall -y --noninteractive "$package"
+    elif [ "$source" = "apt" ]; then
+        echo "--> Running APT removal for $package..."
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get remove -y "$package"
+    else
+        echo "Error: Unknown package source: $source" >&2
+        exit 1
+    fi
+
+    refresh_desktop_database
+    echo "=========================================================="
+    echo " [Brisk Store Engine] Successfully removed: $name"
+    echo "=========================================================="
+}
+
+# ------------------------------------------------------------------------------
+# Command: list-installed [--json]
+# ------------------------------------------------------------------------------
+cmd_list_installed() {
+    local output_json=false
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --json) output_json=true ;;
+        esac
+        shift
+    done
+
+    # High-speed batch inventory
+    local installed_flatpaks=""
+    if command -v flatpak >/dev/null 2>&1; then
+        installed_flatpaks=$(flatpak list --app --columns=application 2>/dev/null || true)
+    fi
+
+    local installed_apts=""
+    if command -v dpkg-query >/dev/null 2>&1; then
+        installed_apts=$(dpkg-query -W -f='${Package} ${Status}\n' 2>/dev/null | grep 'install ok installed' | awk '{print $1}' || true)
+    fi
+
+    local installed_ids=()
+
+    if [ -f "$CATALOG_FILE" ]; then
+        local raw_table=""
+        if command -v jq >/dev/null 2>&1; then
+            raw_table=$(jq -r '.[] | "\(.id)\t\(.source)\t\(.package)\t\(.command // "")"' "$CATALOG_FILE" 2>/dev/null || true)
+        else
+            local py_bin=""
+            if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+            if [ -n "$py_bin" ]; then
+                raw_table=$("$py_bin" -c "
+import sys, json
+try:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    for app in data:
+        print(f\"{app.get('id', '')}\t{app.get('source', '')}\t{app.get('package', '')}\t{app.get('command', '')}\")
+except Exception:
+    pass
+" "$CATALOG_FILE" 2>/dev/null || true)
+            fi
+        fi
+
+        while IFS=$'\t' read -r c_id c_source c_pkg c_cmd; do
+            [ -z "$c_id" ] && continue
+            local is_inst=false
+            if [ "$c_source" = "flathub" ]; then
+                if echo "$installed_flatpaks" | grep -Fxq "$c_pkg"; then
+                    is_inst=true
+                fi
+            elif [ "$c_source" = "apt" ]; then
+                if echo "$installed_apts" | grep -Fxq "$c_pkg"; then
+                    is_inst=true
+                fi
+            fi
+
+            if [ "$is_inst" = false ] && [ -n "$c_cmd" ]; then
+                local bname
+                bname=$(echo "$c_cmd" | awk '{print $1}')
+                if [ "$bname" != "flatpak" ] && command -v "$bname" >/dev/null 2>&1; then
+                    is_inst=true
+                fi
+            fi
+
+            if [ "$is_inst" = true ]; then
+                installed_ids+=("$c_id")
+            fi
+        done <<< "$raw_table"
+    fi
+
+    if [ "$output_json" = true ]; then
+        if [ "${#installed_ids[@]}" -eq 0 ]; then
+            echo "[]"
+        else
+            if command -v jq >/dev/null 2>&1; then
+                printf '%s\n' "${installed_ids[@]}" | jq -R . | jq -s .
+            else
+                local py_bin=""
+                if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+                if [ -n "$py_bin" ]; then
+                    printf '%s\n' "${installed_ids[@]}" | "$py_bin" -c "import sys, json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))"
+                else
+                    printf '["%s"]\n' "$(IFS='","'; echo "${installed_ids[*]}")"
+                fi
+            fi
+        fi
+    else
+        for i_id in "${installed_ids[@]}"; do
+            echo "$i_id"
+        done
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Command: search <query> [--json]
+# ------------------------------------------------------------------------------
+cmd_search() {
+    local query="${1:-}"
+    local output_json=false
+
+    if [ -z "$query" ]; then
+        echo "Error: Missing search query." >&2
+        echo "Usage: brisk-store-backend search <query> [--json]" >&2
+        exit 1
+    fi
+
+    shift
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --json) output_json=true ;;
+        esac
+        shift
+    done
+
+    if [ ! -f "$CATALOG_FILE" ]; then
+        if [ "$output_json" = true ]; then
+            echo "[]"
+        else
+            echo "Catalog file not found."
+        fi
+        exit 0
+    fi
+
+    local lower_query
+    lower_query=$(echo "$query" | tr '[:upper:]' '[:lower:]')
+
+    local matches_json="[]"
+
+    if command -v jq >/dev/null 2>&1; then
+        matches_json=$(jq -c --arg q "$lower_query" '
+            [ .[] | select(
+                (.id | ascii_downcase | contains($q)) or
+                (.name | ascii_downcase | contains($q)) or
+                (.summary | ascii_downcase | contains($q)) or
+                (.category | ascii_downcase | contains($q)) or
+                (.package | ascii_downcase | contains($q))
+            ) ]
+        ' "$CATALOG_FILE" 2>/dev/null || echo "[]")
+    else
+        local py_bin=""
+        if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+        if [ -n "$py_bin" ]; then
+            matches_json=$("$py_bin" -c "
+import sys, json
+try:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    q = sys.argv[2]
+    res = []
+    for app in data:
+        fields = [
+            app.get('id', ''),
+            app.get('name', ''),
+            app.get('summary', ''),
+            app.get('category', ''),
+            app.get('package', '')
+        ]
+        if any(q in str(x).lower() for x in fields):
+            res.append(app)
+    print(json.dumps(res))
+except Exception:
+    print('[]')
+" "$CATALOG_FILE" "$lower_query" 2>/dev/null || echo "[]")
+        fi
+    fi
+
+    if [ "$output_json" = true ]; then
+        if command -v jq >/dev/null 2>&1; then
+            echo "$matches_json" | jq .
+        else
+            echo "$matches_json"
+        fi
+    else
+        local match_count=0
+        if command -v jq >/dev/null 2>&1; then
+            match_count=$(echo "$matches_json" | jq '. | length' 2>/dev/null || echo 0)
+        else
+            local py_bin=""
+            if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+            if [ -n "$py_bin" ]; then
+                match_count=$("$py_bin" -c "import sys, json; print(len(json.loads(sys.argv[1])))" "$matches_json" 2>/dev/null || echo 0)
+            fi
+        fi
+
+        echo "Search results for '$query' ($match_count found in catalog):"
+        echo "--------------------------------------------------------------------------------"
+        printf "%-20s %-25s %-12s %-8s %s\n" "ID" "NAME" "CATEGORY" "SOURCE" "SUMMARY"
+        echo "--------------------------------------------------------------------------------"
+
+        if command -v jq >/dev/null 2>&1; then
+            echo "$matches_json" | jq -r '.[] | "\(.id)\t\(.name)\t\(.category)\t\(.source)\t\(.summary)"' | while IFS=$'\t' read -r sid sname scat ssrc ssum; do
+                printf "%-20s %-25s %-12s %-8s %s\n" "$sid" "$sname" "$scat" "$ssrc" "$ssum"
+            done
+        else
+            local py_bin=""
+            if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+            if [ -n "$py_bin" ]; then
+                "$py_bin" -c "
+import sys, json
+try:
+    data = json.loads(sys.argv[1])
+    for a in data:
+        print(f\"{a.get('id','')}\t{a.get('name','')}\t{a.get('category','')}\t{a.get('source','')}\t{a.get('summary','')}\")
+except Exception:
+    pass
+" "$matches_json" | while IFS=$'\t' read -r sid sname scat ssrc ssum; do
+                    printf "%-20s %-25s %-12s %-8s %s\n" "$sid" "$sname" "$scat" "$ssrc" "$ssum"
+                done
+            fi
+        fi
+
+        if [ "$match_count" -eq 0 ] && command -v flatpak >/dev/null 2>&1; then
+            echo ""
+            echo "--> Querying remote Flathub index for '$query'..."
+            flatpak search "$query" 2>/dev/null | head -n 10 || true
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Command: info <id> [--json]
+# ------------------------------------------------------------------------------
+cmd_info() {
+    local app_id="${1:-}"
+    local output_json=false
+
+    if [ -z "$app_id" ]; then
+        echo "Error: Missing application ID for 'info'." >&2
+        exit 1
+    fi
+
+    shift
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --json) output_json=true ;;
+        esac
+        shift
+    done
+
+    local app_json
+    app_json=$(find_app_json "$app_id")
+
+    if [ "$app_json" = "{}" ]; then
+        echo "Error: Application '$app_id' not found in catalog." >&2
+        exit 1
+    fi
+
+    if [ "$output_json" = true ]; then
+        if command -v jq >/dev/null 2>&1; then
+            echo "$app_json" | jq .
+        else
+            echo "$app_json"
+        fi
+    else
+        local iname isum icat isrc ipkg isize ifeat icmd
+        iname=$(extract_field "$app_json" "name" "")
+        isum=$(extract_field "$app_json" "summary" "")
+        icat=$(extract_field "$app_json" "category" "")
+        isrc=$(extract_field "$app_json" "source" "")
+        ipkg=$(extract_field "$app_json" "package" "")
+        isize=$(extract_field "$app_json" "size" "")
+        ifeat=$(extract_field "$app_json" "featured" "false")
+        icmd=$(extract_field "$app_json" "command" "")
+
+        echo "=========================================================="
+        echo " Application Details: $iname"
+        echo "=========================================================="
+        echo "ID:          $app_id"
+        echo "Summary:     $isum"
+        echo "Category:    $icat"
+        echo "Source:      $isrc"
+        echo "Package:     $ipkg"
+        echo "Size:        $isize"
+        echo "Featured:    $ifeat"
+        echo "Command:     $icmd"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Command: catalog [--json]
+# ------------------------------------------------------------------------------
+cmd_catalog() {
+    local output_json=false
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --json) output_json=true ;;
+        esac
+        shift
+    done
+
+    if [ ! -f "$CATALOG_FILE" ]; then
+        echo "Error: Catalog not found at $CATALOG_FILE" >&2
+        exit 1
+    fi
+
+    if [ "$output_json" = true ]; then
+        cat "$CATALOG_FILE"
+    else
+        local total=0
+        if command -v jq >/dev/null 2>&1; then
+            total=$(jq '. | length' "$CATALOG_FILE")
+        else
+            local py_bin=""
+            if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+            if [ -n "$py_bin" ]; then
+                total=$("$py_bin" -c "import sys, json; print(len(json.load(open(sys.argv[1]))))" "$CATALOG_FILE" 2>/dev/null || echo 0)
+            fi
+        fi
+
+        echo "BriskOS Curated Software Catalog ($total applications registered):"
+        echo "--------------------------------------------------------------------------------"
+        printf "%-22s %-25s %-12s %-8s %s\n" "ID" "NAME" "CATEGORY" "SOURCE" "PACKAGE"
+        echo "--------------------------------------------------------------------------------"
+
+        if command -v jq >/dev/null 2>&1; then
+            jq -r '.[] | "\(.id)\t\(.name)\t\(.category)\t\(.source)\t\(.package)"' "$CATALOG_FILE" | while IFS=$'\t' read -r cid cname ccat csrc cpkg; do
+                printf "%-22s %-25s %-12s %-8s %s\n" "$cid" "$cname" "$ccat" "$csrc" "$cpkg"
+            done
+        else
+            local py_bin=""
+            if command -v python3 >/dev/null 2>&1; then py_bin="python3"; elif command -v python >/dev/null 2>&1; then py_bin="python"; fi
+            if [ -n "$py_bin" ]; then
+                "$py_bin" -c "
+import sys, json
+try:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    for a in data:
+        print(f\"{a.get('id','')}\t{a.get('name','')}\t{a.get('category','')}\t{a.get('source','')}\t{a.get('package','')}\")
+except Exception:
+    pass
+" "$CATALOG_FILE" | while IFS=$'\t' read -r cid cname ccat csrc cpkg; do
+                    printf "%-22s %-25s %-12s %-8s %s\n" "$cid" "$cname" "$ccat" "$csrc" "$cpkg"
+                done
+            fi
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Main Dispatcher
+# ------------------------------------------------------------------------------
+main() {
+    if [ "$#" -eq 0 ]; then
+        show_help
+        exit 0
+    fi
+
+    local action="$1"
+    shift
+
+    case "$action" in
+        status)
+            cmd_status "$@"
+            ;;
+        install)
+            cmd_install "$@"
+            ;;
+        remove|uninstall)
+            cmd_remove "$@"
+            ;;
+        list-installed|installed)
+            cmd_list_installed "$@"
+            ;;
+        search)
+            cmd_search "$@"
+            ;;
+        info)
+            cmd_info "$@"
+            ;;
+        catalog)
+            cmd_catalog "$@"
+            ;;
+        version|-v|--version)
+            echo "Brisk Store Backend Engine v$VERSION"
+            exit 0
+            ;;
+        help|-h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo "Error: Unknown command '$action'." >&2
+            echo "Run 'brisk-store-backend help' for available commands." >&2
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
