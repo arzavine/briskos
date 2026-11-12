@@ -124,14 +124,17 @@
         "states": {
             "good": 95,
             "warning": 30,
-            "critical": 15
+            "critical": 20
         },
         "format": "{icon} {capacity}%",
         "format-charging": "⚡ {capacity}%",
         "format-plugged": "🔌 {capacity}%",
+        "format-critical": "🪽🪫 {capacity}%",
         "format-alt": "{icon} {time}",
         "format-icons": ["🪫", "🔋", "🔋"],
-        "tooltip-format": "Battery: {capacity}% ({time})",
+        "tooltip-format": "{capacity}% ({time}) • {status}\n⚡ Brisk Sentinel & Glide Mode Auto-Guard\nClick to open power settings",
+        "tooltip-format-critical": "🪽 GLIDE MODE ACTIVE ({capacity}%)\nAuto-guard low-battery protection engaged\nClick to open power settings",
+        "tooltip-format-charging": "⚡ Charging: {capacity}% ({time} until full)\nClick to open power settings",
         "on-click": "brisk-sentinel-gui"
     },
     "clock": {

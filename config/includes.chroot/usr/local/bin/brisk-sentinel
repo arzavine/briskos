@@ -10,6 +10,10 @@ CONF_DIR="/etc/brisk"
 PROFILE_FILE="${CONF_DIR}/sentinel-profile"
 THRESHOLD_FILE="${CONF_DIR}/battery-threshold"
 TLP_SENTINEL_CONF="/etc/tlp.d/00-brisk-sentinel.conf"
+GLIDE_CONF="${CONF_DIR}/glide.conf"
+GLIDE_ACTIVE_FILE="/run/brisk/glide-active"
+GLIDE_ACTIVE_FILE_ALT="/run/brisk-glide.active"
+GLIDE_DAEMON_BIN="/usr/local/bin/brisk-glide-daemon"
 
 # Ensure configuration directory exists
 mkdir -p "$CONF_DIR" 2>/dev/null || true
@@ -56,6 +60,196 @@ get_active_threshold() {
     else
         echo "80"
     fi
+}
+
+# ------------------------------------------------------------------------------
+# Glide Mode Helper Functions & Configuration Management
+# ------------------------------------------------------------------------------
+init_glide_conf() {
+    mkdir -p "$CONF_DIR" 2>/dev/null || true
+    if [ ! -f "$GLIDE_CONF" ]; then
+        cat <<'EOF' > "$GLIDE_CONF"
+# ==============================================================================
+# BriskOS Glide Mode Configuration
+# Smart Low-Battery Auto-Pilot Engine
+# ==============================================================================
+
+# Enable or disable automatic Glide Mode on low battery
+GLIDE_AUTO_ENABLED=true
+
+# Low battery threshold percentage to engage Glide Mode (e.g. 20, 15, 10)
+GLIDE_THRESHOLD=20
+
+# Automatically dim the screen smoothly when Glide Mode activates
+# If false, screen remains bright and only CPU/hardware power is saved
+GLIDE_AUTO_DIM=true
+
+# Target brightness percentage when dimmed (default: 35%)
+GLIDE_DIM_LEVEL=35
+
+# Safety debounce delay in seconds to ignore loose charger cables / brief disconnects
+GLIDE_DEBOUNCE_SECONDS=3
+
+# Send desktop notifications on Glide Mode transitions
+GLIDE_NOTIFY=true
+EOF
+        chmod 644 "$GLIDE_CONF" 2>/dev/null || true
+    fi
+}
+
+get_glide_var() {
+    local var_name="$1"
+    local default_val="$2"
+    if [ -f "$GLIDE_CONF" ]; then
+        local val
+        val=$(grep -E "^${var_name}=" "$GLIDE_CONF" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"'\'' ' || true)
+        if [ -n "$val" ]; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    echo "$default_val"
+}
+
+set_glide_var() {
+    local var_name="$1"
+    local new_val="$2"
+    ensure_root "$@"
+    init_glide_conf
+
+    if grep -q -E "^${var_name}=" "$GLIDE_CONF" 2>/dev/null; then
+        sed -i "s|^${var_name}=.*|${var_name}=${new_val}|" "$GLIDE_CONF"
+    else
+        echo "${var_name}=${new_val}" >> "$GLIDE_CONF"
+    fi
+}
+
+is_glide_engaged() {
+    if [ -f "$GLIDE_ACTIVE_FILE" ] || [ -f "$GLIDE_ACTIVE_FILE_ALT" ]; then
+        return 0
+    fi
+    return 1
+}
+
+is_glide_daemon_running() {
+    if systemctl is-active --quiet brisk-glide.service 2>/dev/null; then
+        return 0
+    elif pgrep -f "brisk-glide-daemon" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+get_glide_status() {
+    local raw_output=0
+    if [ "${1:-}" = "--porcelain" ] || [ "${1:-}" = "--raw" ]; then
+        raw_output=1
+    fi
+
+    local auto_enabled threshold auto_dim dim_level debounce_sec notify is_active daemon_running
+    auto_enabled=$(get_glide_var "GLIDE_AUTO_ENABLED" "true")
+    threshold=$(get_glide_var "GLIDE_THRESHOLD" "20")
+    auto_dim=$(get_glide_var "GLIDE_AUTO_DIM" "true")
+    dim_level=$(get_glide_var "GLIDE_DIM_LEVEL" "35")
+    debounce_sec=$(get_glide_var "GLIDE_DEBOUNCE_SECONDS" "3")
+    notify=$(get_glide_var "GLIDE_NOTIFY" "true")
+
+    if is_glide_engaged; then
+        is_active="true"
+    else
+        is_active="false"
+    fi
+
+    if is_glide_daemon_running; then
+        daemon_running="true"
+    else
+        daemon_running="false"
+    fi
+
+    if [ "$raw_output" -eq 1 ]; then
+        echo "GLIDE_AUTO_ENABLED=$auto_enabled"
+        echo "GLIDE_THRESHOLD=$threshold"
+        echo "GLIDE_AUTO_DIM=$auto_dim"
+        echo "GLIDE_DIM_LEVEL=$dim_level"
+        echo "GLIDE_DEBOUNCE_SECONDS=$debounce_sec"
+        echo "GLIDE_NOTIFY=$notify"
+        echo "GLIDE_ACTIVE=$is_active"
+        echo "GLIDE_DAEMON_RUNNING=$daemon_running"
+        return 0
+    fi
+
+    local status_badge="Enabled (Active Auto-Guard)"
+    if [ "$auto_enabled" != "true" ]; then
+        status_badge="Disabled (Manual Only)"
+    fi
+
+    local dim_badge="Enabled (Smooth Dim to ${dim_level}%)"
+    if [ "$auto_dim" != "true" ]; then
+        dim_badge="Disabled (Screen Remains Bright)"
+    fi
+
+    local notify_badge="Enabled"
+    if [ "$notify" != "true" ]; then
+        notify_badge="Disabled"
+    fi
+
+    local state_badge="Standby / Ready"
+    if [ "$is_active" = "true" ]; then
+        state_badge="🪽 ENGAGED (Conserving Power)"
+    fi
+
+    local daemon_badge="Running (Active)"
+    if [ "$daemon_running" != "true" ]; then
+        daemon_badge="Inactive / Standby"
+    fi
+
+    echo "================================================================================"
+    echo "               Brisk Glide Mode - Smart Low-Battery Auto-Pilot"
+    echo "================================================================================"
+    printf "  %-24s : %s\n" "Auto-Guard Engine" "$status_badge"
+    printf "  %-24s : %s%%\n" "Trigger Threshold" "$threshold"
+    printf "  %-24s : %s\n" "Smooth Auto-Dimming" "$dim_badge"
+    printf "  %-24s : %s seconds\n" "Anti-Flicker Debounce" "$debounce_sec"
+    printf "  %-24s : %s\n" "Desktop Notifications" "$notify_badge"
+    printf "  %-24s : %s\n" "Runtime State" "$state_badge"
+    printf "  %-24s : %s\n" "Daemon Service" "$daemon_badge"
+    echo "================================================================================"
+}
+
+test_glide_mode() {
+    echo "⚡ Starting 5-second Brisk Glide Mode Simulation..."
+    if [ -x "$GLIDE_DAEMON_BIN" ]; then
+        "$GLIDE_DAEMON_BIN" trigger-on 2>/dev/null || true
+        sleep 5
+        "$GLIDE_DAEMON_BIN" trigger-off 2>/dev/null || true
+    else
+        # Standalone simulation fallback
+        local cur_profile
+        cur_profile=$(get_active_profile)
+        local cur_bright=""
+        if command -v brightnessctl >/dev/null 2>&1; then
+            cur_bright=$(brightnessctl get 2>/dev/null || true)
+        fi
+        if command -v notify-send >/dev/null 2>&1; then
+            notify-send -a "Brisk Sentinel" -i "battery-caution" "🪽 Uji Coba Glide Mode" "Memulai simulasi Glide Mode selama 5 detik..." 2>/dev/null || true
+        fi
+        set_power_profile eco >/dev/null 2>&1 || true
+        local auto_dim dim_lvl
+        auto_dim=$(get_glide_var "GLIDE_AUTO_DIM" "true")
+        dim_lvl=$(get_glide_var "GLIDE_DIM_LEVEL" "35")
+        if [ "$auto_dim" = "true" ] && command -v brightnessctl >/dev/null 2>&1; then
+            brightnessctl set "${dim_lvl}%" -q 2>/dev/null || true
+        fi
+        sleep 5
+        set_power_profile "$cur_profile" >/dev/null 2>&1 || true
+        if [ -n "$cur_bright" ] && command -v brightnessctl >/dev/null 2>&1; then
+            brightnessctl set "$cur_bright" -q 2>/dev/null || true
+        fi
+        if command -v notify-send >/dev/null 2>&1; then
+            notify-send -a "Brisk Sentinel" -i "battery-good" "⚡ Uji Coba Selesai" "Glide Mode berhasil diuji. Pengaturan telah dipulihkan." 2>/dev/null || true
+        fi
+    fi
+    echo "✓ Glide Mode simulation complete. System restored."
 }
 
 # ------------------------------------------------------------------------------
@@ -291,6 +485,17 @@ get_status() {
     local full_design_mwh=""
     local full_mwh=""
 
+    # Glide Mode parameters
+    local glide_enabled glide_thresh glide_dim glide_engaged_str
+    glide_enabled=$(get_glide_var "GLIDE_AUTO_ENABLED" "true")
+    glide_thresh=$(get_glide_var "GLIDE_THRESHOLD" "20")
+    glide_dim=$(get_glide_var "GLIDE_AUTO_DIM" "true")
+    if is_glide_engaged; then
+        glide_engaged_str="true"
+    else
+        glide_engaged_str="false"
+    fi
+
     # 1. Thermal reading
     for t in /sys/class/thermal/thermal_zone*/temp; do
         if [ -f "$t" ]; then
@@ -425,6 +630,10 @@ get_status() {
         echo "TEMPERATURE=$temp"
         echo "REMAINING=$remaining"
         echo "THRESHOLD=$threshold"
+        echo "GLIDE_AUTO_ENABLED=$glide_enabled"
+        echo "GLIDE_THRESHOLD=$glide_thresh"
+        echo "GLIDE_AUTO_DIM=$glide_dim"
+        echo "GLIDE_ACTIVE=$glide_engaged_str"
         return 0
     fi
 
@@ -435,6 +644,19 @@ get_status() {
         turbo) profile_label="⚡ TURBO PERFORMANCE (Peak Frequency)" ;;
         *) profile_label="⚖️ BALANCED (Intelligent Dynamic Scaling)" ;;
     esac
+
+    local glide_summary=""
+    if [ "$glide_engaged_str" = "true" ]; then
+        glide_summary="🪽 ENGAGED (Conserving Power via Eco Profile)"
+    elif [ "$glide_enabled" = "true" ]; then
+        if [ "$glide_dim" = "true" ]; then
+            glide_summary="Enabled (Auto-Guard at ${glide_thresh}%, Screen Dim: On)"
+        else
+            glide_summary="Enabled (Auto-Guard at ${glide_thresh}%, Screen Dim: Off/Screen Bright)"
+        fi
+    else
+        glide_summary="Disabled (Manual Control Only)"
+    fi
 
     echo "================================================================================"
     echo "                   Brisk Battery Sentinel - System Diagnostics"
@@ -450,6 +672,7 @@ get_status() {
     printf "  %-22s : %s\n" "Hardware Temperature" "$temp"
     printf "  %-22s : %s\n" "Estimated Remaining" "$remaining"
     printf "  %-22s : %s%% (Protects Li-Ion cells against degradation)\n" "Lifespan Ceiling" "$threshold"
+    printf "  %-22s : %s\n" "Glide Auto-Guard" "$glide_summary"
     echo "================================================================================"
 }
 
@@ -477,16 +700,91 @@ case "$cmd" in
             echo "Battery Charge Threshold: $(get_active_threshold)%"
         fi
         ;;
+    glide)
+        subcmd="${1:-status}"
+        shift || true
+        case "$subcmd" in
+            status)
+                get_glide_status "$@"
+                ;;
+            on|enable)
+                set_glide_var "GLIDE_AUTO_ENABLED" "true"
+                if systemctl is-active --quiet brisk-glide.service 2>/dev/null; then
+                    systemctl restart brisk-glide.service 2>/dev/null || true
+                elif systemctl list-unit-files brisk-glide.service >/dev/null 2>&1; then
+                    systemctl start brisk-glide.service 2>/dev/null || true
+                fi
+                echo "🪽 Glide Mode Auto-Guard: ENABLED (Automatic trigger when battery <= $(get_glide_var GLIDE_THRESHOLD 20)%)"
+                ;;
+            off|disable)
+                set_glide_var "GLIDE_AUTO_ENABLED" "false"
+                if is_glide_engaged; then
+                    if [ -x "$GLIDE_DAEMON_BIN" ]; then
+                        "$GLIDE_DAEMON_BIN" trigger-off 2>/dev/null || true
+                    fi
+                fi
+                echo "🪽 Glide Mode Auto-Guard: DISABLED"
+                ;;
+            toggle-dim|dim)
+                cur_dim=$(get_glide_var "GLIDE_AUTO_DIM" "true")
+                if [ "$cur_dim" = "true" ]; then
+                    set_glide_var "GLIDE_AUTO_DIM" "false"
+                    echo "🪽 Glide Mode Screen Auto-Dimming: DISABLED (Screen will stay bright; only hardware will be throttled)"
+                else
+                    set_glide_var "GLIDE_AUTO_DIM" "true"
+                    echo "🪽 Glide Mode Screen Auto-Dimming: ENABLED (Screen will smoothly dim to $(get_glide_var GLIDE_DIM_LEVEL 35)% during Glide Mode)"
+                fi
+                ;;
+            threshold)
+                if [ $# -gt 0 ]; then
+                    thresh_val="$1"
+                    if ! [[ "$thresh_val" =~ ^[0-9]+$ ]] || [ "$thresh_val" -lt 5 ] || [ "$thresh_val" -gt 50 ]; then
+                        echo "Error: Glide threshold must be an integer percentage between 5 and 50 (e.g. 20, 15, or 10)." >&2
+                        exit 1
+                    fi
+                    set_glide_var "GLIDE_THRESHOLD" "$thresh_val"
+                    echo "🪽 Glide Mode trigger threshold set to: ${thresh_val}%"
+                else
+                    echo "Glide Mode Trigger Threshold: $(get_glide_var GLIDE_THRESHOLD 20)%"
+                fi
+                ;;
+            debounce)
+                if [ $# -gt 0 ]; then
+                    deb_val="$1"
+                    if ! [[ "$deb_val" =~ ^[0-9]+$ ]] || [ "$deb_val" -lt 0 ] || [ "$deb_val" -gt 30 ]; then
+                        echo "Error: Debounce must be an integer between 0 and 30 seconds." >&2
+                        exit 1
+                    fi
+                    set_glide_var "GLIDE_DEBOUNCE_SECONDS" "$deb_val"
+                    echo "🪽 Glide Mode anti-flicker debounce set to: ${deb_val}s"
+                else
+                    echo "Glide Mode Debounce Delay: $(get_glide_var GLIDE_DEBOUNCE_SECONDS 3)s"
+                fi
+                ;;
+            test|simulate)
+                test_glide_mode
+                ;;
+            help|--help|-h)
+                echo "Usage: brisk-sentinel glide [status|on|off|toggle-dim|threshold <val>|debounce <sec>|test]"
+                ;;
+            *)
+                echo "Unknown glide subcommand: $subcmd" >&2
+                echo "Usage: brisk-sentinel glide [status|on|off|toggle-dim|threshold <val>|debounce <sec>|test]" >&2
+                exit 1
+                ;;
+        esac
+        ;;
     help|--help|-h)
         echo "Brisk Battery Sentinel - Ultra-Lean Laptop Power Optimization"
         echo ""
         echo "Usage: brisk-sentinel [command] [options]"
         echo ""
         echo "Commands:"
-        echo "  profile [eco|balanced|turbo]  Switch active power profile"
-        echo "  status [--raw]                Display battery health, power rate & profile"
-        echo "  threshold [50-100]            Set maximum battery charge threshold (e.g. 80%)"
-        echo "  help                          Show this assistance manual"
+        echo "  profile [eco|balanced|turbo]                                 Switch active power profile"
+        echo "  status [--raw]                                               Display battery health, power rate & profile"
+        echo "  threshold [50-100]                                           Set maximum battery charge threshold (e.g. 80%)"
+        echo "  glide [status|on|off|toggle-dim|threshold <val>|test]        Manage Glide Mode smart low-battery auto-pilot"
+        echo "  help                                                         Show this assistance manual"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

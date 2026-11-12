@@ -3,6 +3,6 @@
 # Allow live session user and sudo group to adjust power profiles without password
 # ==============================================================================
 
-live ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel
-user ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel
-%sudo ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel
+live ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel, /usr/local/bin/brisk-glide-daemon
+user ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel, /usr/local/bin/brisk-glide-daemon
+%sudo ALL=(ALL) NOPASSWD: /usr/local/bin/brisk-sentinel, /usr/local/bin/brisk-glide-daemon

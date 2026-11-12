@@ -16,6 +16,7 @@ echo "=========================================================="
 POWER_SERVICES=(
     "tlp.service"
     "acpid.service"
+    "brisk-glide.service"
 )
 
 echo "--> Enabling system power daemons (TLP & ACPID)..."
@@ -37,11 +38,12 @@ for svc in "${POWER_SERVICES[@]}"; do
     done
 done
 
-# 2. Permissions for Battery Sentinel Binaries
-echo "--> Configuring Brisk Battery Sentinel executable permissions..."
+# 2. Permissions for Battery Sentinel & Glide Mode Binaries
+echo "--> Configuring Brisk Battery Sentinel & Glide Mode executable permissions..."
 SENTINEL_BINS=(
     "/usr/local/bin/brisk-sentinel"
     "/usr/local/bin/brisk-sentinel-gui"
+    "/usr/local/bin/brisk-glide-daemon"
 )
 
 for bin_path in "${SENTINEL_BINS[@]}"; do
@@ -117,6 +119,16 @@ mkdir -p /etc/brisk
 if [ -f "/etc/brisk/timetravel.conf" ]; then
     chmod 644 /etc/brisk/timetravel.conf
     chown root:root /etc/brisk/timetravel.conf
+fi
+
+if [ -f "/etc/brisk/glide.conf" ]; then
+    chmod 644 /etc/brisk/glide.conf
+    chown root:root /etc/brisk/glide.conf
+fi
+
+if [ -f "/etc/systemd/system/brisk-glide.service" ]; then
+    chmod 644 /etc/systemd/system/brisk-glide.service
+    chown root:root /etc/systemd/system/brisk-glide.service
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then

@@ -13,5 +13,8 @@ upower
 acpi
 acpid
 
+# Wayland-native backlight controller for Brisk Glide Mode
+brightnessctl
+
 # CPU frequency scaling & energy performance preference management
 linux-cpupower

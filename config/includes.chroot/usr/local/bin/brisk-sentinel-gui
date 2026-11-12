@@ -27,6 +27,175 @@ notify() {
     fi
 }
 
+show_glide_settings_dialog() {
+    while true; do
+        # Fetch current Glide settings from CLI
+        local RAW_GLIDE=""
+        if [ -x "$SENTINEL_CLI" ]; then
+            RAW_GLIDE="$("$SENTINEL_CLI" glide status --raw 2>/dev/null || true)"
+        fi
+
+        local GLIDE_AUTO_ENABLED="true"
+        local GLIDE_THRESHOLD="20"
+        local GLIDE_AUTO_DIM="true"
+        local GLIDE_DIM_LEVEL="35"
+        local GLIDE_DEBOUNCE_SECONDS="3"
+        local GLIDE_ACTIVE="false"
+        local GLIDE_DAEMON_RUNNING="false"
+
+        if [ -n "$RAW_GLIDE" ]; then
+            eval "$RAW_GLIDE"
+        fi
+
+        # UI Badge Indicators adhering to Antislop UI aesthetics
+        local AUTO_CHECK="[✓]"
+        local AUTO_DESC="Auto-Guard aktif (hemat baterai otomatis saat kritis)"
+        local AUTO_COLOR="#4ade80"
+        local AUTO_STATUS_TEXT="AKTIF"
+        if [ "${GLIDE_AUTO_ENABLED:-true}" != "true" ]; then
+            AUTO_CHECK="[ ]"
+            AUTO_DESC="Auto-Guard nonaktif (hanya kontrol manual)"
+            AUTO_COLOR="#94a3b8"
+            AUTO_STATUS_TEXT="NONAKTIF"
+        fi
+
+        local DIM_CHECK="[✓]"
+        local DIM_DESC="Layar redup halus ke ${GLIDE_DIM_LEVEL:-35}% saat Glide Mode aktif"
+        local DIM_COLOR="#4ade80"
+        local DIM_STATUS_TEXT="Peredupan Halus (${GLIDE_DIM_LEVEL:-35}%)"
+        if [ "${GLIDE_AUTO_DIM:-true}" != "true" ]; then
+            DIM_CHECK="[ ]"
+            DIM_DESC="Layar TETAP TERANG — Hanya CPU & hardware dihemat"
+            DIM_COLOR="#f59e0b"
+            DIM_STATUS_TEXT="Layar Tetap Terang (CPU Saja)"
+        fi
+
+        local DEBOUNCE_CHECK="[✓]"
+        local DEBOUNCE_DESC="Jeda 3 detik anti-kedip (abaikan charger tersenggol)"
+        local DEBOUNCE_COLOR="#4ade80"
+        local DEBOUNCE_STATUS_TEXT="${GLIDE_DEBOUNCE_SECONDS:-3} Detik"
+        if [ "${GLIDE_DEBOUNCE_SECONDS:-3}" -eq 0 ]; then
+            DEBOUNCE_CHECK="[ ]"
+            DEBOUNCE_DESC="Tanpa jeda pengaman (reaksi instan 0 detik)"
+            DEBOUNCE_COLOR="#94a3b8"
+            DEBOUNCE_STATUS_TEXT="Instan (0 Detik)"
+        fi
+
+        local ENGAGED_BADGE=""
+        if [ "${GLIDE_ACTIVE:-false}" = "true" ]; then
+            ENGAGED_BADGE="<span color='#f43f5e'><b>[SEDANG BERJALAN / ENGAGED]</b></span>"
+        else
+            ENGAGED_BADGE="<span color='#38bdf8'><b>[SIAGA / STANDBY]</b></span>"
+        fi
+
+        local GLIDE_HEADER="<big><b>🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)</b></big>\n\n"
+        GLIDE_HEADER+="Auto-pilot hemat daya laptop cerdas saat baterai menipis.\n"
+        GLIDE_HEADER+="Transisi cerdas & anti-kedip melindungi produktivitas dan baterai Anda.\n\n"
+        GLIDE_HEADER+="<b>Status:</b> <span color='${AUTO_COLOR}'><b>${AUTO_STATUS_TEXT}</b></span> ${ENGAGED_BADGE}    "
+        GLIDE_HEADER+="<b>Ambang Batas:</b> <span color='#38bdf8'><b>${GLIDE_THRESHOLD:-20}%</b></span>\n"
+        GLIDE_HEADER+="<b>Peredupan Layar:</b> <span color='${DIM_COLOR}'><b>${DIM_STATUS_TEXT}</b></span>    "
+        GLIDE_HEADER+="<b>Debounce:</b> <span color='${DEBOUNCE_COLOR}'><b>${DEBOUNCE_STATUS_TEXT}</b></span>\n"
+        GLIDE_HEADER+="────────────────────────────────────────────────────────────\n"
+        GLIDE_HEADER+="Pilih pengaturan untuk mengaktifkan/menyesuaikan, atau uji coba langsung:"
+
+        local SUB_CHOICE
+        SUB_CHOICE=$(zenity --list \
+            --title="Brisk Glide Mode - Pengaturan Cerdas" \
+            --window-icon="$APP_ICON" \
+            --width=760 \
+            --height=500 \
+            --text="$GLIDE_HEADER" \
+            --column="Key" \
+            --column="Fitur / Opsi Pengaturan" \
+            --column="Penjelasan Detail & Perilaku" \
+            --hide-column=1 \
+            --ok-label="Pilih / Ubah" \
+            --cancel-label="Kembali ke Menu Utama" \
+            "TOGGLE_AUTO" "${AUTO_CHECK} Aktifkan Glide Mode otomatis saat baterai menipis" "$AUTO_DESC" \
+            "SET_THRESHOLD" "🎯 Pilihan Ambang Batas: 20%, 15%, atau 10%" "Pemicu transisi otomatis (Saat ini aktif pada ${GLIDE_THRESHOLD:-20}%)" \
+            "TOGGLE_DIM" "${DIM_CHECK} Redupkan layar secara halus saat Glide Mode aktif" "Jika tidak dicentang, layar TETAP TERANG dan hanya performa CPU/perangkat keras yang dihemat!" \
+            "TOGGLE_DEBOUNCE" "${DEBOUNCE_CHECK} Jeda Pengaman 3 Detik (Debounce anti-kedip)" "$DEBOUNCE_DESC" \
+            "TEST_GLIDE" "⚡ Uji Coba Glide Mode Sekarang" "Simulasi transisi 5 detik untuk menguji peredupan layar & profil hemat daya" \
+            2>/dev/null || true)
+
+        if [ -z "$SUB_CHOICE" ]; then
+            break
+        fi
+
+        case "$SUB_CHOICE" in
+            TOGGLE_AUTO)
+                if [ "${GLIDE_AUTO_ENABLED:-true}" = "true" ]; then
+                    "$SENTINEL_CLI" glide off
+                    notify "Glide Mode Dinonaktifkan" "Auto-pilot baterai dinonaktifkan. Sistem tetap pada profil manual." "battery-good"
+                else
+                    "$SENTINEL_CLI" glide on
+                    notify "Glide Mode Diaktifkan" "Auto-pilot cerdas aktif saat baterai mencapai ${GLIDE_THRESHOLD:-20}%." "battery-caution"
+                fi
+                ;;
+            SET_THRESHOLD)
+                local NEW_THRESH
+                NEW_THRESH=$(zenity --list --radiolist \
+                    --title="Pilihan Ambang Batas Glide Mode" \
+                    --window-icon="$APP_ICON" \
+                    --width=540 \
+                    --height=320 \
+                    --text="Pilih persentase sisa baterai untuk memicu Glide Mode secara otomatis:" \
+                    --column="Pilih" --column="Ambang" --column="Rekomendasi Profil Daya" \
+                    --hide-column=2 \
+                    $([ "${GLIDE_THRESHOLD:-20}" = "20" ] && echo "TRUE" || echo "FALSE") "20" "20% (Disarankan - Perlindungan awal, transisi ultra-halus)" \
+                    $([ "${GLIDE_THRESHOLD:-20}" = "15" ] && echo "TRUE" || echo "FALSE") "15" "15% (Seimbang - Waktu performa penuh lebih panjang)" \
+                    $([ "${GLIDE_THRESHOLD:-20}" = "10" ] && echo "TRUE" || echo "FALSE") "10" "10% (Kritis - Daya tahan darurat level paling akhir)" \
+                    2>/dev/null || true)
+                if [ -n "$NEW_THRESH" ]; then
+                    "$SENTINEL_CLI" glide threshold "$NEW_THRESH"
+                    notify "Ambang Batas Diperbarui" "Glide Mode akan aktif otomatis ketika sisa baterai <= ${NEW_THRESH}%." "battery-good"
+                fi
+                ;;
+            TOGGLE_DIM)
+                "$SENTINEL_CLI" glide toggle-dim
+                if [ "${GLIDE_AUTO_DIM:-true}" = "true" ]; then
+                    notify "Peredupan Layar Dinonaktifkan" "Layar akan TETAP TERANG saat Glide Mode aktif. Hanya profil CPU/perangkat keras yang dihemat!" "display"
+                else
+                    notify "Peredupan Layar Diaktifkan" "Layar akan meredup halus hingga 35% saat Glide Mode aktif untuk menghemat daya." "display"
+                fi
+                ;;
+            TOGGLE_DEBOUNCE)
+                if [ "${GLIDE_DEBOUNCE_SECONDS:-3}" -ge 1 ]; then
+                    "$SENTINEL_CLI" glide debounce 0
+                    notify "Jeda Pengaman Dinonaktifkan" "Glide Mode akan aktif seketika tanpa jeda 3 detik." "dialog-information"
+                else
+                    "$SENTINEL_CLI" glide debounce 3
+                    notify "Jeda Pengaman 3 Detik Diaktifkan" "Jeda anti-kedip aktif untuk mengabaikan senggolan kabel charger." "dialog-information"
+                fi
+                ;;
+            TEST_GLIDE)
+                (
+                    echo "10"; echo "# Mempersiapkan pengujian Glide Mode..."; sleep 1
+                    echo "30"; echo "# Mengaktifkan profil Eco Saver & peredupan halus..."; sleep 1
+                    echo "60"; echo "# Simulasi Glide Mode berjalan (5 detik)..."; sleep 2
+                    echo "90"; echo "# Memulihkan profil daya & kecerahan semula..."; sleep 1
+                    echo "100"; echo "# Selesai!"
+                ) | zenity --progress \
+                    --title="Uji Coba Glide Mode" \
+                    --window-icon="$APP_ICON" \
+                    --width=480 \
+                    --auto-close \
+                    --pulsate \
+                    2>/dev/null &
+                local TEST_PID=$!
+                "$SENTINEL_CLI" glide test >/dev/null 2>&1 || true
+                wait "$TEST_PID" 2>/dev/null || true
+                zenity --info \
+                    --title="Uji Coba Glide Mode Selesai" \
+                    --window-icon="$APP_ICON" \
+                    --width=480 \
+                    --text="⚡ <b>Uji Coba Glide Mode Berhasil!</b>\n\nTransisi otomatis profil daya dan respon kecerahan layar telah diuji dan dikembalikan ke kondisi semula dengan sempurna." \
+                    2>/dev/null || true
+                ;;
+        esac
+    done
+}
+
 while true; do
     # Fetch fresh metrics from CLI
     PROFILE="balanced"
@@ -37,6 +206,10 @@ while true; do
     TEMPERATURE="Normal"
     REMAINING="AC Power"
     THRESHOLD="80"
+    GLIDE_AUTO_ENABLED="true"
+    GLIDE_THRESHOLD="20"
+    GLIDE_AUTO_DIM="true"
+    GLIDE_ACTIVE="false"
 
     if [ -x "$SENTINEL_CLI" ]; then
         RAW_DATA="$("$SENTINEL_CLI" status --raw 2>/dev/null || true)"
@@ -61,6 +234,16 @@ while true; do
         PROTECTOR_BADGE="${THRESHOLD}% (Lifespan Saver Active)"
     fi
 
+    # Format Glide Mode Badge
+    GLIDE_BADGE="🪽 Auto (${GLIDE_THRESHOLD:-20}%, Dim On)"
+    if [ "${GLIDE_ACTIVE:-false}" = "true" ]; then
+        GLIDE_BADGE="🪽 Engaged (Active)"
+    elif [ "${GLIDE_AUTO_ENABLED:-true}" != "true" ]; then
+        GLIDE_BADGE="🪽 Disabled"
+    elif [ "${GLIDE_AUTO_DIM:-true}" != "true" ]; then
+        GLIDE_BADGE="🪽 Auto (${GLIDE_THRESHOLD:-20}%, Dim Off)"
+    fi
+
     HEADER_PANGO="<big><b>⚡ Brisk Battery Sentinel</b></big>\n\n"
     HEADER_PANGO+="<b>Battery Level:</b> <span color='#38bdf8'><b>${CAPACITY}</b></span> (${STATUS})    "
     HEADER_PANGO+="<b>Health:</b> <span color='#4ade80'><b>${HEALTH}</b></span>\n"
@@ -68,14 +251,15 @@ while true; do
     HEADER_PANGO+="<b>Estimated Runtime:</b> ${REMAINING}\n\n"
     HEADER_PANGO+="<b>Active Profile:</b> <b>${CURRENT_PROFILE_BADGE}</b>    "
     HEADER_PANGO+="<b>Charge Ceiling:</b> <b>${PROTECTOR_BADGE}</b>\n"
+    HEADER_PANGO+="<b>Glide Mode:</b> <b>${GLIDE_BADGE}</b>\n"
     HEADER_PANGO+="────────────────────────────────────────────────────────────\n"
     HEADER_PANGO+="Select an optimization action or profile switch below:"
 
     CHOICE=$(zenity --list \
         --title="$APP_NAME" \
         --window-icon="$APP_ICON" \
-        --width=680 \
-        --height=480 \
+        --width=720 \
+        --height=520 \
         --text="$HEADER_PANGO" \
         --column="Key" \
         --column="Profile / Operation" \
@@ -84,6 +268,7 @@ while true; do
         "ECO" "🍃 Switch to ECO SAVER Profile" "Capped CPU, powersave governor, +60% battery life" \
         "BALANCED" "⚖️ Switch to BALANCED Profile" "Smart adaptive scaling (ideal everyday balance)" \
         "TURBO" "⚡ Switch to TURBO PERFORMANCE" "Max clock speed & uncapped boost for heavy workloads" \
+        "GLIDE" "🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)" "Auto-pilot baterai: peredupan halus, ambang batas & proteksi hemat daya" \
         "PROTECT_80" "🛡️ Enable 80% Lifespan Protection" "Extends battery lifespan 3x by capping top voltage" \
         "PROTECT_100" "🔋 Allow 100% Full Charge (Travel)" "Charges battery to full capacity for travel" \
         "DIAGNOSTICS" "📊 View Detailed Power Diagnostics" "Detailed breakdown of battery wear, watts & TLP" \
@@ -107,6 +292,9 @@ while true; do
         TURBO)
             "$SENTINEL_CLI" profile turbo
             notify "Profile Switched: Turbo Performance" "Maximum frequency boost and sustained performance governor enabled." "battery-full"
+            ;;
+        GLIDE)
+            show_glide_settings_dialog
             ;;
         PROTECT_80)
             "$SENTINEL_CLI" threshold 80

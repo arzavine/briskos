@@ -44,6 +44,7 @@ This manual provides authoritative, step-by-step instructions for flashing, boot
    - [6.5 Dual-Boot Hardware Clock Fix (RTC UTC)](#65-dual-boot-hardware-clock-fix-rtc-utc)
    - [6.6 Feature: Brisk Time-Travel Instant System Rollback & Checkpoints](#66-feature-brisk-time-travel-instant-system-rollback--checkpoints)
    - [6.7 Feature: Brisk Battery Sentinel Laptop Power Optimization & Profiles](#67-feature-brisk-battery-sentinel-laptop-power-optimization--profiles)
+   - [6.8 Feature: Brisk Glide Mode Smart Low-Battery Auto-Pilot](#68-feature-brisk-glide-mode-smart-low-battery-auto-pilot)
 7. [Troubleshooting & FAQ](#7-troubleshooting--faq)
 
 ---
@@ -713,6 +714,91 @@ sudo brisk-sentinel threshold 80
 
 # 5. Reset charge ceiling to 100% for long-distance travel
 sudo brisk-sentinel threshold 100
+```
+
+---
+
+### 6.8 Feature: Brisk Glide Mode Smart Low-Battery Auto-Pilot
+
+**Brisk Glide Mode** is an intelligent, zero-polling battery auto-pilot engine designed to gracefully protect user sessions and extend laptop endurance when battery reserves drop to critical thresholds. Unlike coarse battery-saver utilities, Glide Mode combines kernel-level uevent monitoring with an anti-flicker debounce safety buffer, smooth hardware backlight dimming, and instantaneous charger-restoration recovery.
+
+#### A. Architecture & Event-Driven Engine
+- **Zero-Polling Kernel Event Monitoring (`brisk-glide-daemon`)**:
+  - Monitors hardware power state via Linux kernel `power_supply` uevents (`udevadm monitor --subsystem-match=power_supply`) with automatic D-Bus fallback (`upower --monitor`).
+  - Consumes **0% CPU and zero idle battery draw** while waiting for power transitions.
+- **3-Second Anti-Flicker Safety Debounce (`GLIDE_DEBOUNCE_SECONDS`)**:
+  - When the AC power cable is disconnected while battery is at or below the trigger threshold, the engine pauses for 3 seconds before engaging Glide Mode.
+  - This eliminates jarring brightness and CPU throttling if a power brick is bumped, momentarily loose, or swapped across outlets.
+- **Smooth Backlight Dimming (`brightnessctl`)**:
+  - Hardware-level, Wayland-native backlight scaling transitions smoothly step-by-step from current brightness down to target level (default 35%).
+  - Automatically records pre-dimming brightness level into `/run/brisk/glide-prev-brightness` and restores it smoothly the instant AC mains power is reconnected.
+- **Instant Charger Reconnection Recovery**:
+  - Plugging in the charger immediately exits Glide Mode without debounce delay: restores the previous active power profile (Balanced or Turbo) and restores original screen brightness.
+- **Desktop Session Notification Broadcast**:
+  - Emits modern Wayland toasts to active desktop sessions via D-Bus session bus:
+    - On engage: `🪫 Baterai Tersisa [X]% — Glide Mode Aktif (Performa hemat daya diaktifkan)`
+    - On disengage: `⚡ Charger Terhubung — Glide Mode dinonaktifkan`
+- **Waybar Indicator Integration**:
+  - Waybar battery island automatically reflects critical Glide status with `🪽🪫 {capacity}%` and detailed tooltip alerting the user that Auto-Guard is engaged.
+
+#### B. Customizable Configuration Settings (`/etc/brisk/glide.conf`)
+Glide Mode is governed by `/etc/brisk/glide.conf`, completely customizable via GUI or CLI:
+
+| Parameter | Default | Values | Description |
+| :--- | :--- | :--- | :--- |
+| `GLIDE_AUTO_ENABLED` | `true` | `true` \| `false` | Enable or disable automatic Glide Mode auto-pilot on low battery. |
+| `GLIDE_THRESHOLD` | `20` | `5` - `50` (`20`, `15`, `10`) | Battery capacity percentage threshold that triggers Glide Mode. |
+| `GLIDE_AUTO_DIM` | `true` | `true` \| `false` | Smoothly dim screen to `GLIDE_DIM_LEVEL`. If `false`, the screen **remains 100% bright** while CPU and hardware power are aggressively conserved. |
+| `GLIDE_DIM_LEVEL` | `35` | `10` - `80` (percentage) | Target screen brightness percentage when dimmed. |
+| `GLIDE_DEBOUNCE_SECONDS`| `3` | `0` - `30` (seconds) | Delay buffer to prevent triggering on loose charger cables or accidental unplugs. |
+| `GLIDE_NOTIFY` | `true` | `true` \| `false` | Send desktop toast notifications on Glide Mode transitions. |
+
+#### C. Graphical Interface (`brisk-sentinel-gui`)
+Open the Battery Sentinel GUI from Waybar battery icon or Start Menu:
+1. Select **🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)**.
+2. In the Glide settings dialog, you can:
+   - **Toggle Auto-Guard**: `[✓] Aktifkan Glide Mode otomatis saat baterai menipis`
+   - **Adjust Threshold**: Choose between **20%**, **15%**, or **10%** trigger threshold.
+   - **Toggle Screen Auto-Dimming**: `[✓] Redupkan layar secara halus saat Glide Mode aktif`. When unchecked, the screen **stays bright** for presentations, reading, or video playback while CPU/GPU hardware profiles are throttled into Eco Saver mode.
+   - **Toggle Debounce**: Enable or disable the 3-second anti-flicker protection buffer.
+   - **⚡ Uji Coba Glide Mode Sekarang**: Runs an interactive 5-second simulated Glide Mode cycle to test brightness fading, profile switching, and notification toasts with a live progress dialog.
+
+#### D. Command-Line Interface (`brisk-sentinel glide`)
+Manage Glide Mode parameters directly from the terminal:
+
+```bash
+# 1. View Glide Mode status and current configuration
+brisk-sentinel glide status
+
+# 2. Output raw key-value pairs (for scripting or status bars)
+brisk-sentinel glide status --raw
+
+# 3. Enable or disable automatic Glide Mode auto-pilot
+sudo brisk-sentinel glide on
+sudo brisk-sentinel glide off
+
+# 4. Toggle screen auto-dimming (keep screen bright vs smooth dimming)
+sudo brisk-sentinel glide toggle-dim
+
+# 5. Set battery trigger threshold (e.g. 15% or 10%)
+sudo brisk-sentinel glide threshold 15
+
+# 6. Set anti-flicker debounce duration (e.g. 3 seconds)
+sudo brisk-sentinel glide debounce 3
+
+# 7. Run an interactive 5-second test simulation
+brisk-sentinel glide test
+```
+
+#### E. Service Management (`brisk-glide.service`)
+The background daemon is managed as a standard systemd service unit:
+
+```bash
+# Check service status
+systemctl status brisk-glide.service
+
+# Restart daemon after manual edits to /etc/brisk/glide.conf
+sudo systemctl restart brisk-glide.service
 ```
 
 ---

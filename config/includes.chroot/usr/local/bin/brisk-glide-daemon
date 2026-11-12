@@ -1,0 +1,517 @@
+#!/bin/bash
+# ==============================================================================
+# Brisk Glide Mode Daemon - Smart Low-Battery Auto-Pilot Engine
+# Zero-Polling Event-Driven Kernel Monitor & Adaptive Power Controller
+# ==============================================================================
+
+set -euo pipefail
+
+# Configuration & Runtime State Paths
+CONF_FILE="/etc/brisk/glide.conf"
+RUN_DIR="/run/brisk"
+GLIDE_ACTIVE_FILE="${RUN_DIR}/glide-active"
+GLIDE_ACTIVE_FILE_ALT="/run/brisk-glide.active"
+GLIDE_PREV_BRIGHT_FILE="${RUN_DIR}/glide-prev-brightness"
+GLIDE_PREV_PROFILE_FILE="${RUN_DIR}/glide-prev-profile"
+PID_FILE="/run/brisk-glide.pid"
+
+# Default Configuration Values
+GLIDE_AUTO_ENABLED="true"
+GLIDE_THRESHOLD=20
+GLIDE_AUTO_DIM="true"
+GLIDE_DIM_LEVEL=35
+GLIDE_DEBOUNCE_SECONDS=3
+GLIDE_NOTIFY="true"
+
+# ------------------------------------------------------------------------------
+# Privilege Escalation Helper
+# ------------------------------------------------------------------------------
+ensure_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if sudo -n true 2>/dev/null; then
+            exec sudo "$0" "$@"
+        elif command -v pkexec >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            exec pkexec "$0" "$@"
+        elif command -v sudo >/dev/null 2>&1; then
+            exec sudo "$0" "$@"
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Configuration Loader
+# ------------------------------------------------------------------------------
+load_config() {
+    if [ -f "$CONF_FILE" ]; then
+        # shellcheck source=/dev/null
+        . "$CONF_FILE" 2>/dev/null || true
+    fi
+
+    # Normalize values with safe defaults
+    GLIDE_AUTO_ENABLED="${GLIDE_AUTO_ENABLED:-true}"
+    GLIDE_THRESHOLD="${GLIDE_THRESHOLD:-20}"
+    GLIDE_AUTO_DIM="${GLIDE_AUTO_DIM:-true}"
+    GLIDE_DIM_LEVEL="${GLIDE_DIM_LEVEL:-35}"
+    GLIDE_DEBOUNCE_SECONDS="${GLIDE_DEBOUNCE_SECONDS:-3}"
+    GLIDE_NOTIFY="${GLIDE_NOTIFY:-true}"
+}
+
+# ------------------------------------------------------------------------------
+# Hardware Discovery & Power Status Checks
+# ------------------------------------------------------------------------------
+has_battery() {
+    for b in /sys/class/power_supply/BAT* /sys/class/power_supply/battery; do
+        if [ -d "$b" ]; then
+            return 0
+        fi
+    done
+
+    if command -v upower >/dev/null 2>&1; then
+        if upower -e 2>/dev/null | grep -q 'battery'; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+get_battery_capacity() {
+    for b in /sys/class/power_supply/BAT* /sys/class/power_supply/battery; do
+        if [ -d "$b" ] && [ -f "$b/capacity" ]; then
+            local cap
+            cap=$(cat "$b/capacity" 2>/dev/null || echo "")
+            if [ -n "$cap" ] && [[ "$cap" =~ ^[0-9]+$ ]]; then
+                echo "$cap"
+                return 0
+            fi
+        fi
+    done
+
+    # Fallback to upower
+    if command -v upower >/dev/null 2>&1; then
+        local upower_bat
+        upower_bat=$(upower -e 2>/dev/null | grep -E 'battery' | head -n1 || true)
+        if [ -n "$upower_bat" ]; then
+            local cap
+            cap=$(upower -i "$upower_bat" 2>/dev/null | awk '/percentage:/ {gsub(/%/, ""); print int($2)}')
+            if [ -n "$cap" ] && [[ "$cap" =~ ^[0-9]+$ ]]; then
+                echo "$cap"
+                return 0
+            fi
+        fi
+    fi
+
+    echo 100
+}
+
+is_ac_online() {
+    # 1. Sysfs inspection
+    for ac in /sys/class/power_supply/*; do
+        if [ -f "$ac/type" ]; then
+            local type
+            type=$(cat "$ac/type" 2>/dev/null || true)
+            if [ "$type" = "Mains" ] && [ -f "$ac/online" ]; then
+                local online
+                online=$(cat "$ac/online" 2>/dev/null || echo 0)
+                if [ "$online" -eq 1 ]; then
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    # 2. Upower inspection
+    if command -v upower >/dev/null 2>&1; then
+        local upower_ac
+        upower_ac=$(upower -e 2>/dev/null | grep -E 'line_power|AC' | head -n1 || true)
+        if [ -n "$upower_ac" ]; then
+            if upower -i "$upower_ac" 2>/dev/null | grep -E -q "online:\s+yes"; then
+                return 0
+            fi
+        fi
+    fi
+
+    # 3. Battery charging status heuristic
+    for b in /sys/class/power_supply/BAT* /sys/class/power_supply/battery; do
+        if [ -d "$b" ] && [ -f "$b/status" ]; then
+            local st
+            st=$(cat "$b/status" 2>/dev/null || echo "")
+            if [ "$st" = "Charging" ] || [ "$st" = "Full" ]; then
+                return 0
+            elif [ "$st" = "Discharging" ]; then
+                return 1
+            fi
+        fi
+    done
+
+    return 1
+}
+
+is_glide_active() {
+    if [ -f "$GLIDE_ACTIVE_FILE" ] || [ -f "$GLIDE_ACTIVE_FILE_ALT" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# ------------------------------------------------------------------------------
+# Notification Dispatcher
+# Broadcasts to desktop notification daemons (Mako/Sway/Wayland)
+# ------------------------------------------------------------------------------
+send_toast() {
+    local message="$1"
+    local icon="${2:-battery-caution}"
+    local urgency="${3:-normal}"
+
+    if [ "${GLIDE_NOTIFY:-true}" != "true" ]; then
+        return 0
+    fi
+
+    if ! command -v notify-send >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # 1. Direct delivery if executed in active desktop session
+    if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${DISPLAY:-}" ]; then
+        notify-send -a "Brisk Glide Mode" -i "$icon" -u "$urgency" "Brisk Glide Mode" "$message" 2>/dev/null || \
+        notify-send -a "Brisk Glide Mode" -i "$icon" -u "$urgency" "$message" 2>/dev/null || true
+    fi
+
+    # 2. System daemon delivery: broadcast to active user sessions in /run/user/*
+    for user_dir in /run/user/*; do
+        if [ -d "$user_dir" ] && [ -S "$user_dir/bus" ]; then
+            local uid
+            uid=$(basename "$user_dir")
+            local uname
+            uname=$(id -nu "$uid" 2>/dev/null || true)
+            if [ -n "$uname" ] && [ "$uname" != "root" ]; then
+                sudo -u "$uname" \
+                    DBUS_SESSION_BUS_ADDRESS="unix:path=${user_dir}/bus" \
+                    notify-send -a "Brisk Glide Mode" -i "$icon" -u "$urgency" \
+                    "Brisk Glide Mode" "$message" 2>/dev/null || \
+                sudo -u "$uname" \
+                    DBUS_SESSION_BUS_ADDRESS="unix:path=${user_dir}/bus" \
+                    notify-send -a "Brisk Glide Mode" -i "$icon" -u "$urgency" \
+                    "$message" 2>/dev/null || true
+            fi
+        fi
+    done
+}
+
+# ------------------------------------------------------------------------------
+# Smooth Backlight Control (brightnessctl)
+# ------------------------------------------------------------------------------
+get_current_brightness_pct() {
+    if ! command -v brightnessctl >/dev/null 2>&1; then
+        return 1
+    fi
+
+    local m_line
+    m_line=$(brightnessctl -m 2>/dev/null | head -n1 || true)
+    if [ -z "$m_line" ]; then
+        return 1
+    fi
+
+    local cur_pct
+    cur_pct=$(echo "$m_line" | awk -F, 'NR==1 {gsub(/%/,"",$4); print $4}')
+    if [ -n "$cur_pct" ] && [[ "$cur_pct" =~ ^[0-9]+$ ]]; then
+        echo "$cur_pct"
+        return 0
+    fi
+    return 1
+}
+
+fade_brightness() {
+    local target_pct="$1"
+
+    if ! command -v brightnessctl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local cur_pct
+    cur_pct=$(get_current_brightness_pct) || return 0
+
+    if [ "$cur_pct" -eq "$target_pct" ]; then
+        return 0
+    fi
+
+    local step=3
+    local delay=0.02
+
+    if [ "$cur_pct" -lt "$target_pct" ]; then
+        local val=$cur_pct
+        while [ "$val" -lt "$target_pct" ]; do
+            val=$((val + step))
+            if [ "$val" -gt "$target_pct" ]; then
+                val=$target_pct
+            fi
+            brightnessctl set "${val}%" -q 2>/dev/null || true
+            sleep "$delay"
+        done
+    else
+        local val=$cur_pct
+        while [ "$val" -gt "$target_pct" ]; do
+            val=$((val - step))
+            if [ "$val" -lt "$target_pct" ]; then
+                val=$target_pct
+            fi
+            brightnessctl set "${val}%" -q 2>/dev/null || true
+            sleep "$delay"
+        done
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Glide Mode Activation / Deactivation State Transitions
+# ------------------------------------------------------------------------------
+activate_glide_mode() {
+    local current_cap="${1:-}"
+    if [ -z "$current_cap" ]; then
+        current_cap=$(get_battery_capacity)
+    fi
+
+    echo "[glide-daemon] $(date '+%Y-%m-%d %H:%M:%S') - Activating Glide Mode (battery: ${current_cap}% <= ${GLIDE_THRESHOLD}%)..."
+
+    # 1. Record current power profile & activate Eco profile
+    mkdir -p "$RUN_DIR" 2>/dev/null || true
+    local cur_profile="balanced"
+    if [ -f "/etc/brisk/sentinel-profile" ]; then
+        cur_profile=$(cat /etc/brisk/sentinel-profile 2>/dev/null | tr -d '[:space:]' || echo "balanced")
+    fi
+    if [ "$cur_profile" != "eco" ]; then
+        echo "$cur_profile" > "$GLIDE_PREV_PROFILE_FILE" 2>/dev/null || true
+    else
+        echo "balanced" > "$GLIDE_PREV_PROFILE_FILE" 2>/dev/null || true
+    fi
+
+    if command -v brisk-sentinel >/dev/null 2>&1; then
+        brisk-sentinel profile eco >/dev/null 2>&1 || true
+    fi
+
+    # 2. Smoothly fade screen brightness if enabled
+    if [ "${GLIDE_AUTO_DIM:-true}" = "true" ]; then
+        local cur_bright
+        if cur_bright=$(get_current_brightness_pct); then
+            if [ "$cur_bright" -gt "$GLIDE_DIM_LEVEL" ]; then
+                echo "$cur_bright" > "$GLIDE_PREV_BRIGHT_FILE" 2>/dev/null || true
+                echo "[glide-daemon] Dimming brightness smoothly from ${cur_bright}% to ${GLIDE_DIM_LEVEL}%"
+                fade_brightness "$GLIDE_DIM_LEVEL"
+            fi
+        fi
+    fi
+
+    # 3. Persist runtime activation indicators
+    echo "true" > "$GLIDE_ACTIVE_FILE" 2>/dev/null || true
+    echo "true" > "$GLIDE_ACTIVE_FILE_ALT" 2>/dev/null || true
+    echo "$(date '+%Y-%m-%d %H:%M:%S')" > "${RUN_DIR}/glide-activated-at" 2>/dev/null || true
+
+    # 4. Dispatch desktop notification
+    if [ "${GLIDE_NOTIFY:-true}" = "true" ]; then
+        send_toast "🪫 Baterai Tersisa ${current_cap}% — Glide Mode Aktif (Performa hemat daya diaktifkan)" "battery-caution" "critical"
+    fi
+
+    echo "[glide-daemon] Glide Mode is now ACTIVE."
+}
+
+deactivate_glide_mode() {
+    echo "[glide-daemon] $(date '+%Y-%m-%d %H:%M:%S') - Exiting Glide Mode (Charger connected or manual override)..."
+
+    # 1. Restore previous power profile (or balanced)
+    local restore_profile="balanced"
+    if [ -f "$GLIDE_PREV_PROFILE_FILE" ]; then
+        restore_profile=$(cat "$GLIDE_PREV_PROFILE_FILE" 2>/dev/null | tr -d '[:space:]' || echo "balanced")
+        rm -f "$GLIDE_PREV_PROFILE_FILE"
+    fi
+
+    if command -v brisk-sentinel >/dev/null 2>&1; then
+        brisk-sentinel profile "$restore_profile" >/dev/null 2>&1 || true
+    fi
+
+    # 2. Restore previous brightness smoothly
+    if [ -f "$GLIDE_PREV_BRIGHT_FILE" ]; then
+        local prev_bright
+        prev_bright=$(cat "$GLIDE_PREV_BRIGHT_FILE" 2>/dev/null | tr -d '[:space:]' || echo "")
+        rm -f "$GLIDE_PREV_BRIGHT_FILE"
+        if [ -n "$prev_bright" ] && [[ "$prev_bright" =~ ^[0-9]+$ ]]; then
+            echo "[glide-daemon] Restoring original brightness smoothly to ${prev_bright}%"
+            fade_brightness "$prev_bright"
+        fi
+    fi
+
+    # 3. Remove active state markers
+    rm -f "$GLIDE_ACTIVE_FILE" "$GLIDE_ACTIVE_FILE_ALT" "${RUN_DIR}/glide-activated-at" 2>/dev/null || true
+
+    # 4. Dispatch desktop notification
+    if [ "${GLIDE_NOTIFY:-true}" = "true" ]; then
+        send_toast "⚡ Charger Terhubung — Glide Mode dinonaktifkan" "battery-charging" "normal"
+    fi
+
+    echo "[glide-daemon] Glide Mode is now DEACTIVATED."
+}
+
+# ------------------------------------------------------------------------------
+# Core Evaluation Engine (State Machine)
+# ------------------------------------------------------------------------------
+evaluate_power_state() {
+    load_config
+
+    # If Glide Mode auto-pilot is disabled in configuration
+    if [ "${GLIDE_AUTO_ENABLED:-true}" != "true" ]; then
+        if is_glide_active; then
+            echo "[glide-daemon] Glide Mode disabled in config while active; exiting..."
+            deactivate_glide_mode
+        fi
+        return 0
+    fi
+
+    # If system has no battery (e.g. desktop workstation), skip auto-pilot
+    if ! has_battery; then
+        return 0
+    fi
+
+    local ac_online=0
+    if is_ac_online; then
+        ac_online=1
+    fi
+
+    if is_glide_active; then
+        # Already active: if AC charger plugged in, exit immediately
+        if [ "$ac_online" -eq 1 ]; then
+            deactivate_glide_mode
+        fi
+    else
+        # Not active: check if AC is unplugged and battery <= threshold
+        if [ "$ac_online" -eq 0 ]; then
+            local cap
+            cap=$(get_battery_capacity)
+            if [ "$cap" -le "$GLIDE_THRESHOLD" ]; then
+                echo "[glide-daemon] Low battery detected (${cap}% <= ${GLIDE_THRESHOLD}% on battery). Waiting debounce delay (${GLIDE_DEBOUNCE_SECONDS}s)..."
+                if [ "$GLIDE_DEBOUNCE_SECONDS" -gt 0 ]; then
+                    sleep "$GLIDE_DEBOUNCE_SECONDS"
+                fi
+
+                # Re-verify conditions to ignore brief cable bumps / loose connections
+                load_config
+                if [ "${GLIDE_AUTO_ENABLED:-true}" = "true" ] && ! is_ac_online && ! is_glide_active; then
+                    cap=$(get_battery_capacity)
+                    if [ "$cap" -le "$GLIDE_THRESHOLD" ]; then
+                        activate_glide_mode "$cap"
+                    else
+                        echo "[glide-daemon] Debounce aborted: battery level recovered above threshold."
+                    fi
+                else
+                    echo "[glide-daemon] Debounce aborted: AC charger reconnected or Glide Mode already active."
+                fi
+            fi
+        fi
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Event Loop (Zero-Polling via udevadm uevents or upower D-Bus signals)
+# ------------------------------------------------------------------------------
+cleanup() {
+    echo "[glide-daemon] Received shutdown signal; stopping daemon..."
+    rm -f "$PID_FILE"
+    exit 0
+}
+
+run_monitor() {
+    trap cleanup SIGTERM SIGINT SIGHUP
+
+    # Initial evaluation on daemon launch
+    evaluate_power_state
+
+    # Event listening loop
+    while true; do
+        if command -v udevadm >/dev/null 2>&1; then
+            echo "[glide-daemon] Listening for kernel power_supply uevents via udevadm monitor..."
+            udevadm monitor --subsystem-match=power_supply --udev 2>/dev/null | while read -r line; do
+                evaluate_power_state
+            done
+        elif command -v upower >/dev/null 2>&1; then
+            echo "[glide-daemon] Listening for D-Bus power events via upower --monitor..."
+            upower --monitor 2>/dev/null | while read -r line; do
+                evaluate_power_state
+            done
+        else
+            echo "[glide-daemon] Notice: No udevadm/upower found; falling back to clean 5s event polling."
+            while true; do
+                sleep 5
+                evaluate_power_state
+            done
+        fi
+        sleep 2
+    done
+}
+
+# ------------------------------------------------------------------------------
+# Status Output
+# ------------------------------------------------------------------------------
+print_status() {
+    load_config
+    local active_str="inactive"
+    if is_glide_active; then
+        active_str="active"
+    fi
+
+    local ac_str="offline (Battery)"
+    if is_ac_online; then
+        ac_str="online (AC Mains)"
+    fi
+
+    local cap
+    cap=$(get_battery_capacity)
+    local bright
+    bright=$(get_current_brightness_pct 2>/dev/null || echo "N/A")
+
+    echo "BriskOS Glide Mode Auto-Pilot Engine"
+    echo "======================================"
+    echo "  Status              : $active_str"
+    echo "  Auto-Pilot Enabled  : $GLIDE_AUTO_ENABLED"
+    echo "  Threshold           : ${GLIDE_THRESHOLD}%"
+    echo "  Current Battery     : ${cap}%"
+    echo "  Power Source        : $ac_str"
+    echo "  Auto-Dimming        : $GLIDE_AUTO_DIM"
+    echo "  Dim Target Level    : ${GLIDE_DIM_LEVEL}%"
+    echo "  Current Brightness  : ${bright}%"
+    echo "  Debounce Delay      : ${GLIDE_DEBOUNCE_SECONDS}s"
+    echo "  Notifications       : $GLIDE_NOTIFY"
+    if is_glide_active && [ -f "${RUN_DIR}/glide-activated-at" ]; then
+        echo "  Activated At        : $(cat "${RUN_DIR}/glide-activated-at" 2>/dev/null)"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Entrypoint & CLI Command Handling
+# ------------------------------------------------------------------------------
+case "${1:-daemon}" in
+    daemon|start|--daemon)
+        ensure_root "$@"
+        echo "[glide-daemon] Starting BriskOS Glide Mode Auto-Pilot Daemon (PID $$)..."
+        mkdir -p "$RUN_DIR" 2>/dev/null || true
+        echo "$$" > "$PID_FILE" 2>/dev/null || true
+        run_monitor
+        ;;
+    status|--status)
+        print_status
+        ;;
+    trigger-on|activate|test-on)
+        ensure_root "$@"
+        load_config
+        activate_glide_mode "$(get_battery_capacity)"
+        ;;
+    trigger-off|deactivate|test-off)
+        ensure_root "$@"
+        load_config
+        deactivate_glide_mode
+        ;;
+    help|--help|-h)
+        echo "Usage: brisk-glide-daemon [daemon|status|trigger-on|trigger-off|help]"
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        echo "Usage: brisk-glide-daemon [daemon|status|trigger-on|trigger-off|help]" >&2
+        exit 1
+        ;;
+esac
