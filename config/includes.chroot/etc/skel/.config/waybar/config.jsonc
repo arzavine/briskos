@@ -42,7 +42,7 @@
         "escape": true
     },
     "custom/store": {
-        "format": "🛍️ Store",
+        "format": "Store",
         "tooltip-format": "Brisk Store (Pusat Aplikasi Modern)",
         "on-click": "brisk-store",
         "escape": true

@@ -94,7 +94,7 @@ searchentry:focus {
 }
 
 .sidebar-title {
-    color: #64748b;
+    color: #94a3b8;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.8px;
@@ -152,7 +152,7 @@ searchentry:focus {
 }
 
 .section-desc {
-    color: #64748b;
+    color: #94a3b8;
     font-size: 12px;
 }
 
@@ -180,7 +180,7 @@ flowboxchild:selected {
 .app-card {
     background-color: #0f172a;
     border: 1px solid #1e293b;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 14px 16px;
     transition: all 150ms ease-in-out;
 }
@@ -203,7 +203,7 @@ flowboxchild:selected {
 }
 
 .app-card-size {
-    color: #64748b;
+    color: #94a3b8;
     font-size: 11px;
     font-weight: 500;
 }
@@ -245,7 +245,8 @@ flowboxchild:selected {
     border-radius: 7px;
     font-weight: 700;
     font-size: 12px;
-    padding: 5px 14px;
+    min-height: 30px;
+    padding: 6px 16px;
     border: none;
     transition: all 120ms ease;
 }
@@ -324,7 +325,7 @@ scrollbar slider:hover {
 }
 
 .engine-banner-desc {
-    color: #64748b;
+    color: #94a3b8;
     font-size: 10px;
 }
 """
@@ -508,7 +509,7 @@ class BriskStoreWindow(Gtk.Window):
 
         # Center Search Entry
         self.search_entry = Gtk.SearchEntry()
-        self.search_entry.set_placeholder_text("🔍 Cari aplikasi di Brisk Store...")
+        self.search_entry.set_placeholder_text("Cari aplikasi di Brisk Store...")
         self.search_entry.set_width_chars(34)
         self.search_entry.connect("search-changed", self.on_search_changed)
         header.pack_end(self.search_entry)
@@ -542,13 +543,13 @@ class BriskStoreWindow(Gtk.Window):
         lbl_status_sec.get_style_context().add_class("sidebar-title")
         sidebar_box.pack_start(lbl_status_sec, False, False, 0)
 
-        self.btn_status_all = self.create_sidebar_item("status_all", "📦 Semua", self.on_status_clicked, "all")
+        self.btn_status_all = self.create_sidebar_item("status_all", "Semua", self.on_status_clicked, "all")
         self.lbl_all_count = Gtk.Label(label=str(len(self.catalog)))
         self.lbl_all_count.get_style_context().add_class("sidebar-badge")
         self.btn_status_all.pack_end(self.lbl_all_count, False, False, 0)
         sidebar_box.pack_start(self.btn_status_all, False, False, 0)
 
-        self.btn_status_installed = self.create_sidebar_item("status_installed", "✓ Terpasang", self.on_status_clicked, "installed")
+        self.btn_status_installed = self.create_sidebar_item("status_installed", "Terpasang", self.on_status_clicked, "installed")
         self.lbl_installed_count = Gtk.Label(label="0")
         self.lbl_installed_count.get_style_context().add_class("sidebar-badge")
         self.btn_status_installed.pack_end(self.lbl_installed_count, False, False, 0)
@@ -566,13 +567,13 @@ class BriskStoreWindow(Gtk.Window):
         sidebar_box.pack_start(lbl_cat_sec, False, False, 0)
 
         self.categories_def = [
-            ("featured", "⭐ Unggulan", "Pilihan aplikasi terbaik dan esensial untuk BriskOS"),
-            ("internet", "🌐 Internet", "Peramban web, aplikasi pesan, dan komunikasi"),
-            ("development", "💻 Coding", "Editor kode, kompiler, dan perkakas developer"),
-            ("office", "📝 Office", "Paket perkantoran, catatan, dan pengolah dokumen"),
-            ("media", "🎨 Media", "Pemutar audio-video, desain grafis, dan multimedia"),
-            ("gaming", "🎮 Gaming", "Peluncur gim, emulator, dan perkakas gaming"),
-            ("utilities", "⚙️ Utilitas", "Perkakas sistem, pemeliharaan, dan utilitas"),
+            ("featured", "Unggulan", "Pilihan aplikasi terbaik dan esensial untuk BriskOS"),
+            ("internet", "Internet", "Peramban web, aplikasi pesan, dan komunikasi"),
+            ("development", "Coding", "Editor kode, kompiler, dan perkakas developer"),
+            ("office", "Office", "Paket perkantoran, catatan, dan pengolah dokumen"),
+            ("media", "Media", "Pemutar audio-video, desain grafis, dan multimedia"),
+            ("gaming", "Gaming", "Peluncur gim, emulator, dan perkakas gaming"),
+            ("utilities", "Utilitas", "Perkakas sistem, pemeliharaan, dan utilitas"),
         ]
 
         for cat_key, cat_label, _ in self.categories_def:
@@ -586,7 +587,7 @@ class BriskStoreWindow(Gtk.Window):
         # Bottom Dual Engine Information Banner
         engine_banner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         engine_banner.get_style_context().add_class("engine-banner")
-        lbl_b1 = Gtk.Label(label="⚡ Dual-Engine Ready", xalign=0)
+        lbl_b1 = Gtk.Label(label="Dual-Engine Ready", xalign=0)
         lbl_b1.get_style_context().add_class("engine-banner-title")
         lbl_b2 = Gtk.Label(label="APT Native + Flathub Sandbox", xalign=0)
         lbl_b2.get_style_context().add_class("engine-banner-desc")
