@@ -1,0 +1,172 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Update Channel Manager (brisk-channel)
+# Manage system update stream: 'stable' (LTS default) vs 'beta' (preview builds)
+# ==============================================================================
+
+set -euo pipefail
+
+CONF_DIR="/etc/brisk"
+CHANNEL_FILE="${CONF_DIR}/channel"
+DEFAULT_CHANNEL="stable"
+
+# ANSI styling
+if [ -t 1 ]; then
+    bold="\033[1m"
+    dim="\033[2m"
+    cyan="\033[38;2;56;189;248m"
+    green="\033[38;2;74;222;128m"
+    amber="\033[38;2;251;191;36m"
+    red="\033[38;2;248;113;113m"
+    slate="\033[38;2;148;163;184m"
+    white="\033[38;2;248;250;252m"
+    rst="\033[0m"
+else
+    bold=""
+    dim=""
+    cyan=""
+    green=""
+    amber=""
+    red=""
+    slate=""
+    white=""
+    rst=""
+fi
+
+get_channel() {
+    local ch="$DEFAULT_CHANNEL"
+    if [ -f "$CHANNEL_FILE" ]; then
+        local raw
+        raw=$(head -n 1 "$CHANNEL_FILE" 2>/dev/null | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' || true)
+        if [ "$raw" = "stable" ] || [ "$raw" = "beta" ]; then
+            ch="$raw"
+        fi
+    fi
+    echo "$ch"
+}
+
+show_status() {
+    local raw_output="${1:-false}"
+    local current
+    current="$(get_channel)"
+
+    if [ "$raw_output" = "true" ]; then
+        echo "$current"
+        return 0
+    fi
+
+    echo -e "${bold}${white}BriskOS System Update Channel${rst}"
+    if [ "$current" = "stable" ]; then
+        echo -e "  Active Channel: ${green}${bold}● stable${rst} ${slate}(Long-Term Support, Verified Releases)${rst}"
+        echo -e "  Description:    Production LTS stream with strict quality assurance."
+    else
+        echo -e "  Active Channel: ${amber}${bold}▲ beta${rst} ${slate}(Preview / Testing Stream)${rst}"
+        echo -e "  Description:    Pre-release builds and early feature previews for testers."
+    fi
+    echo -e "  Config Path:    ${dim}${CHANNEL_FILE}${rst}"
+}
+
+list_channels() {
+    local current
+    current="$(get_channel)"
+    echo -e "${bold}${white}Available BriskOS Update Channels:${rst}"
+    if [ "$current" = "stable" ]; then
+        echo -e "  ${green}${bold}* stable${rst}  [ACTIVE] - Recommended for all users. Rock-solid stability."
+        echo -e "    beta            - Cutting-edge features, testing builds. Sudo required to activate."
+    else
+        echo -e "    stable          - Recommended for all users. Rock-solid stability."
+        echo -e "  ${amber}${bold}* beta${rst}    [ACTIVE] - Cutting-edge features, testing builds."
+    fi
+}
+
+set_channel() {
+    local target="${1:-}"
+    target=$(echo "$target" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+
+    if [ -z "$target" ]; then
+        echo -e "${red}Error: Missing channel name.${rst} Usage: brisk-channel set <stable|beta>" >&2
+        exit 1
+    fi
+
+    if [ "$target" != "stable" ] && [ "$target" != "beta" ]; then
+        echo -e "${red}Error: Invalid channel '${target}'.${rst}" >&2
+        echo -e "Supported channels are: ${bold}stable${rst}, ${bold}beta${rst}" >&2
+        exit 1
+    fi
+
+    # Check root privileges
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${red}${bold}Error: Changing the system update channel requires administrator privileges.${rst}" >&2
+        echo -e "Please execute with sudo: ${cyan}sudo brisk-channel set ${target}${rst}" >&2
+        exit 1
+    fi
+
+    # Ensure config directory exists
+    mkdir -p "$CONF_DIR" 2>/dev/null || true
+
+    # Write target channel
+    printf '%s\n' "$target" > "$CHANNEL_FILE"
+    chmod 644 "$CHANNEL_FILE" 2>/dev/null || true
+
+    if [ "$target" = "stable" ]; then
+        echo -e "${green}✓ Update channel successfully switched to: ${bold}stable${rst}"
+        echo -e "  Your system will receive verified production updates strictly on the LTS stream."
+    else
+        echo -e "${amber}✓ Update channel successfully switched to: ${bold}beta${rst}"
+        echo -e "  Your system is now enrolled in the tester preview stream."
+    fi
+}
+
+show_help() {
+    echo -e "${bold}${white}BriskOS Update Channel Manager${rst}"
+    echo -e "Usage: brisk-channel <command> [arguments]\n"
+    echo -e "Commands:"
+    echo -e "  ${bold}get${rst} [--raw]            Display the currently active channel"
+    echo -e "  ${bold}status${rst}                 Show detailed channel info and security status"
+    echo -e "  ${bold}list${rst}                   List available update channels"
+    echo -e "  ${bold}set <stable|beta>${rst}      Switch channel (requires root / sudo)"
+    echo -e "  ${bold}help${rst}                   Display this help message\n"
+    echo -e "Options:"
+    echo -e "  ${bold}-r, --raw${rst}              Print raw channel name without color or decorations"
+}
+
+# CLI Argument parsing
+cmd="${1:-get}"
+case "$cmd" in
+    get)
+        raw="false"
+        if [ "${2:-}" = "--raw" ] || [ "${2:-}" = "-r" ]; then
+            raw="true"
+        fi
+        show_status "$raw"
+        ;;
+    --raw|-r)
+        show_status "true"
+        ;;
+    status)
+        show_status "false"
+        ;;
+    list|ls)
+        list_channels
+        ;;
+    set)
+        if [ $# -lt 2 ]; then
+            echo -e "${red}Error: Channel name required.${rst} Example: sudo brisk-channel set stable" >&2
+            exit 1
+        fi
+        set_channel "$2"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        if [ "$cmd" = "stable" ] || [ "$cmd" = "beta" ]; then
+            # Direct shortcut e.g. sudo brisk-channel beta
+            set_channel "$cmd"
+        else
+            echo -e "${red}Unknown command: ${cmd}${rst}" >&2
+            show_help
+            exit 1
+        fi
+        ;;
+esac

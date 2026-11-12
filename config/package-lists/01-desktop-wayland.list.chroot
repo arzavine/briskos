@@ -19,11 +19,13 @@ mako-notifier
 swayidle
 swaylock
 
-# Wayland Utilities (Clipboard & Screenshots)
+# Wayland Utilities (Clipboard, Screenshots & Output Management)
 wl-clipboard
 grim
 slurp
 xwayland
+wlr-randr
+gammastep
 
 # Authentication Agent
 polkit-kde-agent-1

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Brisk Control Center
+GenericName=System Settings & Hardware Control
+Comment=Pusat pengaturan sistem, tampilan layar, daya baterai, jaringan, dan suara BriskOS
+Exec=/usr/local/bin/brisk-control
+Icon=brisk-control
+Terminal=false
+StartupNotify=true
+Categories=Settings;HardwareSettings;DesktopSettings;
+Keywords=settings;control;center;panel;display;screen;resolution;night light;gammastep;wifi;network;sound;audio;pipewire;volume;power;battery;tlp;glide;wallpaper;theme;pengaturan;

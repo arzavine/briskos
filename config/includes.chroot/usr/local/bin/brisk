@@ -28,6 +28,10 @@ show_help() {
     echo -e "    ${bold}brisk info${rst}                Show full Brisk Cockpit terminal greeting & telemetry"
     echo -e "    ${bold}brisk clear | cls${rst}         Clear terminal and display compact cockpit status\n"
 
+    echo -e "  ${cyan}Control Center & Settings:${rst}"
+    echo -e "    ${bold}brisk settings | control${rst}   Launch Brisk Control Center graphical settings hub"
+    echo -e "    ${bold}brisk channel [stable|beta]${rst} Show or set OS update release channel\n"
+
     echo -e "  ${cyan}Power & Battery Sentinel:${rst}"
     echo -e "    ${bold}brisk profile [turbo|eco|balanced]${rst}   Switch active hardware power profile"
     echo -e "    ${bold}brisk power status${rst}        Display detailed battery metrics, health & discharge rate"
@@ -68,6 +72,24 @@ case "$cmd" in
         command -v /usr/bin/clear >/dev/null 2>&1 && /usr/bin/clear || printf "\033[2J\033[H"
         if [[ -x /usr/local/bin/brisk-cockpit ]]; then
             exec /usr/local/bin/brisk-cockpit --compact "$@"
+        fi
+        ;;
+    control|settings)
+        if [[ -x /usr/local/bin/brisk-control ]]; then
+            exec /usr/local/bin/brisk-control "$@"
+        elif [[ -x /usr/local/bin/brisk-settings ]]; then
+            exec /usr/local/bin/brisk-settings "$@"
+        else
+            echo "brisk-control executable not found." >&2
+            exit 1
+        fi
+        ;;
+    channel)
+        if [[ -x /usr/local/bin/brisk-channel ]]; then
+            exec /usr/local/bin/brisk-channel "$@"
+        else
+            echo "brisk-channel executable not found." >&2
+            exit 1
         fi
         ;;
     profile|power)

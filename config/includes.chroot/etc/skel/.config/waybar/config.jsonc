@@ -15,6 +15,7 @@
     "modules-left": [
         "custom/startmenu",
         "custom/store",
+        "custom/settings",
         "custom/installer",
         "custom/browser",
         "custom/files",
@@ -45,6 +46,12 @@
         "format": "Store",
         "tooltip-format": "Brisk Store (Pusat Aplikasi Modern)",
         "on-click": "brisk-store",
+        "escape": true
+    },
+    "custom/settings": {
+        "format": "⚙️",
+        "tooltip-format": "Brisk Control Center (Pusat Pengaturan)",
+        "on-click": "brisk-control",
         "escape": true
     },
     "custom/installer": {
@@ -125,7 +132,7 @@
         "tooltip-format-wifi": "SSID: {essid} ({signalStrength}%)\nIP: {ipaddr}/{cidr}",
         "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}/{cidr}",
         "tooltip-format-disconnected": "Network Disconnected",
-        "on-click": "foot -e nmtui"
+        "on-click": "brisk-control"
     },
     "battery": {
         "states": {
