@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Brisk Cockpit - Foot Terminal &amp; Smart Shell Prompt (Night Glass 1080p)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: #0b1120;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      position: relative;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Desktop Wallpaper SVG Layer (Deep Midnight Slate + Supersonic Frost Feather)
+     * ------------------------------------------------------------------------- */
+    .wallpaper-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      z-index: 0;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Desktop Icons Layer
+     * ------------------------------------------------------------------------- */
+    .desktop-icons {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      z-index: 5;
+    }
+    .desktop-icon-item {
+      width: 96px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .desktop-icon-item:hover {
+      background: rgba(30, 41, 59, 0.45);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .desktop-icon-graphic {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+    }
+    .desktop-icon-title {
+      font-size: 12px;
+      color: #f8fafc;
+      font-weight: 500;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+      line-height: 1.25;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Foot Terminal Window (Night Glass Design System, 10px radius, Ice Cyan Glow)
+     * ------------------------------------------------------------------------- */
+    #terminal-window {
+      position: absolute;
+      left: calc(50% - 490px);
+      top: 52px;
+      width: 980px;
+      height: 920px;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+      border: 1px solid #38bdf8;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.35), 0 0 28px rgba(56, 189, 248, 0.22);
+      background-color: rgba(11, 17, 32, 0.94);
+      backdrop-filter: blur(16px);
+    }
+
+    /* Terminal Titlebar */
+    .terminal-titlebar {
+      height: 38px;
+      min-height: 38px;
+      background-color: #0b1120;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .terminal-title-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .terminal-title-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      letter-spacing: -0.01em;
+      font-family: "JetBrains Mono", monospace;
+    }
+    .titlebar-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .win-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+      color: #94a3b8;
+      transition: all 0.15s ease;
+    }
+    .win-btn:hover {
+      background-color: #334155;
+      color: #f8fafc;
+    }
+    .win-btn.close:hover {
+      background-color: #f43f5e;
+      color: #ffffff;
+    }
+
+    /* Terminal Body: 24-bit TrueColor JetBrains Mono Output */
+    .terminal-body {
+      flex: 1;
+      padding: 16px 20px 20px 20px;
+      overflow-y: hidden;
+      font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+      font-size: 12.8px;
+      line-height: 1.34;
+      color: #f8fafc;
+      white-space: pre;
+    }
+
+    /* Smart Prompt Components */
+    .prompt-block {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .prompt-meta-line {
+      display: flex;
+      align-items: center;
+      font-size: 12.8px;
+    }
+    .prompt-border {
+      color: rgb(71, 85, 105);
+    }
+    .prompt-bracket {
+      color: rgb(100, 116, 139);
+    }
+    .prompt-path {
+      color: rgb(56, 189, 248);
+      font-weight: 700;
+    }
+    .prompt-git-bracket {
+      color: rgb(71, 85, 105);
+    }
+    .prompt-git-label {
+      color: rgb(148, 163; 184);
+    }
+    .prompt-git-branch {
+      color: rgb(241, 245, 249);
+      font-weight: 700;
+    }
+    .prompt-git-status-clean {
+      color: rgb(74, 222, 128);
+      font-weight: 700;
+    }
+    .prompt-timer-icon {
+      color: rgb(203, 213, 225);
+    }
+    .prompt-timer-val {
+      color: rgb(148, 163, 184);
+    }
+    .prompt-cmd-line {
+      display: flex;
+      align-items: center;
+      font-size: 12.8px;
+    }
+    .prompt-arrow {
+      color: rgb(56, 189, 248);
+      font-weight: 700;
+      margin-right: 8px;
+    }
+    .prompt-typed-cmd {
+      color: #f8fafc;
+      font-weight: 500;
+    }
+
+    /* Cursor Beam */
+    .cursor-beam {
+      display: inline-block;
+      width: 2.2px;
+      height: 15px;
+      background-color: #38bdf8;
+      margin-left: 2px;
+      vertical-align: middle;
+      box-shadow: 0 0 6px #38bdf8;
+    }
+
+    /* Command Output Styles */
+    .cmd-output {
+      color: #cbd5e1;
+      font-size: 12.2px;
+      line-height: 1.4;
+      margin-top: 6px;
+      margin-bottom: 6px;
+    }
+    .cmd-section-title {
+      color: #38bdf8;
+      font-weight: 700;
+    }
+    .cmd-keyword {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+    .cmd-desc {
+      color: #94a3b8;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Waybar Bottom Taskbar: Night Glass Floating 3-Island Architecture
+     * ------------------------------------------------------------------------- */
+    #waybar {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      right: 8px;
+      height: 38px;
+      background-color: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .modules-left,
+    .modules-center,
+    .modules-right {
+      pointer-events: auto;
+      background-color: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+      padding: 2px 6px;
+      display: flex;
+      align-items: center;
+      height: 38px;
+    }
+
+    /* Left Island */
+    #custom-startmenu {
+      height: 30px;
+      background-color: transparent;
+      color: #38bdf8;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 0 10px;
+      margin: 0 2px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .pinned-launcher {
+      width: 32px;
+      height: 30px;
+      background-color: transparent;
+      color: #94a3b8;
+      margin: 0 1px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .pinned-launcher:hover {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Center Island: Window Taskbar with 'foot: user@briskos:~' active glow */
+    #taskbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+    }
+    .taskbar-button {
+      height: 30px;
+      border-radius: 8px 8px 6px 6px;
+      padding: 0 12px;
+      margin: 0 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-bottom: 3px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .taskbar-button.active {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-bottom: 3px solid #38bdf8;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+      font-weight: 600;
+    }
+    .taskbar-button.inactive {
+      background-color: transparent;
+      color: #94a3b8;
+    }
+    .taskbar-button.inactive:hover {
+      background-color: #1e293b;
+      color: #f8fafc;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Right Island */
+    .tray-module {
+      height: 30px;
+      background-color: transparent;
+      color: #f8fafc;
+      border: none;
+      border-radius: 6px;
+      padding: 0 10px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. Desktop Wallpaper SVG Layer (Deep Midnight Slate + Supersonic Frost Feather Emblem) -->
+  <div class="wallpaper-container">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Base Floor Gradient: Deep Midnight Slate (#0b1120) with subtle peripheral depth -->
+    <linearGradient id="baseFloorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080d18"/>
+      <stop offset="50%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#0a0f1d"/>
+    </linearGradient>
+
+    <!-- Luminous Ambient Field: Single soft cyan light source low on the right/center -->
+    <radialGradient id="luminousAmbient" cx="64%" cy="68%" r="58%" fx="64%" fy="68%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.12"/>
+      <stop offset="25%" stop-color="#38bdf8" stop-opacity="0.07"/>
+      <stop offset="55%" stop-color="#0ea5e9" stop-opacity="0.025"/>
+      <stop offset="80%" stop-color="#0369a1" stop-opacity="0.006"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Secondary Soft Core Diffusion to prevent any banding -->
+    <radialGradient id="coreAmbientBloom" cx="60%" cy="72%" r="28%" fx="60%" fy="72%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.05"/>
+      <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.015"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Central Emblem Ambient Core Bloom Floor -->
+    <radialGradient id="emblemBloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22"/>
+      <stop offset="35%" stop-color="#0284c7" stop-opacity="0.09"/>
+      <stop offset="70%" stop-color="#1d4ed8" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Emblem Horizon Pedestal Floor Glow -->
+    <radialGradient id="emblemFloorBloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.14"/>
+      <stop offset="45%" stop-color="#0284c7" stop-opacity="0.05"/>
+      <stop offset="80%" stop-color="#1d4ed8" stop-opacity="0.015"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Unified Supersonic Frost Gradient: 4-Stop System Identity -->
+    <!-- Stop 0%: Frost White #ffffff (specular highlight tip) -->
+    <!-- Stop 30%: Ice Cyan #38bdf8 (core glow identity) -->
+    <!-- Stop 70%: Electric Sky #0284c7 (aerodynamic body) -->
+    <!-- Stop 100%: Deep Cobalt Sapphire #1d4ed8 (base foundation) -->
+    <linearGradient id="supersonicFrostGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+
+    <!-- Emblem Primary Wing Delta & Layer 1 Blade -->
+    <linearGradient id="emblemGrad1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+
+    <!-- Emblem Mid-Span Compression Vane Layer 2 -->
+    <linearGradient id="emblemGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+
+    <!-- Emblem Lower Trailing Vane Layer 3 -->
+    <linearGradient id="emblemGrad3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="40%" stop-color="#0284c7"/>
+      <stop offset="80%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- Emblem Supersonic Chine Spar / Spine Glow -->
+    <linearGradient id="emblemSpineGlow" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+
+    <!-- Apex Specular Flare -->
+    <radialGradient id="apexSpecularFlare" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Supersonic Geometric Facet Gradients (Deep Slate Flow Surfaces) -->
+    <linearGradient id="facetGradA" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#1e293b" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#334155" stop-opacity="0.08"/>
+    </linearGradient>
+
+    <linearGradient id="facetGradB" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.30"/>
+      <stop offset="50%" stop-color="#162236" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0b1120" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <linearGradient id="facetGradC" x1="100%" y1="80%" x2="0%" y2="20%">
+      <stop offset="0%" stop-color="#0a0f1d" stop-opacity="0.50"/>
+      <stop offset="60%" stop-color="#131e33" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#1e293b" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <!-- Aerodynamic Streamline Gradients -->
+    <linearGradient id="streamlineGradCyan" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0"/>
+      <stop offset="20%" stop-color="#38bdf8" stop-opacity="0.09"/>
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.12"/>
+      <stop offset="80%" stop-color="#38bdf8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="streamlineGradSubtle" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Base Floor Layer (Deep midnight slate #0b1120) -->
+  <rect width="1920" height="1080" fill="url(#baseFloorGrad)"/>
+
+  <!-- 2. Luminous Ambient Field (Single soft cyan light source low on right/center) -->
+  <rect width="1920" height="1080" fill="url(#luminousAmbient)"/>
+  <rect width="1920" height="1080" fill="url(#coreAmbientBloom)"/>
+
+  <!-- 3. Minimalist Aerodynamic Contours & Supersonic Geometric Facets -->
+  <!-- Lower sweeping supersonic keel plane -->
+  <polygon points="-80,1080 500,760 1320,830 2000,1080" 
+           fill="url(#facetGradC)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.05" 
+           stroke-width="1"/>
+
+  <!-- Main sweeping supersonic delta wedge -->
+  <polygon points="-60,680 660,510 1440,490 2000,320 1880,590 1280,730 480,780 -60,920" 
+           fill="url(#facetGradA)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.08" 
+           stroke-width="1"/>
+
+  <!-- Upper transonic flow facet -->
+  <polygon points="160,0 840,340 1640,280 2020,130 2020,0" 
+           fill="url(#facetGradB)" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.06" 
+           stroke-width="1"/>
+
+  <!-- Mid-chord compression facet -->
+  <polygon points="480,780 660,510 1440,490 1280,730" 
+           fill="#1e293b" 
+           fill-opacity="0.12" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.10" 
+           stroke-width="1"/>
+
+  <!-- Forward supersonic chine line -->
+  <polygon points="-40,520 660,510 1160,410 1820,260 1440,490" 
+           fill="#0f172a" 
+           fill-opacity="0.20" 
+           stroke="#38bdf8" 
+           stroke-opacity="0.09" 
+           stroke-width="1"/>
+
+  <!-- 4. Aerodynamic Streamlines & Vector Flow Contours -->
+  <!-- Primary supersonic chord streamline -->
+  <path d="M -40 560 C 440 600, 860 480, 1360 450 S 1800 350, 2000 310" 
+        fill="none" 
+        stroke="url(#streamlineGradCyan)" 
+        stroke-width="1.2"/>
+
+  <!-- Secondary boundary layer streamline -->
+  <path d="M -40 600 C 460 640, 890 520, 1390 484 S 1830 384, 2000 348" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.07" 
+        stroke-width="1"/>
+
+  <!-- Tertiary laminar flow contour -->
+  <path d="M 120 680 C 580 700, 960 590, 1440 550 S 1860 460, 2000 430" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.05" 
+        stroke-width="1"/>
+
+  <!-- High-altitude transonic flow line -->
+  <path d="M 240 240 C 700 300, 1120 220, 1600 190 S 1920 140, 2020 120" 
+        fill="none" 
+        stroke="url(#streamlineGradSubtle)" 
+        stroke-width="1"/>
+
+  <!-- Supersonic Mach vector lines -->
+  <line x1="660" y1="510" x2="1440" y2="490" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.11" 
+        stroke-width="1"/>
+
+  <line x1="840" y1="340" x2="1640" y2="280" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.07" 
+        stroke-width="1"/>
+
+  <line x1="500" y1="760" x2="1280" y2="730" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.06" 
+        stroke-width="1"/>
+
+  <!-- Subtle lower atmospheric horizon guide line -->
+  <path d="M 80 970 C 600 950, 1180 960, 1840 940" 
+        fill="none" 
+        stroke="#38bdf8" 
+        stroke-opacity="0.04" 
+        stroke-width="1"/>
+
+  <!-- 5. Central Swept Feather Emblem & Ambient Bloom Floor -->
+  <!-- Ambient Pedestal Bloom Floor -->
+  <ellipse cx="960" cy="720" rx="520" ry="110" fill="url(#emblemFloorBloom)"/>
+  <circle cx="960" cy="500" r="320" fill="url(#emblemBloom)"/>
+
+  <!-- Aerodynamic Swept Feather Emblem Container -->
+  <g id="centralFeatherEmblem" transform="translate(690, 248)">
+    <!-- Concentric Aerodynamic Guide Streamlines -->
+    <path d="M 60 410 C 160 380, 310 260, 440 90" 
+          fill="none" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.25"/>
+    <path d="M 100 450 C 200 420, 350 300, 465 130" 
+          fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.15"/>
+    <path d="M 40 370 C 130 330, 270 210, 400 60" 
+          fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.12"/>
+
+    <!-- Feather / Wing Layer 3 (Lower Trailing Vane) -->
+    <path d="M 120 410 C 170 400, 240 370, 305 315 L 260 295 C 200 340, 150 375, 120 410 Z"
+          fill="url(#emblemGrad3)"/>
+
+    <!-- Feather / Wing Layer 2 (Mid-Span Compression Vane) -->
+    <path d="M 165 365 C 230 330, 320 275, 380 205 L 325 190 C 265 245, 195 310, 165 365 Z"
+          fill="url(#emblemGrad2)"/>
+
+    <!-- Feather / Wing Layer 1 (Forward Supersonic Blade) -->
+    <path d="M 220 305 C 295 245, 385 170, 445 80 L 385 95 C 320 160, 245 235, 220 305 Z"
+          fill="url(#emblemGrad1)"/>
+
+    <!-- Main Primary Swept Aerodynamic Wing Delta -->
+    <path d="M 90 430 C 150 380, 260 260, 445 75 C 420 135, 370 265, 285 345 C 220 405, 135 435, 90 430 Z"
+          fill="url(#emblemGrad1)" fill-opacity="0.95"/>
+
+    <!-- Feather Spine / Supersonic Chine Spar -->
+    <path d="M 75 445 C 145 385, 275 255, 465 60"
+          fill="none" stroke="url(#emblemSpineGlow)" stroke-width="7" stroke-linecap="round"/>
+
+    <!-- Aerodynamic Caliber Slots (Vane Separation) -->
+    <line x1="285" y1="210" x2="355" y2="245" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="225" y1="270" x2="285" y2="305" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="165" y1="340" x2="215" y2="368" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
+
+    <!-- Apex Luminous Specular Node -->
+    <circle cx="465" cy="60" r="14" fill="url(#apexSpecularFlare)"/>
+    <circle cx="465" cy="60" r="5" fill="#ffffff"/>
+  </g>
+</svg>
+  </div>
+
+  <!-- 2. Desktop Icons Layer -->
+  <div class="desktop-icons">
+    <!-- Brisk Store Icon -->
+    <div class="desktop-icon-item" title="Brisk Store">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <defs>
+            <linearGradient id="iconTote" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0f172a"/>
+              <stop offset="100%" stop-color="#0284c7"/>
+            </linearGradient>
+            <linearGradient id="featherGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="30%" stop-color="#38bdf8"/>
+              <stop offset="70%" stop-color="#0284c7"/>
+              <stop offset="100%" stop-color="#1d4ed8"/>
+            </linearGradient>
+          </defs>
+          <path d="M14 16V12a10 10 0 0 1 20 0v4" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+          <path d="M9 16h30l-3 26a3 3 0 0 1-3 2.7H15a3 3 0 0 1-3-2.7L9 16z" fill="url(#iconTote)" stroke="#38bdf8" stroke-width="2"/>
+          <path d="M24 20c-3 4-8 10-6 16 1.5 4.5 7 5.5 10 3-1.5-3-1-7 1-10 1.5-2.5 0-5-5-9z" fill="url(#featherGrad)"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Brisk Store</span>
+    </div>
+
+    <!-- Terminal (Foot) Icon -->
+    <div class="desktop-icon-item" title="Terminal (Foot)">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <rect x="5" y="7" width="38" height="34" rx="7" fill="#0b1120" stroke="#38bdf8" stroke-width="2.5"/>
+          <polyline points="14 19 22 25 14 31" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="26" y1="31" x2="35" y2="31" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Terminal</span>
+    </div>
+
+    <!-- File Manager Icon -->
+    <div class="desktop-icon-item" title="File Manager (Thunar)">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <path d="M5 12a3 3 0 0 1 3-3h10a3 3 0 0 1 2.1 0.9l2.8 2.8a3 3 0 0 0 2.1 0.9H40a3 3 0 0 1 3 3v4H5v-6z" fill="#0284c7"/>
+          <path d="M5 17h38v21a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V17z" fill="#0ea5e9"/>
+          <path d="M5 23h38v15a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V23z" fill="#38bdf8"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Berkas</span>
+    </div>
+
+    <!-- Calamares Installer Icon -->
+    <div class="desktop-icon-item" title="Install BriskOS">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <circle cx="24" cy="24" r="21" fill="#0b1120" stroke="#38bdf8" stroke-width="2"/>
+          <path d="M24 11c-4 5-11 13-8 20 2 5.5 9 6.5 13 3.5-2-4-1.5-9 1.5-13 2-3 0-6.5-6.5-10.5z" fill="url(#featherGrad)"/>
+          <circle cx="24" cy="24" r="23" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3 3"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Pasang BriskOS</span>
+    </div>
+  </div>
+
+  <!-- 3. Active Foot Terminal Window (980x920px, Night Glass Design System) -->
+  <div id="terminal-window">
+    <!-- Terminal Titlebar -->
+    <div class="terminal-titlebar">
+      <div class="titlebar-left">
+        <div class="terminal-title-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+            <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+            <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="terminal-title-text">user@briskos: ~/workspace/brisk-core (foot)</span>
+      </div>
+      <div class="titlebar-controls">
+        <button class="win-btn">─</button>
+        <button class="win-btn">□</button>
+        <button class="win-btn close">✕</button>
+      </div>
+    </div>
+
+    <!-- Terminal Content Area -->
+    <div class="terminal-body">
+  <span style="color: rgb(255,255,255)">                  ▟▀</span>    <span style="color: rgb(255,255,255)">█</span><span style="color: rgb(239,249,254)">█</span><span style="color: rgb(223,244,253)">█</span><span style="color: rgb(207,239,253)">█</span><span style="color: rgb(192,234,252)">█</span><span style="color: rgb(176,228,252)">█</span><span style="color: rgb(160,223,251)">╗  </span><span style="color: rgb(113,208,250)">█</span><span style="color: rgb(97,202,249)">█</span><span style="color: rgb(82,197,248)">█</span><span style="color: rgb(66,192,248)">█</span><span style="color: rgb(54,187,246)">█</span><span style="color: rgb(50,182,242)">█</span><span style="color: rgb(45,178,238)">╗  </span><span style="color: rgb(33,164,227)">█</span><span style="color: rgb(28,160,223)">█</span><span style="color: rgb(24,155,219)">╗ </span><span style="color: rgb(16,146,211)">█</span><span style="color: rgb(11,142,207)">█</span><span style="color: rgb(7,137,204)">█</span><span style="color: rgb(3,133,200)">█</span><span style="color: rgb(3,129,199)">█</span><span style="color: rgb(5,124,201)">█</span><span style="color: rgb(7,120,202)">█</span><span style="color: rgb(9,116,203)">╗ </span><span style="color: rgb(14,107,206)">█</span><span style="color: rgb(16,103,207)">█</span><span style="color: rgb(18,99,209)">╗  </span><span style="color: rgb(24,86,213)">█</span><span style="color: rgb(26,82,214)">█</span><span style="color: rgb(28,78,216)">╗</span>
+  <span style="color: rgb(169,226,251)">                ▟██ </span>    <span style="color: rgb(255,255,255)">█</span><span style="color: rgb(239,249,254)">█</span><span style="color: rgb(223,244,253)">╔</span><span style="color: rgb(207,239,253)">═</span><span style="color: rgb(192,234,252)">═</span><span style="color: rgb(176,228,252)">█</span><span style="color: rgb(160,223,251)">█</span><span style="color: rgb(144,218,251)">╗ </span><span style="color: rgb(113,208,250)">█</span><span style="color: rgb(97,202,249)">█</span><span style="color: rgb(82,197,248)">╔</span><span style="color: rgb(66,192,248)">═</span><span style="color: rgb(54,187,246)">═</span><span style="color: rgb(50,182,242)">█</span><span style="color: rgb(45,178,238)">█</span><span style="color: rgb(41,173,235)">╗ </span><span style="color: rgb(33,164,227)">█</span><span style="color: rgb(28,160,223)">█</span><span style="color: rgb(24,155,219)">║ </span><span style="color: rgb(16,146,211)">█</span><span style="color: rgb(11,142,207)">█</span><span style="color: rgb(7,137,204)">╔</span><span style="color: rgb(3,133,200)">═</span><span style="color: rgb(3,129,199)">═</span><span style="color: rgb(5,124,201)">═</span><span style="color: rgb(7,120,202)">═</span><span style="color: rgb(9,116,203)">╝ </span><span style="color: rgb(14,107,206)">█</span><span style="color: rgb(16,103,207)">█</span><span style="color: rgb(18,99,209)">║ </span><span style="color: rgb(22,90,211)">█</span><span style="color: rgb(24,86,213)">█</span><span style="color: rgb(26,82,214)">╔</span><span style="color: rgb(28,78,216)">╝</span>
+  <span style="color: rgb(84,198,248)">              ▟███▀ </span>    <span style="color: rgb(255,255,255)">█</span><span style="color: rgb(239,249,254)">█</span><span style="color: rgb(223,244,253)">█</span><span style="color: rgb(207,239,253)">█</span><span style="color: rgb(192,234,252)">█</span><span style="color: rgb(176,228,252)">█</span><span style="color: rgb(160,223,251)">╔</span><span style="color: rgb(144,218,251)">╝ </span><span style="color: rgb(113,208,250)">█</span><span style="color: rgb(97,202,249)">█</span><span style="color: rgb(82,197,248)">█</span><span style="color: rgb(66,192,248)">█</span><span style="color: rgb(54,187,246)">█</span><span style="color: rgb(50,182,242)">█</span><span style="color: rgb(45,178,238)">╔</span><span style="color: rgb(41,173,235)">╝ </span><span style="color: rgb(33,164,227)">█</span><span style="color: rgb(28,160,223)">█</span><span style="color: rgb(24,155,219)">║ </span><span style="color: rgb(16,146,211)">█</span><span style="color: rgb(11,142,207)">█</span><span style="color: rgb(7,137,204)">█</span><span style="color: rgb(3,133,200)">█</span><span style="color: rgb(3,129,199)">█</span><span style="color: rgb(5,124,201)">█</span><span style="color: rgb(7,120,202)">█</span><span style="color: rgb(9,116,203)">╗ </span><span style="color: rgb(14,107,206)">█</span><span style="color: rgb(16,103,207)">█</span><span style="color: rgb(18,99,209)">█</span><span style="color: rgb(20,95,210)">█</span><span style="color: rgb(22,90,211)">█</span><span style="color: rgb(24,86,213)">╔</span><span style="color: rgb(26,82,214)">╝ </span>
+  <span style="color: rgb(40,172,233)">        ▟▀  ▟████▀  </span>    <span style="color: rgb(255,255,255)">█</span><span style="color: rgb(239,249,254)">█</span><span style="color: rgb(223,244,253)">╔</span><span style="color: rgb(207,239,253)">═</span><span style="color: rgb(192,234,252)">═</span><span style="color: rgb(176,228,252)">█</span><span style="color: rgb(160,223,251)">█</span><span style="color: rgb(144,218,251)">╗ </span><span style="color: rgb(113,208,250)">█</span><span style="color: rgb(97,202,249)">█</span><span style="color: rgb(82,197,248)">╔</span><span style="color: rgb(66,192,248)">═</span><span style="color: rgb(54,187,246)">═</span><span style="color: rgb(50,182,242)">█</span><span style="color: rgb(45,178,238)">█</span><span style="color: rgb(41,173,235)">╗ </span><span style="color: rgb(33,164,227)">█</span><span style="color: rgb(28,160,223)">█</span><span style="color: rgb(24,155,219)">║ </span><span style="color: rgb(16,146,211)">╚</span><span style="color: rgb(11,142,207)">═</span><span style="color: rgb(7,137,204)">═</span><span style="color: rgb(3,133,200)">═</span><span style="color: rgb(3,129,199)">═</span><span style="color: rgb(5,124,201)">█</span><span style="color: rgb(7,120,202)">█</span><span style="color: rgb(9,116,203)">║ </span><span style="color: rgb(14,107,206)">█</span><span style="color: rgb(16,103,207)">█</span><span style="color: rgb(18,99,209)">╔</span><span style="color: rgb(20,95,210)">═</span><span style="color: rgb(22,90,211)">█</span><span style="color: rgb(24,86,213)">█</span><span style="color: rgb(26,82,214)">╗ </span>
+  <span style="color: rgb(17,148,212)">      ▟██ ▟█████▀   </span>    <span style="color: rgb(255,255,255)">█</span><span style="color: rgb(239,249,254)">█</span><span style="color: rgb(223,244,253)">█</span><span style="color: rgb(207,239,253)">█</span><span style="color: rgb(192,234,252)">█</span><span style="color: rgb(176,228,252)">█</span><span style="color: rgb(160,223,251)">╔</span><span style="color: rgb(144,218,251)">╝ </span><span style="color: rgb(113,208,250)">█</span><span style="color: rgb(97,202,249)">█</span><span style="color: rgb(82,197,248)">║  </span><span style="color: rgb(50,182,242)">█</span><span style="color: rgb(45,178,238)">█</span><span style="color: rgb(41,173,235)">║ </span><span style="color: rgb(33,164,227)">█</span><span style="color: rgb(28,160,223)">█</span><span style="color: rgb(24,155,219)">║ </span><span style="color: rgb(16,146,211)">█</span><span style="color: rgb(11,142,207)">█</span><span style="color: rgb(7,137,204)">█</span><span style="color: rgb(3,133,200)">█</span><span style="color: rgb(3,129,199)">█</span><span style="color: rgb(5,124,201)">█</span><span style="color: rgb(7,120,202)">█</span><span style="color: rgb(9,116,203)">║ </span><span style="color: rgb(14,107,206)">█</span><span style="color: rgb(16,103,207)">█</span><span style="color: rgb(18,99,209)">║  </span><span style="color: rgb(24,86,213)">█</span><span style="color: rgb(26,82,214)">█</span><span style="color: rgb(28,78,216)">╗</span>
+  <span style="color: rgb(5,124,201)">    ▟███ ▟██████▀   </span>    <span style="color: rgb(255,255,255)">╚</span><span style="color: rgb(239,249,254)">═</span><span style="color: rgb(223,244,253)">═</span><span style="color: rgb(207,239,253)">═</span><span style="color: rgb(192,234,252)">═</span><span style="color: rgb(176,228,252)">═</span><span style="color: rgb(160,223,251)">╝  </span><span style="color: rgb(113,208,250)">╚</span><span style="color: rgb(97,202,249)">═</span><span style="color: rgb(82,197,248)">╝  </span><span style="color: rgb(50,182,242)">╚</span><span style="color: rgb(45,178,238)">═</span><span style="color: rgb(41,173,235)">╝ </span><span style="color: rgb(33,164,227)">╚</span><span style="color: rgb(28,160,223)">═</span><span style="color: rgb(24,155,219)">╝ </span><span style="color: rgb(16,146,211)">╚</span><span style="color: rgb(11,142,207)">═</span><span style="color: rgb(7,137,204)">═</span><span style="color: rgb(3,133,200)">═</span><span style="color: rgb(3,129,199)">═</span><span style="color: rgb(5,124,201)">═</span><span style="color: rgb(7,120,202)">═</span><span style="color: rgb(9,116,203)">╝ </span><span style="color: rgb(14,107,206)">╚</span><span style="color: rgb(16,103,207)">═</span><span style="color: rgb(18,99,209)">╝  </span><span style="color: rgb(24,86,213)">╚</span><span style="color: rgb(26,82,214)">═</span><span style="color: rgb(28,78,216)">╝</span>
+  <span style="color: rgb(17,101,208)">  ▟████ ▟███████▀   </span>    <span style="color: rgb(148,163,184); font-weight: 700">BriskOS 1.0 LTS</span> <span style="color: rgb(56,189,248)">•</span> <span style="color: rgb(203,213,225)">Feather Edition</span>
+  <span style="color: rgb(28,78,216)">  ▀▀▀▀▀ ▀▀▀▀▀▀▀▀    </span>    <span style="color: rgb(255,255,255)">─</span><span style="color: rgb(239,249,254)">─</span><span style="color: rgb(223,244,253)">─</span><span style="color: rgb(207,239,253)">─</span><span style="color: rgb(192,234,252)">─</span><span style="color: rgb(176,228,252)">─</span><span style="color: rgb(160,223,251)">─</span><span style="color: rgb(144,218,251)">─</span><span style="color: rgb(129,213,250)">─</span><span style="color: rgb(113,208,250)">─</span><span style="color: rgb(97,202,249)">─</span><span style="color: rgb(82,197,248)">─</span><span style="color: rgb(66,192,248)">─</span><span style="color: rgb(54,187,246)">─</span><span style="color: rgb(50,182,242)">─</span><span style="color: rgb(45,178,238)">─</span><span style="color: rgb(41,173,235)">─</span><span style="color: rgb(37,169,231)">─</span><span style="color: rgb(33,164,227)">─</span><span style="color: rgb(28,160,223)">─</span><span style="color: rgb(24,155,219)">─</span><span style="color: rgb(20,151,215)">─</span><span style="color: rgb(16,146,211)">─</span><span style="color: rgb(11,142,207)">─</span><span style="color: rgb(7,137,204)">─</span><span style="color: rgb(3,133,200)">─</span><span style="color: rgb(3,129,199)">─</span><span style="color: rgb(5,124,201)">─</span><span style="color: rgb(7,120,202)">─</span><span style="color: rgb(9,116,203)">─</span><span style="color: rgb(11,112,205)">─</span><span style="color: rgb(14,107,206)">─</span><span style="color: rgb(16,103,207)">─</span><span style="color: rgb(18,99,209)">─</span><span style="color: rgb(20,95,210)">─</span><span style="color: rgb(22,90,211)">─</span><span style="color: rgb(24,86,213)">─</span><span style="color: rgb(26,82,214)">─</span><span style="color: rgb(28,78,216)">─</span>
+
+  <span style="color: rgb(56,189,248)">╭────────────────────────────────────────────────────────────────────╮</span>
+  <span style="color: rgb(56,189,248)">│</span>  <span style="color: rgb(148,163,184)">OS:</span> <span style="color: rgb(241,245,249)">BriskOS 1.0 LTS (Feather)</span>    <span style="color: rgb(148,163,184)">Kernel:</span> <span style="color: rgb(241,245,249)">3.6.10-710e5275.x86_64</span>   <span style="color: rgb(56,189,248)">│</span>
+  <span style="color: rgb(56,189,248)">│</span>  <span style="color: rgb(148,163,184)">Host:</span> <span style="color: rgb(241,245,249)">x86_64 (Brisk Terminal)</span>    <span style="color: rgb(148,163,184)">Uptime:</span> <span style="color: rgb(241,245,249)">1d 11h 21m</span>               <span style="color: rgb(56,189,248)">│</span>
+  <span style="color: rgb(56,189,248)">│</span>  <span style="color: rgb(148,163,184)">Memory:</span> <span style="color: rgb(56,189,248)">184 MB / 16.0 GB (1.1%)</span>   <span style="color: rgb(148,163,184)">Disk (/):</span> <span style="color: rgb(241,245,249)">94G / 98G (97%)</span>       <span style="color: rgb(56,189,248)">│</span>
+  <span style="color: rgb(56,189,248)">│</span>  <span style="color: rgb(148,163,184)">Profile:</span> <span style="color: rgb(56,189,248)">⚡ Turbo Active</span>         <span style="color: rgb(148,163,184)">Battery:</span> <span style="color: rgb(74,222,128)">98% (AC Connected)</span>      <span style="color: rgb(56,189,248)">│</span>
+  <span style="color: rgb(56,189,248)">│</span>  <span style="color: rgb(148,163,184)">Palette:</span> <span style="background-color: #1e293b">  </span><span style="background-color: #f43f5e">  </span><span style="background-color: #34d399">  </span><span style="background-color: #fbbf24">  </span><span style="background-color: #38bdf8">  </span><span style="background-color: #a78bfa">  </span><span style="background-color: #22d3ee">  </span><span style="background-color: #e2e8f0">  </span> <span style="background-color: #475569">  </span><span style="background-color: #fb7185">  </span><span style="background-color: #4ade80">  </span><span style="background-color: #fde047">  </span><span style="background-color: #60a5fa">  </span><span style="background-color: #c084fc">  </span><span style="background-color: #67e8f9">  </span><span style="background-color: #ffffff">  </span>                        <span style="color: rgb(56,189,248)">│</span>
+  <span style="color: rgb(56,189,248)">╰────────────────────────────────────────────────────────────────────╯</span>
+      <!-- Aeroline Prompt Line 1 (Executed Command) -->
+      <div class="prompt-block">
+        <div class="prompt-meta-line">
+          <span class="prompt-border">┌─ </span><span class="prompt-bracket">[</span><span class="prompt-path">~/workspace/brisk-core</span><span class="prompt-bracket">]</span>
+          <span class="prompt-border"> ── </span><span class="prompt-git-bracket">(</span><span class="prompt-git-label">git: </span><span class="prompt-git-branch">main</span> <span class="prompt-git-status-clean">✓</span><span class="prompt-git-bracket">)</span>
+          <span class="prompt-border"> ── </span><span class="prompt-bracket">[</span><span class="prompt-timer-icon">⏱ </span><span class="prompt-timer-val">12ms</span><span class="prompt-bracket">]</span>
+        </div>
+        <div class="prompt-cmd-line">
+          <span class="prompt-border">└─</span><span class="prompt-arrow">❯</span><span class="prompt-typed-cmd">brisk --help</span>
+        </div>
+      </div>
+
+      <!-- Command Output: brisk --help -->
+      <div class="cmd-output">
+  <span class="cmd-keyword">BriskOS 1.0 LTS Unified Command-Line Center</span>
+  Usage: <span style="color:#38bdf8">brisk</span> &lt;command&gt; [arguments]
+
+  <span class="cmd-section-title">Telemetry &amp; Cockpit:</span>
+    <span class="cmd-keyword">brisk info</span>                <span class="cmd-desc">Show full Brisk Cockpit terminal greeting &amp; telemetry</span>
+    <span class="cmd-keyword">brisk clear | cls</span>         <span class="cmd-desc">Clear terminal and display compact cockpit status</span>
+
+  <span class="cmd-section-title">Power &amp; Battery Sentinel:</span>
+    <span class="cmd-keyword">brisk profile [mode]</span>      <span class="cmd-desc">Switch profile: turbo | eco | balanced</span>
+    <span class="cmd-keyword">brisk power status</span>        <span class="cmd-desc">Display detailed battery metrics &amp; discharge rate</span>
+    <span class="cmd-keyword">brisk glide [status|on]</span>   <span class="cmd-desc">Manage Glide Mode smart low-battery auto-pilot</span>
+
+  <span class="cmd-section-title">Applications &amp; Packages:</span>
+    <span class="cmd-keyword">brisk store</span>               <span class="cmd-desc">Launch Brisk Store graphical hub</span>
+    <span class="cmd-keyword">brisk store search &lt;q&gt;</span>    <span class="cmd-desc">Search curated Flathub &amp; Debian catalog</span>
+    <span class="cmd-keyword">brisk store install &lt;pkg&gt;</span> <span class="cmd-desc">Install application seamlessly</span>
+
+  <span class="cmd-section-title">System Maintenance &amp; Recovery:</span>
+    <span class="cmd-keyword">brisk recovery</span>            <span class="cmd-desc">Launch TimeTravel Btrfs snapshot restore manager</span>
+    <span class="cmd-keyword">brisk snapshot create</span>     <span class="cmd-desc">Create instant system recovery snapshot</span>
+    <span class="cmd-keyword">brisk update</span>              <span class="cmd-desc">Sync Debian &amp; Flatpak repositories</span>
+      </div>
+
+      <!-- Aeroline Active Prompt Line (with Steady Ice Cyan Beam Cursor) -->
+      <div class="prompt-block">
+        <div class="prompt-meta-line">
+          <span class="prompt-border">┌─ </span><span class="prompt-bracket">[</span><span class="prompt-path">~/workspace/brisk-core</span><span class="prompt-bracket">]</span>
+          <span class="prompt-border"> ── </span><span class="prompt-git-bracket">(</span><span class="prompt-git-label">git: </span><span class="prompt-git-branch">main</span> <span class="prompt-git-status-clean">✓</span><span class="prompt-git-bracket">)</span>
+          <span class="prompt-border"> ── </span><span class="prompt-bracket">[</span><span class="prompt-timer-icon">⏱ </span><span class="prompt-timer-val">3ms</span><span class="prompt-bracket">]</span>
+        </div>
+        <div class="prompt-cmd-line">
+          <span class="prompt-border">└─</span><span class="prompt-arrow">❯</span><span class="cursor-beam"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Waybar Bottom Taskbar (Floating 3-Island Architecture with active Foot Terminal) -->
+  <div id="waybar">
+    <!-- Left Island: Start Menu & Pinned Launchers -->
+    <div class="modules-left">
+      <div id="custom-startmenu" title="Applications (Super_L)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <polygon points="2,4 22,12 14,15 2,9" fill="#38bdf8"/>
+          <polygon points="8,14 24,20 18,22 8,18" fill="#38bdf8" fill-opacity="0.75"/>
+          <polygon points="14,21 26,25 21,27 14,24" fill="#0ea5e9" fill-opacity="0.5"/>
+        </svg>
+        <span>❖</span>
+      </div>
+
+      <div class="pinned-launcher" title="Web Browser (Firefox)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="10" stroke="#38bdf8"/>
+          <line x1="2" y1="12" x2="22" y2="12" stroke="#38bdf8"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" stroke="#38bdf8"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="File Manager (Thunar)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <path d="M2 5a2 2 0 0 1 2-2h4.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H20a2 2 0 0 1 2 2v2H2V5z" fill="#0284c7"/>
+          <path d="M2 8h20v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8z" fill="#38bdf8"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="Terminal (Foot)" style="background-color: #1e293b; border-color: rgba(56, 189, 248, 0.4);">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+          <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <div class="pinned-launcher" title="Productivity Suite (ONLYOFFICE)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="3" fill="#f97316"/>
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Center Island: Window Tasks (Foot Terminal is ACTIVE with cyan glow) -->
+    <div class="modules-center">
+      <div id="taskbar">
+        <div class="taskbar-button active" title="foot: user@briskos: ~/workspace/brisk-core">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none">
+            <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+            <polyline points="6 9 10 12 6 15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="12" y1="15" x2="17" y2="15" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>foot: user@briskos:~ (brisk-cockpit)</span>
+        </div>
+
+        <div class="taskbar-button inactive" title="Brisk Store - Pusat Aplikasi">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none">
+            <path d="M6 7V5a3 3 0 0 1 6 0v2" stroke="#64748b" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4 7h16l-1.5 13a2 2 0 0 1-2 1.8H7.5a2 2 0 0 1-2-1.8L4 7z" fill="#0f172a" stroke="#64748b" stroke-width="1.8"/>
+            <path d="M9 13l2 2 4-4" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Brisk Store</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Island: Status Tray Indicators -->
+    <div class="modules-right">
+      <div class="tray-module" id="pulseaudio" title="PipeWire Volume (85%)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" stroke-linecap="round"/>
+        </svg>
+        <span>85%</span>
+      </div>
+
+      <div class="tray-module" id="network" title="Wi-Fi (Brisk-Mesh, 100%)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" stroke-linecap="round"/>
+        </svg>
+        <span>📶 Brisk-Mesh 100%</span>
+      </div>
+
+      <div class="tray-module" id="battery" title="Battery (98% Charging)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="7" width="17" height="10" rx="2" stroke="currentColor"/>
+          <line x1="21" y1="11" x2="21" y2="13" stroke="currentColor" stroke-linecap="round"/>
+          <rect x="4" y="9" width="13" height="6" rx="1" fill="#38bdf8"/>
+        </svg>
+        <span style="color:#38bdf8; font-weight: 600;">⚡ 98%</span>
+      </div>
+
+      <div class="tray-module" id="clock" title="Date &amp; Time">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>14:30  Wed 11 Nov</span>
+      </div>
+
+      <div class="tray-module" id="custom-power" title="Exit / Power Off">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+          <line x1="12" y1="2" x2="12" y2="12"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

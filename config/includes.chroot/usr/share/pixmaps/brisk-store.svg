@@ -47,35 +47,50 @@
 
     <!-- Center Ambient Cyan Glow -->
     <radialGradient id="centerCyanBloom" cx="50%" cy="58%" r="48%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32"/>
-      <stop offset="40%" stop-color="#0284c7" stop-opacity="0.14"/>
-      <stop offset="75%" stop-color="#0369a1" stop-opacity="0.04"/>
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
+      <stop offset="35%" stop-color="#0284c7" stop-opacity="0.15"/>
+      <stop offset="70%" stop-color="#1d4ed8" stop-opacity="0.05"/>
       <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Emblem Gradients (Matching BriskOS Aerodynamic Wing/Feather) -->
-    <linearGradient id="featherGrad1" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0284c7"/>
-      <stop offset="50%" stop-color="#0ea5e9"/>
-      <stop offset="100%" stop-color="#38bdf8"/>
+    <!-- Unified Supersonic Frost Gradient: 4-Stop System Identity -->
+    <!-- Stop 0%: Frost White #ffffff (specular highlight tip) -->
+    <!-- Stop 30%: Ice Cyan #38bdf8 (core glow identity) -->
+    <!-- Stop 70%: Electric Sky #0284c7 (aerodynamic body) -->
+    <!-- Stop 100%: Deep Cobalt Sapphire #1d4ed8 (base foundation) -->
+    <linearGradient id="supersonicFrostGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
     </linearGradient>
 
-    <linearGradient id="featherGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0369a1"/>
-      <stop offset="60%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#38bdf8"/>
+    <linearGradient id="featherGrad1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
     </linearGradient>
 
-    <linearGradient id="featherGrad3" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#082f49"/>
-      <stop offset="70%" stop-color="#0369a1"/>
-      <stop offset="100%" stop-color="#0284c7"/>
+    <linearGradient id="featherGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1e40af"/>
     </linearGradient>
 
-    <linearGradient id="spineGlow" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0ea5e9"/>
-      <stop offset="60%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#f8fafc"/>
+    <linearGradient id="featherGrad3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="40%" stop-color="#0284c7"/>
+      <stop offset="80%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="spineGlow" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#38bdf8"/>
+      <stop offset="70%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
     </linearGradient>
   </defs>
 
@@ -190,6 +205,6 @@
     <line x1="200" y1="328" x2="232" y2="348" stroke="#0f172a" stroke-width="2.5" stroke-linecap="round"/>
 
     <!-- Apex Luminous Node -->
-    <circle cx="388" cy="142" r="3.5" fill="#f8fafc"/>
+    <circle cx="388" cy="142" r="3.5" fill="#ffffff"/>
   </g>
 </svg>

@@ -1,0 +1,137 @@
+#!/bin/bash
+# ==============================================================================
+# Brisk OS Command-Line Center & Unified System Helper
+# Pure Bash Executable • Shortcuts for Telemetry, Profiles, Store & Recovery
+# ==============================================================================
+
+set -euo pipefail
+
+rst="\033[0m"
+bold="\033[1m"
+dim="\033[2m"
+cyan="\033[38;2;56;189;248m"
+blue="\033[38;2;96;165;250m"
+green="\033[38;2;74;222;128m"
+amber="\033[38;2;251;191;36m"
+slate="\033[38;2;148;163;184m"
+white="\033[38;2;248;250;252m"
+
+show_help() {
+    if [[ -x /usr/local/bin/brisk-cockpit ]]; then
+        /usr/local/bin/brisk-cockpit --compact
+    fi
+
+    echo -e "  ${bold}${white}BriskOS 1.0 LTS Unified Command-Line Center${rst}"
+    echo -e "  ${dim}${slate}Usage: brisk <command> [arguments]${rst}\n"
+
+    echo -e "  ${cyan}Telemetry & Cockpit:${rst}"
+    echo -e "    ${bold}brisk info${rst}                Show full Brisk Cockpit terminal greeting & telemetry"
+    echo -e "    ${bold}brisk clear | cls${rst}         Clear terminal and display compact cockpit status\n"
+
+    echo -e "  ${cyan}Power & Battery Sentinel:${rst}"
+    echo -e "    ${bold}brisk profile [turbo|eco|balanced]${rst}   Switch active hardware power profile"
+    echo -e "    ${bold}brisk power status${rst}        Display detailed battery metrics, health & discharge rate"
+    echo -e "    ${bold}brisk glide [status|on|off]${rst} Manage Glide Mode smart low-battery auto-pilot\n"
+
+    echo -e "  ${cyan}Applications & Packages:${rst}"
+    echo -e "    ${bold}brisk store${rst}               Launch Brisk Store graphical hub"
+    echo -e "    ${bold}brisk store search <query>${rst} Search curated Flathub & Debian catalog"
+    echo -e "    ${bold}brisk store install <pkg>${rst}  Install application seamlessly\n"
+
+    echo -e "  ${cyan}System Maintenance & Recovery:${rst}"
+    echo -e "    ${bold}brisk recovery${rst}            Launch TimeTravel Btrfs snapshot restore manager"
+    echo -e "    ${bold}brisk snapshot create${rst}     Create instant system recovery snapshot"
+    echo -e "    ${bold}brisk snapshot list${rst}       View existing recovery checkpoints"
+    echo -e "    ${bold}brisk update${rst}              Check and review pending OS & security updates\n"
+
+    echo -e "  ${dim}Tip: Run 'brisk <command> --help' for command-specific flags and options.${rst}\n"
+}
+
+# Entrypoint
+cmd="${1:-}"
+if [[ -z "$cmd" ]]; then
+    show_help
+    exit 0
+fi
+shift || true
+
+case "$cmd" in
+    info|cockpit|greeting)
+        if [[ -x /usr/local/bin/brisk-cockpit ]]; then
+            exec /usr/local/bin/brisk-cockpit "$@"
+        else
+            echo "brisk-cockpit executable not found." >&2
+            exit 1
+        fi
+        ;;
+    clear|cls)
+        command -v /usr/bin/clear >/dev/null 2>&1 && /usr/bin/clear || printf "\033[2J\033[H"
+        if [[ -x /usr/local/bin/brisk-cockpit ]]; then
+            exec /usr/local/bin/brisk-cockpit --compact "$@"
+        fi
+        ;;
+    profile|power)
+        if [[ -x /usr/local/bin/brisk-sentinel ]]; then
+            exec /usr/local/bin/brisk-sentinel profile "$@"
+        else
+            echo "brisk-sentinel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    sentinel)
+        if [[ -x /usr/local/bin/brisk-sentinel ]]; then
+            exec /usr/local/bin/brisk-sentinel "$@"
+        else
+            echo "brisk-sentinel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    glide)
+        if [[ -x /usr/local/bin/brisk-sentinel ]]; then
+            exec /usr/local/bin/brisk-sentinel glide "$@"
+        else
+            echo "brisk-sentinel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    store)
+        if [[ -x /usr/local/bin/brisk-store ]]; then
+            exec /usr/local/bin/brisk-store "$@"
+        else
+            echo "brisk-store executable not found." >&2
+            exit 1
+        fi
+        ;;
+    recovery|timetravel|snapshot|snapshots)
+        if [[ -x /usr/local/bin/brisk-timetravel ]]; then
+            exec /usr/local/bin/brisk-timetravel "$@"
+        elif [[ -x /usr/local/bin/brisk-timetravel-gui ]]; then
+            exec /usr/local/bin/brisk-timetravel-gui "$@"
+        else
+            echo "brisk-timetravel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    update|updater)
+        if [[ -x /usr/local/bin/brisk-update-checker ]]; then
+            exec /usr/local/bin/brisk-update-checker "$@"
+        elif [[ -x /usr/local/bin/brisk-updater-gui ]]; then
+            exec /usr/local/bin/brisk-updater-gui "$@"
+        else
+            echo "brisk update utilities not found." >&2
+            exit 1
+        fi
+        ;;
+    version|--version|-v)
+        echo "BriskOS 1.0 LTS (Feather Edition)"
+        uname -srm 2>/dev/null || true
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo -e "${amber}Unknown command: ${cmd}${rst}" >&2
+        echo "Run 'brisk help' to see available shortcuts." >&2
+        exit 1
+        ;;
+esac

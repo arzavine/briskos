@@ -46,6 +46,7 @@ This manual provides authoritative, step-by-step instructions for flashing, boot
    - [6.7 Feature: Brisk Battery Sentinel Laptop Power Optimization & Profiles](#67-feature-brisk-battery-sentinel-laptop-power-optimization--profiles)
    - [6.8 Feature: Brisk Glide Mode Smart Low-Battery Auto-Pilot](#68-feature-brisk-glide-mode-smart-low-battery-auto-pilot)
    - [6.9 Feature: Brisk Store Modern Curated Application Center](#69-feature-brisk-store-modern-curated-application-center)
+   - [6.10 Feature: Brisk Cockpit & Aeroline Shell (Developer Terminal)](#610-feature-brisk-cockpit--aeroline-shell-developer-terminal)
 7. [Troubleshooting & FAQ](#7-troubleshooting--faq)
 
 ---
@@ -865,6 +866,36 @@ brisk-store-backend search "browser"
 
 # 5. List all installed application IDs managed by Brisk Store
 brisk-store-backend list-installed
+```
+
+---
+
+### 6.10 Feature: Brisk Cockpit & Aeroline Shell (Developer Terminal)
+
+BriskOS features an aerodynamic, high-performance terminal experience powered by the native Wayland **Foot** terminal and **Brisk Cockpit**:
+
+#### A. Dual-Column Supersonic Frost ASCII Greeting (`brisk-cockpit`)
+When Foot is launched, it displays a zero-lag TrueColor 24-bit ANSI terminal greeting:
+* **Left**: Handcrafted swept feather emblem shifting through the Supersonic Frost spectrum (`#ffffff` → `#38bdf8` → `#0284c7` → `#1d4ed8`).
+* **Right**: Big BOLD typography `B R I S K` with horizontal TrueColor gradient transition, subtitled *"BriskOS 1.0 LTS • Feather Edition"*.
+* **System Telemetry Card**: Live memory footprint (`184 MiB / 16 GB (1.1%)`), active power profile (`⚡ Turbo` / `🍃 Glide Active`), kernel version, uptime, and disk capacity.
+
+#### B. Aeroline Two-Line Smart Prompt
+Configured in `~/.bashrc`:
+* **Line 1 (Metadata)**: `┌─ [~/path] ── (git: main ✓) ── [⏱ duration]`
+  - Shows current path in Ice Cyan (`#38bdf8`).
+  - Automatic Git branch status (`✓` clean green, `✗` dirty amber).
+  - High-precision execution timer tracking long-running commands.
+* **Line 2 (Action)**: `└─❯ ` with a steady Ice Cyan beam cursor.
+
+#### C. Unified CLI Control (`brisk`)
+A dedicated command-line helper provides rapid management:
+```bash
+brisk info                  # Display full Cockpit greeting & telemetry
+brisk clear | cls           # Clear screen and display compact telemetry header
+brisk profile turbo|eco     # Switch Battery Sentinel power profiles
+brisk store search <query>  # Search Brisk Store from terminal
+brisk snapshot create       # Take an instant TimeTravel recovery snapshot
 ```
 
 ---
