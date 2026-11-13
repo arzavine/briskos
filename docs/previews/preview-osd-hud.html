@@ -130,16 +130,59 @@
     .dot-min { background: #eab308; }
     .dot-max { background: #22c55e; }
 
+    /* -------------------------------------------------------------------------
+     * Night Glass Ghost Scrollbar
+     * ------------------------------------------------------------------------- */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.6);
+    }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+
     .app-content {
+      flex: 1;
+      overflow-y: scroll;
       padding: 24px;
-      color: #64748b;
+      color: #94a3b8;
       font-family: "JetBrains Mono", monospace;
       font-size: 13px;
       line-height: 1.6;
     }
-    .code-accent { color: #38bdf8; }
+    .app-content::-webkit-scrollbar {
+      width: 6px;
+    }
+    .app-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .app-content::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    .app-content::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.6);
+    }
+    .code-accent { color: #38bdf8; font-weight: 600; }
     .code-green { color: #4ade80; }
-    .code-comment { color: #475569; }
+    .code-comment { color: #475569; font-style: italic; }
+    .code-keyword { color: #f43f5e; font-weight: 600; }
+    .code-fn { color: #38bdf8; }
+    .code-str { color: #34d399; }
+    .code-num { color: #fbbf24; }
+    .code-line { display: flex; gap: 16px; margin-bottom: 2px; }
+    .code-ln { color: #334155; min-width: 24px; text-align: right; user-select: none; }
 
     /* -------------------------------------------------------------------------
      * FLOATING OSD HUD PILL (Center Stage Star Element)
@@ -204,15 +247,6 @@
       color: #94a3b8;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-    }
-    .osd-fn-hint {
-      font-size: 10px;
-      font-weight: 600;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.15);
-      padding: 1px 6px;
-      border-radius: 4px;
-      letter-spacing: 0.02em;
     }
 
     .osd-track {
@@ -452,13 +486,57 @@
       </div>
     </div>
     <div class="app-content">
-      <p class="code-comment">// BriskOS 1.0 LTS Kernel Telemetry &amp; Flight Center</p>
-      <p><span class="code-accent">brisk info</span></p>
-      <p class="code-green">✓ System Architecture: x86_64 Debian 12 (Bookworm)</p>
-      <p class="code-green">✓ Wayland Compositor: Labwc 0.6.5 (DRM Accelerated)</p>
-      <p class="code-green">✓ Memory Consumption: 184 MiB / 16384 MiB (Idle 1.1%)</p>
-      <p class="code-green">✓ Power Sentinel Profile: ⚡ Turbo Performance (AC Online)</p>
-      <p class="code-comment">// Hardware Media Event: Keypress Fn + F12 detected</p>
+      <div class="code-line"><span class="code-ln">1</span><span><span class="code-comment"># ==============================================================================</span></span></div>
+      <div class="code-line"><span class="code-ln">2</span><span><span class="code-comment"># Brisk Floating OSD HUD (brisk-osd) — Wayland Layer Shell Daemon</span></span></div>
+      <div class="code-line"><span class="code-ln">3</span><span><span class="code-comment"># Pure PyGObject / GTK3 + LayerShell • Sub-18 MB RAM active, 0 MB idle</span></span></div>
+      <div class="code-line"><span class="code-ln">4</span><span><span class="code-comment"># ==============================================================================</span></span></div>
+      <div class="code-line"><span class="code-ln">5</span><span><span class="code-keyword">import</span> os, sys, json, time, socket, subprocess, threading</span></div>
+      <div class="code-line"><span class="code-ln">6</span><span><span class="code-keyword">import</span> gi</span></div>
+      <div class="code-line"><span class="code-ln">7</span><span>gi.<span class="code-fn">require_version</span>(<span class="code-str">"Gtk"</span>, <span class="code-str">"3.0"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">8</span><span>gi.<span class="code-fn">require_version</span>(<span class="code-str">"GtkLayerShell"</span>, <span class="code-str">"0.1"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">9</span><span><span class="code-keyword">from</span> gi.repository <span class="code-keyword">import</span> Gtk, Gdk, GLib, GtkLayerShell</span></div>
+      <div class="code-line"><span class="code-ln">10</span><span></span></div>
+      <div class="code-line"><span class="code-ln">11</span><span><span class="code-keyword">class</span> <span class="code-accent">BriskOSDWindow</span>(Gtk.Window):</span></div>
+      <div class="code-line"><span class="code-ln">12</span><span>    <span class="code-keyword">def</span> <span class="code-fn">__init__</span>(self, init_data):</span></div>
+      <div class="code-line"><span class="code-ln">13</span><span>        <span class="code-fn">super</span>().__init__(type=Gtk.WindowType.TOPLEVEL)</span></div>
+      <div class="code-line"><span class="code-ln">14</span><span>        self.<span class="code-fn">set_title</span>(<span class="code-str">"Brisk OSD HUD"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">15</span><span>        self.<span class="code-fn">set_decorated</span>(<span class="code-keyword">False</span>)</span></div>
+      <div class="code-line"><span class="code-ln">16</span><span>        self.<span class="code-fn">set_resizable</span>(<span class="code-keyword">False</span>)</span></div>
+      <div class="code-line"><span class="code-ln">17</span><span>        self.<span class="code-fn">set_keep_above</span>(<span class="code-keyword">True</span>)</span></div>
+      <div class="code-line"><span class="code-ln">18</span><span></span></div>
+      <div class="code-line"><span class="code-ln">19</span><span>        <span class="code-comment"># Top-Center Anchor &amp; Margin 48 on Wayland LayerShell Overlay</span></span></div>
+      <div class="code-line"><span class="code-ln">20</span><span>        GtkLayerShell.<span class="code-fn">init_for_window</span>(self)</span></div>
+      <div class="code-line"><span class="code-ln">21</span><span>        GtkLayerShell.<span class="code-fn">set_layer</span>(self, GtkLayerShell.Layer.OVERLAY)</span></div>
+      <div class="code-line"><span class="code-ln">22</span><span>        GtkLayerShell.<span class="code-fn">set_anchor</span>(self, GtkLayerShell.Edge.TOP, <span class="code-keyword">True</span>)</span></div>
+      <div class="code-line"><span class="code-ln">23</span><span>        GtkLayerShell.<span class="code-fn">set_margin</span>(self, GtkLayerShell.Edge.TOP, <span class="code-num">48</span>)</span></div>
+      <div class="code-line"><span class="code-ln">24</span><span>        GtkLayerShell.<span class="code-fn">set_keyboard_interactivity</span>(self, <span class="code-keyword">False</span>)</span></div>
+      <div class="code-line"><span class="code-ln">25</span><span></span></div>
+      <div class="code-line"><span class="code-ln">26</span><span>        <span class="code-comment"># UI Pill Container &amp; Labels</span></span></div>
+      <div class="code-line"><span class="code-ln">27</span><span>        self.pill_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=<span class="code-num">0</span>)</span></div>
+      <div class="code-line"><span class="code-ln">28</span><span>        self.pill_box.<span class="code-fn">get_style_context</span>().<span class="code-fn">add_class</span>(<span class="code-str">"osd-pill"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">29</span><span>        self.<span class="code-fn">add</span>(self.pill_box)</span></div>
+      <div class="code-line"><span class="code-ln">30</span><span></span></div>
+      <div class="code-line"><span class="code-ln">31</span><span>        self.lbl_title = Gtk.Label(xalign=<span class="code-num">0</span>)</span></div>
+      <div class="code-line"><span class="code-ln">32</span><span>        self.lbl_title.<span class="code-fn">get_style_context</span>().<span class="code-fn">add_class</span>(<span class="code-str">"osd-title"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">33</span><span>        self.progress = Gtk.ProgressBar()</span></div>
+      <div class="code-line"><span class="code-ln">34</span><span>        self.<span class="code-fn">update_hud</span>(init_data)</span></div>
+      <div class="code-line"><span class="code-ln">35</span><span>        self.<span class="code-fn">show_all</span>()</span></div>
+      <div class="code-line"><span class="code-ln">36</span><span></span></div>
+      <div class="code-line"><span class="code-ln">37</span><span>    <span class="code-keyword">def</span> <span class="code-fn">update_hud</span>(self, data):</span></div>
+      <div class="code-line"><span class="code-ln">38</span><span>        htype = data.<span class="code-fn">get</span>(<span class="code-str">"type"</span>, <span class="code-str">"volume"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">39</span><span>        val = <span class="code-fn">max</span>(<span class="code-num">0</span>, <span class="code-fn">min</span>(<span class="code-num">100</span>, <span class="code-fn">int</span>(data.<span class="code-fn">get</span>(<span class="code-str">"value"</span>, <span class="code-num">75</span>))))</span></div>
+      <div class="code-line"><span class="code-ln">40</span><span>        <span class="code-keyword">if</span> htype == <span class="code-str">"volume"</span>:</span></div>
+      <div class="code-line"><span class="code-ln">41</span><span>            self.lbl_title.<span class="code-fn">set_text</span>(<span class="code-str">"VOLUME"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">42</span><span>            self.lbl_icon.<span class="code-fn">set_text</span>(<span class="code-str">"🔊"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">43</span><span>        <span class="code-keyword">elif</span> htype == <span class="code-str">"brightness"</span>:</span></div>
+      <div class="code-line"><span class="code-ln">44</span><span>            self.lbl_title.<span class="code-fn">set_text</span>(<span class="code-str">"KECERAHAN"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">45</span><span>            self.lbl_icon.<span class="code-fn">set_text</span>(<span class="code-str">"☀️"</span>)</span></div>
+      <div class="code-line"><span class="code-ln">46</span><span>        self.progress.<span class="code-fn">set_fraction</span>(val / <span class="code-num">100.0</span>)</span></div>
+      <div class="code-line"><span class="code-ln">47</span><span>        GLib.<span class="code-fn">timeout_add</span>(<span class="code-num">1200</span>, self.<span class="code-fn">_on_timeout</span>)</span></div>
+      <div class="code-line"><span class="code-ln">48</span><span></span></div>
+      <div class="code-line"><span class="code-ln">49</span><span>    <span class="code-keyword">def</span> <span class="code-fn">_on_timeout</span>(self):</span></div>
+      <div class="code-line"><span class="code-ln">50</span><span>        Gtk.<span class="code-fn">main_quit</span>()</span></div>
+      <div class="code-line"><span class="code-ln">51</span><span>        <span class="code-keyword">return</span> <span class="code-keyword">False</span></span></div>
     </div>
   </div>
 
@@ -473,8 +551,7 @@
       </div>
       <div class="osd-center-content">
         <div class="osd-header-row">
-          <span class="osd-title-text">Volume Master • PipeWire</span>
-          <span class="osd-fn-hint">Fn + F12</span>
+          <span class="osd-title-text">VOLUME</span>
         </div>
         <div class="osd-track">
           <div class="osd-bar-fill"></div>
@@ -490,8 +567,7 @@
       </div>
       <div class="osd-center-content">
         <div class="osd-header-row">
-          <span class="osd-title-text" style="color: #cbd5e1;">Kecerahan Layar</span>
-          <span class="osd-fn-hint" style="color: #fbbf24; background: rgba(251, 191, 36, 0.15);">Fn + F6</span>
+          <span class="osd-title-text" style="color: #cbd5e1;">KECERAHAN</span>
         </div>
         <div class="osd-track">
           <div class="osd-bar-fill-amber"></div>
@@ -547,3 +623,4 @@
 
 </body>
 </html>
+

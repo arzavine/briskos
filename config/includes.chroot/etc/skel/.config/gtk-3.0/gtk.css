@@ -1,0 +1,30 @@
+/* BriskOS Night Glass Ghost Scrollbars */
+scrollbar {
+  background-color: transparent;
+  -GtkScrollbar-has-backward-stepper: 0;
+  -GtkScrollbar-has-forward-stepper: 0;
+}
+
+scrollbar trough {
+  background-color: transparent;
+  border: none;
+}
+
+scrollbar slider {
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 9999px;
+  background-color: rgba(148, 163, 184, 0.25);
+  border: none;
+  margin: 2px;
+}
+
+scrollbar slider:hover {
+  min-width: 9px;
+  min-height: 9px;
+  background-color: rgba(56, 189, 248, 0.6);
+}
+
+scrollbar slider:active {
+  background-color: #38bdf8;
+}

@@ -290,7 +290,7 @@ def run_gui(initial_payload):
             fraction = val / 100.0
 
             if htype == "volume":
-                self.lbl_title.set_text("Audio Master")
+                self.lbl_title.set_text("VOLUME")
                 if muted:
                     self.lbl_icon.set_text("🔇")
                     self.lbl_icon.get_style_context().remove_class("osd-icon")
@@ -305,14 +305,14 @@ def run_gui(initial_payload):
                     self.lbl_val.set_text(f"{val}%")
                     self.progress.get_style_context().remove_class("muted-bar")
             elif htype == "brightness":
-                self.lbl_title.set_text("Kecerahan Layar")
+                self.lbl_title.set_text("KECERAHAN")
                 self.lbl_icon.set_text("☀️")
                 self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
                 self.lbl_icon.get_style_context().add_class("osd-icon")
                 self.lbl_val.set_text(f"{val}%")
                 self.progress.get_style_context().remove_class("muted-bar")
             elif htype == "mic":
-                self.lbl_title.set_text("Mikrofon")
+                self.lbl_title.set_text("MIKROFON")
                 self.lbl_icon.set_text("🎙️" if not muted else "🚫")
                 self.lbl_val.set_text("MUTE" if muted else "AKTIF")
 
