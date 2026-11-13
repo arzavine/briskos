@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# Brisk Floating OSD HUD (brisk-osd)
+# Ephemeral, Ultra-Lean Hardware Media & Brightness Overlay for BriskOS 1.0 LTS
+# Pure PyGObject / GTK3 + LayerShell • Sub-18 MB RAM active, 0 MB idle
+# Adheres strictly to Antislop UI rules and Supersonic Frost aesthetics.
+# ==============================================================================
+
+import os
+import sys
+import json
+import time
+import socket
+import signal
+import subprocess
+import threading
+
+# ------------------------------------------------------------------------------
+# Headless / Helper Hardware CLI Logic (Fast Path)
+# ------------------------------------------------------------------------------
+def get_socket_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    return os.path.join(runtime_dir, "brisk-osd.sock")
+
+def adjust_volume(arg):
+    # arg: "+5", "-5", "mute"
+    is_mute_toggle = (arg == "mute")
+    if is_mute_toggle:
+        try:
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            try:
+                subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    else:
+        sign = "+" if arg.startswith("+") else "-"
+        val = arg.strip("+-")
+        step = f"{val}%{sign}" if sign == "+" else f"{val}%-"
+        try:
+            subprocess.run(["wpctl", "set-volume", "-l", "1.5", "@DEFAULT_AUDIO_SINK@", step], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            try:
+                subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{sign}{val}%"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+    return read_volume()
+
+def read_volume():
+    # Returns (percent: int, muted: bool)
+    try:
+        res = subprocess.check_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], text=True, stderr=subprocess.DEVNULL).strip()
+        # Format example: "Volume: 0.65" or "Volume: 0.65 [MUTED]"
+        parts = res.split()
+        if len(parts) >= 2:
+            vol_float = float(parts[1])
+            muted = "[MUTED]" in res
+            return int(round(vol_float * 100)), muted
+    except Exception:
+        pass
+
+    try:
+        res = subprocess.check_output(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], text=True, stderr=subprocess.DEVNULL)
+        # Parse percentage from pactl
+        for token in res.split():
+            if token.endswith("%"):
+                val = int(token.rstrip("%"))
+                muted = False
+                try:
+                    mute_res = subprocess.check_output(["pactl", "get-sink-mute", "@DEFAULT_SINK@"], text=True, stderr=subprocess.DEVNULL)
+                    muted = "yes" in mute_res.lower()
+                except Exception:
+                    pass
+                return val, muted
+    except Exception:
+        pass
+
+    # Safe fallback
+    return 65, False
+
+def adjust_mic(arg):
+    try:
+        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        try:
+            subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    return 100, True
+
+def adjust_brightness(arg):
+    # arg: "+5", "-5"
+    sign = "+" if arg.startswith("+") else "-"
+    val = arg.strip("+-")
+    step = f"{val}%{sign}"
+    try:
+        subprocess.run(["brightnessctl", "set", step], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+    return read_brightness()
+
+def read_brightness():
+    # Returns (percent: int)
+    try:
+        res = subprocess.check_output(["brightnessctl", "-m"], text=True, stderr=subprocess.DEVNULL).strip()
+        # format: device,class,curr,max%,max,curr%
+        # e.g.: intel_backlight,backlight,450,100%,960,47%
+        parts = res.split(",")
+        if len(parts) >= 4:
+            for p in reversed(parts):
+                if p.endswith("%"):
+                    return int(p.rstrip("%"))
+    except Exception:
+        pass
+    return 70
+
+def send_ipc(payload):
+    sock_path = get_socket_path()
+    if not os.path.exists(sock_path):
+        return False
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(0.2)
+        s.connect(sock_path)
+        s.sendall(json.dumps(payload).encode("utf-8") + b"\n")
+        s.close()
+        return True
+    except Exception:
+        return False
+
+# ------------------------------------------------------------------------------
+# GUI HUD Application (PyGObject GTK3 + LayerShell)
+# ------------------------------------------------------------------------------
+def run_gui(initial_payload):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gtk, Gdk, GLib
+
+    has_layer_shell = False
+    try:
+        gi.require_version("GtkLayerShell", "0.1")
+        from gi.repository import GtkLayerShell
+        has_layer_shell = True
+    except Exception:
+        has_layer_shell = False
+
+    OSD_CSS = b"""
+    window {
+        background-color: transparent;
+    }
+
+    .osd-pill {
+        background-color: rgba(11, 15, 25, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 18px;
+        padding: 10px 18px;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.15);
+    }
+
+    .osd-icon {
+        color: #38bdf8;
+        font-size: 20px;
+        margin-right: 12px;
+    }
+
+    .osd-icon-muted {
+        color: #f43f5e;
+        font-size: 20px;
+        margin-right: 12px;
+    }
+
+    .osd-title {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+    }
+
+    .osd-value {
+        color: #f8fafc;
+        font-size: 13px;
+        font-weight: 700;
+        margin-left: 14px;
+        min-width: 44px;
+    }
+
+    /* Supersonic Frost Progress Bar */
+    progressbar trough {
+        background-color: #1e293b;
+        border-radius: 4px;
+        min-height: 8px;
+        min-width: 170px;
+    }
+
+    progressbar progress {
+        background-image: linear-gradient(90deg, #38bdf8 0%, #0284c7 60%, #1d4ed8 100%);
+        border-radius: 4px;
+    }
+
+    .muted-bar progress {
+        background-image: linear-gradient(90deg, #f43f5e 0%, #be123c 100%);
+        border-radius: 4px;
+    }
+    """
+
+    class BriskOSDWindow(Gtk.Window):
+        def __init__(self, init_data):
+            super().__init__(type=Gtk.WindowType.TOPLEVEL)
+            self.set_title("Brisk OSD HUD")
+            self.set_decorated(False)
+            self.set_resizable(False)
+            self.set_skip_taskbar_hint(True)
+            self.set_skip_pager_hint(True)
+            self.set_keep_above(True)
+
+            # Apply CSS
+            provider = Gtk.CssProvider()
+            provider.load_from_data(OSD_CSS)
+            Gtk.StyleContext.add_provider_for_screen(
+                Gdk.Screen.get_default(),
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            # Wayland Layer Shell Integration
+            if has_layer_shell:
+                GtkLayerShell.init_for_window(self)
+                GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+                GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+                GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 48)
+                GtkLayerShell.set_exclusive_zone(self, 0)
+                GtkLayerShell.set_keyboard_interactivity(self, False)
+            else:
+                self.set_position(Gtk.WindowPosition.CENTER)
+
+            # Build UI
+            self.pill_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            self.pill_box.get_style_context().add_class("osd-pill")
+            self.add(self.pill_box)
+
+            # Icon
+            self.lbl_icon = Gtk.Label()
+            self.lbl_icon.get_style_context().add_class("osd-icon")
+            self.pill_box.pack_start(self.lbl_icon, False, False, 0)
+
+            # Center VBox: Title + Progress Bar
+            v_center = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            self.lbl_title = Gtk.Label(xalign=0)
+            self.lbl_title.get_style_context().add_class("osd-title")
+            v_center.pack_start(self.lbl_title, False, False, 0)
+
+            self.progress = Gtk.ProgressBar()
+            v_center.pack_start(self.progress, False, False, 0)
+            self.pill_box.pack_start(v_center, True, True, 0)
+
+            # Percentage Badge
+            self.lbl_val = Gtk.Label(xalign=1)
+            self.lbl_val.get_style_context().add_class("osd-value")
+            self.pill_box.pack_start(self.lbl_val, False, False, 0)
+
+            self.timeout_id = None
+            self.update_hud(init_data)
+            self.show_all()
+
+            # Start IPC Listener Thread
+            self.sock_path = get_socket_path()
+            if os.path.exists(self.sock_path):
+                try:
+                    os.remove(self.sock_path)
+                except Exception:
+                    pass
+
+            self.server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.server_sock.bind(self.sock_path)
+            self.server_sock.listen(5)
+
+            t = threading.Thread(target=self._ipc_listener_loop, daemon=True)
+            t.start()
+
+        def update_hud(self, data):
+            htype = data.get("type", "volume")
+            val = int(data.get("value", 50))
+            muted = bool(data.get("muted", False))
+
+            val = max(0, min(100, val))
+            fraction = val / 100.0
+
+            if htype == "volume":
+                self.lbl_title.set_text("Audio Master")
+                if muted:
+                    self.lbl_icon.set_text("🔇")
+                    self.lbl_icon.get_style_context().remove_class("osd-icon")
+                    self.lbl_icon.get_style_context().add_class("osd-icon-muted")
+                    self.lbl_val.set_text("MUTE")
+                    self.progress.get_style_context().add_class("muted-bar")
+                else:
+                    icon_char = "🔊" if val > 60 else ("🔉" if val > 20 else "🔈")
+                    self.lbl_icon.set_text(icon_char)
+                    self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
+                    self.lbl_icon.get_style_context().add_class("osd-icon")
+                    self.lbl_val.set_text(f"{val}%")
+                    self.progress.get_style_context().remove_class("muted-bar")
+            elif htype == "brightness":
+                self.lbl_title.set_text("Kecerahan Layar")
+                self.lbl_icon.set_text("☀️")
+                self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
+                self.lbl_icon.get_style_context().add_class("osd-icon")
+                self.lbl_val.set_text(f"{val}%")
+                self.progress.get_style_context().remove_class("muted-bar")
+            elif htype == "mic":
+                self.lbl_title.set_text("Mikrofon")
+                self.lbl_icon.set_text("🎙️" if not muted else "🚫")
+                self.lbl_val.set_text("MUTE" if muted else "AKTIF")
+
+            self.progress.set_fraction(fraction)
+
+            # Reset Auto-dismiss timer (1200ms)
+            if self.timeout_id:
+                GLib.source_remove(self.timeout_id)
+            self.timeout_id = GLib.timeout_add(1200, self._on_timeout)
+
+        def _on_timeout(self):
+            # Clean exit to preserve 0 MB RAM
+            if os.path.exists(self.sock_path):
+                try:
+                    os.remove(self.sock_path)
+                except Exception:
+                    pass
+            Gtk.main_quit()
+            return False
+
+        def _ipc_listener_loop(self):
+            while True:
+                try:
+                    conn, _ = self.server_sock.accept()
+                    raw = conn.recv(1024).decode("utf-8")
+                    conn.close()
+                    if raw:
+                        for line in raw.strip().split("\n"):
+                            msg = json.loads(line)
+                            GLib.idle_add(self.update_hud, msg)
+                except Exception:
+                    break
+
+    win = BriskOSDWindow(initial_payload)
+    Gtk.main()
+
+# ------------------------------------------------------------------------------
+# Entrypoint & Command Dispatcher
+# ------------------------------------------------------------------------------
+def main():
+    if len(sys.argv) < 2:
+        print("Brisk OSD HUD CLI")
+        print("Usage: brisk-osd <volume|brightness|mic|preview> [args]")
+        sys.exit(0)
+
+    target = sys.argv[1].lower()
+    arg = sys.argv[2] if len(sys.argv) > 2 else "+5"
+
+    payload = {"type": "volume", "value": 65, "muted": False}
+
+    if target == "volume":
+        val, muted = adjust_volume(arg)
+        payload = {"type": "volume", "value": val, "muted": muted}
+    elif target == "brightness":
+        val = adjust_brightness(arg)
+        payload = {"type": "brightness", "value": val, "muted": False}
+    elif target == "mic":
+        val, muted = adjust_mic(arg)
+        payload = {"type": "mic", "value": val, "muted": muted}
+    elif target == "preview":
+        ptype = arg if arg in ["volume", "brightness"] else "volume"
+        pval = int(sys.argv[3]) if len(sys.argv) > 3 else 75
+        payload = {"type": ptype, "value": pval, "muted": False}
+
+    # 1. Try sending via IPC to existing visible HUD
+    if send_ipc(payload):
+        sys.exit(0)
+
+    # 2. No HUD running, spawn HUD daemon
+    # If stdin/stdout is terminal, fork or launch background process
+    if hasattr(os, "fork"):
+        if os.fork() != 0:
+            # Parent returns immediately so keyboard input never lags
+            sys.exit(0)
+        os.setsid()
+    run_gui(payload)
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    main()

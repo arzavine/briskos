@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Brisk Floating OSD HUD - Hardware Media &amp; Brightness Overlay (Night Glass 1080p)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: #0b0f19;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      position: relative;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Desktop Wallpaper Layer
+     * ------------------------------------------------------------------------- */
+    .wallpaper-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      z-index: 0;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Desktop Icons Layer
+     * ------------------------------------------------------------------------- */
+    .desktop-icons {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      z-index: 5;
+    }
+    .desktop-icon-item {
+      width: 96px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .desktop-icon-item:hover {
+      background: rgba(30, 41, 59, 0.45);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .desktop-icon-graphic {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+    }
+    .desktop-icon-title {
+      font-size: 12px;
+      color: #f8fafc;
+      font-weight: 500;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+      line-height: 1.25;
+    }
+
+    /* -------------------------------------------------------------------------
+     * Active Background Window (Demonstrating OSD Floating Over Live App)
+     * ------------------------------------------------------------------------- */
+    .background-app-window {
+      position: absolute;
+      top: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1100px;
+      height: 600px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 10;
+      opacity: 0.95;
+    }
+    .app-titlebar {
+      height: 42px;
+      background: #070a12;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+    .app-titlebar-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .app-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .app-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot-close { background: #ef4444; }
+    .dot-min { background: #eab308; }
+    .dot-max { background: #22c55e; }
+
+    .app-content {
+      padding: 24px;
+      color: #64748b;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .code-accent { color: #38bdf8; }
+    .code-green { color: #4ade80; }
+    .code-comment { color: #475569; }
+
+    /* -------------------------------------------------------------------------
+     * FLOATING OSD HUD PILL (Center Stage Star Element)
+     * ------------------------------------------------------------------------- */
+    .osd-hud-container {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      z-index: 100;
+    }
+
+    .osd-pill {
+      width: 410px;
+      height: 64px;
+      background: rgba(11, 15, 25, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 24px rgba(56, 189, 248, 0.22);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      animation: floatIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .osd-icon-box {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #38bdf8;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .osd-center-content {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      gap: 6px;
+    }
+
+    .osd-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .osd-title-text {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .osd-fn-hint {
+      font-size: 10px;
+      font-weight: 600;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    .osd-track {
+      width: 100%;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .osd-bar-fill {
+      height: 100%;
+      width: 75%;
+      background: linear-gradient(90deg, #38bdf8 0%, #0284c7 60%, #1d4ed8 100%);
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+    }
+
+    .osd-value-badge {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f8fafc;
+      min-width: 44px;
+      text-align: right;
+      letter-spacing: -0.02em;
+    }
+
+    /* Second Showcase Pill: Brightness OSD */
+    .osd-pill-secondary {
+      width: 360px;
+      height: 52px;
+      background: rgba(11, 15, 25, 0.88);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 14px;
+      opacity: 0.85;
+    }
+    .osd-icon-box-amber {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fbbf24;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .osd-bar-fill-amber {
+      height: 100%;
+      width: 85%;
+      background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 60%, #d97706 100%);
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+    }
+
+    /* -------------------------------------------------------------------------
+     * Waybar Floating Taskbar (3-Island Architecture)
+     * ------------------------------------------------------------------------- */
+    .waybar-container {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      right: 8px;
+      height: 42px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+      pointer-events: none;
+    }
+    .waybar-container > * {
+      pointer-events: auto;
+    }
+
+    .modules-left, .modules-center, .modules-right {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      height: 42px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 6px;
+    }
+
+    .startmenu-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #38bdf8;
+      font-size: 16px;
+    }
+    .quick-launch-btn {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .taskbar-item {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #f8fafc;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+
+    .tray-module {
+      height: 32px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =======================================================================
+   * DESKTOP WALLPAPER SVG (Midnight Slate + Frost Wing Identity)
+   * ======================================================================= -->
+  <div class="wallpaper-container">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <defs>
+        <linearGradient id="baseFloorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#080d18"/>
+          <stop offset="50%" stop-color="#0b1120"/>
+          <stop offset="100%" stop-color="#0a0f1d"/>
+        </linearGradient>
+        <radialGradient id="luminousAmbient" cx="64%" cy="68%" r="58%" fx="64%" fy="68%">
+          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.12"/>
+          <stop offset="25%" stop-color="#38bdf8" stop-opacity="0.07"/>
+          <stop offset="55%" stop-color="#0ea5e9" stop-opacity="0.025"/>
+          <stop offset="80%" stop-color="#0369a1" stop-opacity="0.006"/>
+          <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="supersonicFrostGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="30%" stop-color="#38bdf8"/>
+          <stop offset="70%" stop-color="#0284c7"/>
+          <stop offset="100%" stop-color="#1d4ed8"/>
+        </linearGradient>
+      </defs>
+      <rect width="1920" height="1080" fill="url(#baseFloorGrad)"/>
+      <rect width="1920" height="1080" fill="url(#luminousAmbient)"/>
+      <g opacity="0.32" transform="translate(960, 480) scale(4.2) translate(-64, -64)">
+        <path d="M 34.30 93.29 C 44.20 85.04, 62.35 65.24, 92.88 34.72 C 88.75 44.62, 80.50 66.06, 66.48 79.27 C 55.75 89.17, 41.73 94.12, 34.30 93.29 Z" fill="url(#supersonicFrostGrad)"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- =======================================================================
+   * DESKTOP ICONS
+   * ======================================================================= -->
+  <div class="desktop-icons">
+    <div class="desktop-icon-item">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <rect x="6" y="8" width="36" height="34" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.8"/>
+          <path d="M16 16V12a8 8 0 0 1 16 0v4" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="24" cy="27" r="4" fill="#38bdf8"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Brisk Store</span>
+    </div>
+
+    <div class="desktop-icon-item">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <rect x="6" y="6" width="36" height="36" rx="8" fill="#0b0f19" stroke="#38bdf8" stroke-width="1.8"/>
+          <circle cx="24" cy="24" r="12" stroke="#0284c7" stroke-width="2" stroke-dasharray="2 3"/>
+          <path d="M 16 32 C 20 28, 28 20, 34 14" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="24" cy="24" r="3" fill="#38bdf8"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Control Center</span>
+    </div>
+
+    <div class="desktop-icon-item">
+      <div class="desktop-icon-graphic">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <rect x="5" y="7" width="38" height="34" rx="7" fill="#0b1120" stroke="#38bdf8" stroke-width="2"/>
+          <polyline points="14 19 22 25 14 31" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="26" y1="31" x2="35" y2="31" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="desktop-icon-title">Terminal</span>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+   * BACKGROUND ACTIVE APPLICATION (Foot Terminal / Cockpit)
+   * ======================================================================= -->
+  <div class="background-app-window">
+    <div class="app-titlebar">
+      <div class="app-titlebar-title">
+        <span>💻</span>
+        <span>user@briskos: ~/workspace/brisk-core — Foot Wayland Terminal</span>
+      </div>
+      <div class="app-controls">
+        <div class="app-dot dot-min"></div>
+        <div class="app-dot dot-max"></div>
+        <div class="app-dot dot-close"></div>
+      </div>
+    </div>
+    <div class="app-content">
+      <p class="code-comment">// BriskOS 1.0 LTS Kernel Telemetry &amp; Flight Center</p>
+      <p><span class="code-accent">brisk info</span></p>
+      <p class="code-green">✓ System Architecture: x86_64 Debian 12 (Bookworm)</p>
+      <p class="code-green">✓ Wayland Compositor: Labwc 0.6.5 (DRM Accelerated)</p>
+      <p class="code-green">✓ Memory Consumption: 184 MiB / 16384 MiB (Idle 1.1%)</p>
+      <p class="code-green">✓ Power Sentinel Profile: ⚡ Turbo Performance (AC Online)</p>
+      <p class="code-comment">// Hardware Media Event: Keypress Fn + F12 detected</p>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+   * THE FLOATING OSD HUD PILLS (Center Stage)
+   * ======================================================================= -->
+  <div class="osd-hud-container">
+    <!-- Primary Active OSD: Audio Master Volume -->
+    <div class="osd-pill">
+      <div class="osd-icon-box">
+        <span>🔊</span>
+      </div>
+      <div class="osd-center-content">
+        <div class="osd-header-row">
+          <span class="osd-title-text">Volume Master • PipeWire</span>
+          <span class="osd-fn-hint">Fn + F12</span>
+        </div>
+        <div class="osd-track">
+          <div class="osd-bar-fill"></div>
+        </div>
+      </div>
+      <div class="osd-value-badge">75%</div>
+    </div>
+
+    <!-- Secondary Complementary OSD: Screen Brightness -->
+    <div class="osd-pill-secondary">
+      <div class="osd-icon-box-amber">
+        <span>☀️</span>
+      </div>
+      <div class="osd-center-content">
+        <div class="osd-header-row">
+          <span class="osd-title-text" style="color: #cbd5e1;">Kecerahan Layar</span>
+          <span class="osd-fn-hint" style="color: #fbbf24; background: rgba(251, 191, 36, 0.15);">Fn + F6</span>
+        </div>
+        <div class="osd-track">
+          <div class="osd-bar-fill-amber"></div>
+        </div>
+      </div>
+      <div class="osd-value-badge" style="font-size: 13px;">85%</div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+   * WAYBAR BOTTOM FLOATING ISLANDS
+   * ======================================================================= -->
+  <div class="waybar-container">
+    <div class="modules-left">
+      <div class="startmenu-btn">❖</div>
+      <div class="quick-launch-btn">Store</div>
+      <div class="quick-launch-btn">⚙️</div>
+      <div class="quick-launch-btn">💿 Install</div>
+      <div class="quick-launch-btn">🌐</div>
+      <div class="quick-launch-btn">📁</div>
+      <div class="quick-launch-btn">💻</div>
+      <div class="quick-launch-btn">📝</div>
+    </div>
+
+    <div class="modules-center">
+      <div class="taskbar-item">
+        <span>💻</span>
+        <span>user@briskos: ~/workspace</span>
+      </div>
+    </div>
+
+    <div class="modules-right">
+      <div class="tray-module">
+        <span>🔊</span>
+        <span>75%</span>
+      </div>
+      <div class="tray-module">
+        <span>📶</span>
+        <span>Brisk-Secure-5G</span>
+      </div>
+      <div class="tray-module">
+        <span>⚡</span>
+        <span style="color: #38bdf8; font-weight: 600;">94%</span>
+      </div>
+      <div class="tray-module">
+        <span>09:05  Jum, 13 Nov</span>
+      </div>
+      <div class="tray-module">
+        <span>⏻</span>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

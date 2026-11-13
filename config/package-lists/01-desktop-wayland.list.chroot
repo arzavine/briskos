@@ -26,6 +26,8 @@ slurp
 xwayland
 wlr-randr
 gammastep
+gir1.2-gtklayershell-0.1
+libgtk-layer-shell0
 
 # Authentication Agent
 polkit-kde-agent-1

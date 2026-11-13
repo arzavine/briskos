@@ -30,7 +30,8 @@ show_help() {
 
     echo -e "  ${cyan}Control Center & Settings:${rst}"
     echo -e "    ${bold}brisk settings | control${rst}   Launch Brisk Control Center graphical settings hub"
-    echo -e "    ${bold}brisk channel [stable|beta]${rst} Show or set OS update release channel\n"
+    echo -e "    ${bold}brisk channel [stable|beta]${rst} Show or set OS update release channel"
+    echo -e "    ${bold}brisk osd <vol|bright> <arg>${rst} Trigger hardware floating OSD HUD\n"
 
     echo -e "  ${cyan}Power & Battery Sentinel:${rst}"
     echo -e "    ${bold}brisk profile [turbo|eco|balanced]${rst}   Switch active hardware power profile"
@@ -89,6 +90,14 @@ case "$cmd" in
             exec /usr/local/bin/brisk-channel "$@"
         else
             echo "brisk-channel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    osd|hud)
+        if [[ -x /usr/local/bin/brisk-osd ]]; then
+            exec /usr/local/bin/brisk-osd "$@"
+        else
+            echo "brisk-osd executable not found." >&2
             exit 1
         fi
         ;;
