@@ -71,9 +71,10 @@ for mdir in "${MIME_DIRS[@]}"; do
             echo -e "\n[Default Applications]" >> "$MIME_FILE"
         fi
 
-        # Remove existing association if present, then add under [Default Applications]
-        sed -i "/^${mime_type}=/d" "$MIME_FILE"
-        sed -i "/^\[Default Applications\]/a ${mime_type}=brisk-wine-runner.desktop;wine.desktop" "$MIME_FILE"
+        # Remove existing association if present (escape '/' by using '|' delimiter),
+        # then add under [Default Applications]
+        sed -i "\|^${mime_type}=|d" "$MIME_FILE"
+        sed -i "/^\[Default Applications\]/a ${mime_type}=brisk-wine-runner.desktop;wine.desktop;" "$MIME_FILE"
 
         # Ensure [Added Associations] section exists
         if ! grep -q "^\[Added Associations\]" "$MIME_FILE"; then
