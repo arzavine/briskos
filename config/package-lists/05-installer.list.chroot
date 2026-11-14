@@ -13,7 +13,7 @@ dosfstools
 e2fsprogs
 btrfs-progs
 xfsprogs
-kpmcore
+libkpmcore12
 
 # Bootloader & EFI Deployment Binaries
 efibootmgr

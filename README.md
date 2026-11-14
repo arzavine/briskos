@@ -229,7 +229,7 @@ All packages are structured against **Debian 13 (Trixie)** repository sections (
 
 * **`05-installer.list.chroot`**:
   * **Installer Framework**: `calamares`, `calamares-settings-debian`
-  * **Storage & Partitioning**: `gparted`, `dosfstools`, `e2fsprogs`, `btrfs-progs`, `xfsprogs`, `kpmcore`
+  * **Storage & Partitioning**: `gparted`, `dosfstools`, `e2fsprogs`, `btrfs-progs`, `xfsprogs`, `libkpmcore12`
   * **Bootloader & Firmware Utilities**: `efibootmgr`, `grub-efi-amd64-bin`, `grub-pc-bin`
   * **Image Extraction**: `squashfs-tools`
 

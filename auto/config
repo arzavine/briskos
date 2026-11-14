@@ -19,6 +19,6 @@ lb config noauto \
     --security true \
     --updates true \
     --backports false \
-    --debian-installer false \
+    --debian-installer none \
     --win32-loader false \
     "${@}"
