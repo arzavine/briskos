@@ -28,7 +28,7 @@ window#waybar {
 /* Primary Launcher: Apps */
 #custom-startmenu {
     background-color: #e9f1f4;
-    background-image: url("icons/apps.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/apps.svg");
     background-repeat: no-repeat;
     background-position: 10px center;
     background-size: 16px 16px;
@@ -49,7 +49,7 @@ window#waybar {
 /* Branded Action Pills: Store and Live Installer */
 #custom-store {
     background-color: #ffffff;
-    background-image: url("icons/store.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/store.svg");
     background-repeat: no-repeat;
     background-position: 9px center;
     background-size: 15px 15px;
@@ -69,7 +69,7 @@ window#waybar {
 
 #custom-installer {
     background-color: #d6e9ee;
-    background-image: url("icons/install.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/install.svg");
     background-repeat: no-repeat;
     background-position: 9px center;
     background-size: 15px 15px;
@@ -107,23 +107,23 @@ window#waybar {
 }
 
 #custom-files {
-    background-image: url("icons/files.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/files.svg");
 }
 
 #custom-browser {
-    background-image: url("icons/browser.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/browser.svg");
 }
 
 #custom-terminal {
-    background-image: url("icons/terminal.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/terminal.svg");
 }
 
 #custom-office {
-    background-image: url("icons/office.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/office.svg");
 }
 
 #custom-settings {
-    background-image: url("icons/settings.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/settings.svg");
 }
 
 #custom-files:hover,
@@ -208,40 +208,40 @@ window#waybar {
 }
 
 #pulseaudio {
-    background-image: url("icons/volume.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/volume.svg");
 }
 
 #pulseaudio.muted {
     color: #475569;
-    background-image: url("icons/volume-muted.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/volume-muted.svg");
 }
 
 #network {
-    background-image: url("icons/ethernet.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/ethernet.svg");
 }
 
 #network.wifi {
-    background-image: url("icons/wifi.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/wifi.svg");
 }
 
 #network.ethernet,
 #network.linked {
-    background-image: url("icons/ethernet.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/ethernet.svg");
 }
 
 #network.disconnected {
     color: #b91c1c;
-    background-image: url("icons/offline.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/offline.svg");
 }
 
 #battery {
-    background-image: url("icons/battery.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/battery.svg");
 }
 
 #battery.charging,
 #battery.plugged {
     color: #0c5b73;
-    background-image: url("icons/battery-charging.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/battery-charging.svg");
 }
 
 #battery.warning:not(.charging) {
@@ -286,7 +286,7 @@ window#waybar {
     border: 1px solid transparent;
     border-radius: 8px;
     background-color: transparent;
-    background-image: url("icons/power.svg");
+    background-image: url("/usr/share/briskos/waybar-icons/power.svg");
     background-repeat: no-repeat;
     background-position: center;
     background-size: 16px 16px;
