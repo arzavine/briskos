@@ -238,7 +238,8 @@ def wait_for_desktop_or_tty(
     """Wait for graphical desktop or detect parked tty1 auto-login console."""
     start = time.time()
     retried_enter = False
-    last_sha = ""
+    last_ratio = -1.0
+    last_colors = -1
     stable_count = 0
 
     while (time.time() - start) < timeout_sec:
@@ -270,18 +271,16 @@ def wait_for_desktop_or_tty(
             mon.screendump(tmp_ppm)
             return "desktop", analyze_ppm(tmp_ppm)
 
-        # Detect stable DRM fbcon console (e.g. tty1 auto-login prompt).
-        if (
-            elapsed >= 20
-            and int(stats["width"]) >= 1024
-            and int(stats["unique_colors"]) >= 120
-            and float(stats["non_black_ratio"]) >= 0.12
-        ):
-            if stats["sha256"] == last_sha:
+        # Detect stable DRM fbcon console even with a blinking text cursor.
+        ratio = float(stats["non_black_ratio"])
+        colors = int(stats["unique_colors"])
+        if elapsed >= 20 and int(stats["width"]) >= 1024 and colors >= 120 and ratio >= 0.12:
+            if abs(ratio - last_ratio) <= 0.01 and abs(colors - last_colors) <= 5:
                 stable_count += 1
             else:
                 stable_count = 0
-                last_sha = str(stats["sha256"])
+            last_ratio = ratio
+            last_colors = colors
 
             if stable_count >= 3:
                 print("[INFO] Stable tty1 console detected; ready for diag/labwc.", flush=True)
