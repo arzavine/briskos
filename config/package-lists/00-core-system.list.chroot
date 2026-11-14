@@ -22,6 +22,7 @@ libpam-systemd
 udev
 dbus
 dbus-user-session
+kbd
 zram-tools
 
 # Audio Stack (PipeWire modern audio engine)
