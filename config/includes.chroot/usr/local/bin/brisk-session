@@ -1,0 +1,56 @@
+#!/bin/sh
+# ==============================================================================
+# BriskOS 1.0 LTS Wayland Session Launcher (invoked by greetd / tuigreet)
+# ==============================================================================
+
+export XDG_SESSION_TYPE="wayland"
+export XDG_CURRENT_DESKTOP="wlroots"
+export GDK_BACKEND="wayland,x11"
+export QT_QPA_PLATFORM="wayland;xcb"
+export MOZ_ENABLE_WAYLAND="1"
+
+UID_NUM="$(id -u)"
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    if [ -d "/run/user/${UID_NUM}" ]; then
+        export XDG_RUNTIME_DIR="/run/user/${UID_NUM}"
+    else
+        export XDG_RUNTIME_DIR="/tmp/xdg-runtime-${UID_NUM}"
+        mkdir -p -m 0700 "$XDG_RUNTIME_DIR"
+    fi
+fi
+
+if [ -n "${XDG_SESSION_ID:-}" ] && command -v loginctl >/dev/null 2>&1; then
+    loginctl activate "$XDG_SESSION_ID" 2>/dev/null || true
+fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "${XDG_RUNTIME_DIR}/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+fi
+
+LOG_FILE="/tmp/brisk-session-${UID_NUM}.log"
+echo "=== BriskOS session start $(date -Is 2>/dev/null || date) tty=$(tty 2>/dev/null || echo none) XDG_SESSION_ID=${XDG_SESSION_ID:-} XDG_VTNR=${XDG_VTNR:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} DBUS=${DBUS_SESSION_BUS_ADDRESS:-} ===" >>"$LOG_FILE"
+
+attempt=1
+while [ "$attempt" -le 3 ]; do
+    start_ts="$(date +%s 2>/dev/null || echo 0)"
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
+        dbus-run-session -- labwc >>"$LOG_FILE" 2>&1
+        rc=$?
+    else
+        labwc >>"$LOG_FILE" 2>&1
+        rc=$?
+    fi
+    end_ts="$(date +%s 2>/dev/null || echo 10)"
+    elapsed=$((end_ts - start_ts))
+    echo "=== labwc attempt=${attempt} rc=${rc} elapsed=${elapsed}s ===" >>"$LOG_FILE"
+    if [ "$rc" -eq 0 ] || [ "$elapsed" -ge 4 ]; then
+        exit "$rc"
+    fi
+    if [ -n "${XDG_SESSION_ID:-}" ] && command -v loginctl >/dev/null 2>&1; then
+        loginctl activate "$XDG_SESSION_ID" 2>/dev/null || true
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+done
+
+exit "${rc:-1}"

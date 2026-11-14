@@ -9,9 +9,9 @@ vt = 7
 switch = true
 
 [default_session]
-command = "tuigreet --time --remember --cmd labwc"
+command = "tuigreet --time --remember --cmd /usr/local/bin/brisk-session"
 user = "_greetd"
 
 [initial_session]
-command = "if [ -z \"${DBUS_SESSION_BUS_ADDRESS:-}\" ] && command -v dbus-run-session >/dev/null 2>&1; then exec dbus-run-session -- labwc; fi; exec labwc"
+command = "/usr/local/bin/brisk-session"
 user = "user"

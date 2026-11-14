@@ -293,10 +293,10 @@ def wait_for_desktop_or_tty(
             mon.screendump(tmp_ppm)
             return "desktop", analyze_ppm(tmp_ppm)
 
-        # Detect stable DRM fbcon console even with a blinking text cursor.
+        # Detect stable DRM fbcon console or greeter fallback even with a blinking cursor.
         ratio = float(stats["non_black_ratio"])
         colors = int(stats["unique_colors"])
-        if elapsed >= 20 and int(stats["width"]) >= 1024 and colors >= 120 and ratio >= 0.12:
+        if elapsed >= 35 and int(stats["width"]) >= 800 and colors >= 20 and ratio >= 0.01:
             if abs(ratio - last_ratio) <= 0.01 and abs(colors - last_colors) <= 5:
                 stable_count += 1
             else:
@@ -304,8 +304,8 @@ def wait_for_desktop_or_tty(
             last_ratio = ratio
             last_colors = colors
 
-            if stable_count >= 3:
-                print("[INFO] Stable tty1 console detected; ready for diag/labwc.", flush=True)
+            if stable_count >= 4:
+                print("[INFO] Stable console/greeter detected; ready for diag/labwc.", flush=True)
                 return "tty", stats
 
     return "timeout", analyze_ppm(tmp_ppm)
@@ -320,19 +320,26 @@ def collect_tty_diagnostics_and_launch_labwc(
     save_png(tmp_ppm, out_dir / "01a-tty1-boot.png")
     print("[SHOT] 01a-tty1-boot.png", flush=True)
 
+    # Switch to tty1 in case greetd is currently parked on VT 7 (e.g. tuigreet).
+    mon.sendkey("ctrl-alt-f1", delay=0.5)
+    time.sleep(1.5)
+    mon.sendkey("ret", delay=0.3)
+    time.sleep(0.5)
+
     diag_cmds = [
         "id user 2>&1 | sudo tee -a /dev/ttyS0\n",
         "systemctl status greetd display-manager getty@tty1 getty@tty7 --no-pager 2>&1 | sudo tee -a /dev/ttyS0\n",
         "journalctl -u greetd -u live-config -b --no-pager 2>&1 | sudo tee -a /dev/ttyS0\n",
         "ls -la /etc/greetd /run/greetd /etc/systemd/system/greetd.service.d /etc/systemd/system/display-manager.service /etc/systemd/system/graphical.target.wants 2>&1 | sudo tee -a /dev/ttyS0\n",
+        "cat /run/greetd/config.toml /tmp/brisk-session-*.log 2>&1 | sudo tee -a /dev/ttyS0\n",
         "pgrep -a 'labwc|waybar|swaybg|greetd' 2>&1 | sudo tee -a /dev/ttyS0\n",
     ]
     for cmd in diag_cmds:
         mon.send_text(cmd, delay=0.03)
         time.sleep(1.5)
 
-    print("[INFO] Launching labwc from tty1...", flush=True)
-    mon.send_text("labwc\n", delay=0.04)
+    print("[INFO] Launching /usr/local/bin/brisk-session from tty1...", flush=True)
+    mon.send_text("/usr/local/bin/brisk-session\n", delay=0.04)
 
     for step in range(10):
         time.sleep(3.0)
@@ -357,7 +364,7 @@ def log_runtime_diagnostics(mon: QemuMonitor) -> None:
     cmd = (
         "{ id user; pgrep -a labwc; pgrep -a waybar; "
         "journalctl -u greetd -b --no-pager -n 40; "
-        "ls -la ~/.local /tmp/waybar.log; cat /tmp/waybar.log; "
+        "ls -la ~/.local /tmp/waybar.log; cat /tmp/waybar.log /tmp/brisk-session-*.log; "
         "} 2>&1 | sudo tee -a /dev/ttyS0 >/dev/null\n"
     )
     mon.send_text(cmd, delay=0.025)
