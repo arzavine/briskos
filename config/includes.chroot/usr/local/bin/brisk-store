@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# Brisk Store - Ultra-Lean Curated Application Hub for BriskOS
-# Pure PyGObject / GTK3 native desktop app adhering strictly to Antislop UI.
-# Sub-25 MB RSS RAM, <0.3s instantaneous startup, Night Glass aesthetics.
+# Brisk Store - Curated Application Hub for BriskOS 1.0 LTS
+# Pure PyGObject / GTK3 native desktop app adhering to Morning Breeze & Antislop.
+# Inline uniform-stroke SVG icons, explicit UI states, offline-safe Live mode.
 # ==============================================================================
 
 import os
@@ -16,153 +16,263 @@ import threading
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Pango", "1.0")
-from gi.repository import Gtk, Gdk, GLib, Pango
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango
 
 # ------------------------------------------------------------------------------
-# Application Constants & Styling Palette (Night Glass Design System)
+# Application Constants & Morning Breeze Design System CSS
 # ------------------------------------------------------------------------------
 APP_ID = "brisk-store"
 APP_NAME = "Brisk Store"
 APP_VERSION = "1.0.0"
 
-NIGHT_GLASS_CSS = b"""
-/* Window Base */
+MORNING_BREEZE_CSS = b"""
+/* Base Reset & Adwaita Isolation */
+window,
+headerbar,
+headerbar button,
+list,
+listbox,
+row,
+scrolledwindow,
+viewport,
+flowbox,
+flowboxchild,
+button,
+entry,
+searchentry {
+    background-image: none;
+    box-shadow: none;
+}
+
 window {
-    background-color: #0b1120;
-    color: #f8fafc;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Cantarell, "Helvetica Neue", sans-serif;
+    background-color: #F5F7F7;
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", "Cantarell", "Segoe UI", sans-serif;
 }
 
 /* HeaderBar */
 headerbar {
-    background-color: #0b1120;
-    border-bottom: 1px solid #1e293b;
+    background-color: #E9F1F4;
+    border-bottom: 1px solid #D5E2E7;
     padding: 8px 14px;
-    box-shadow: none;
+    color: #0F172A;
 }
 
 headerbar .title {
-    color: #f8fafc;
+    color: #0F172A;
     font-weight: 700;
     font-size: 15px;
 }
 
 headerbar .subtitle {
-    color: #38bdf8;
+    color: #475569;
     font-size: 11px;
     font-weight: 500;
 }
 
 headerbar button {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
     border-radius: 8px;
-    color: #94a3b8;
-    padding: 6px 12px;
+    color: #0F172A;
+    padding: 6px 10px;
     transition: all 120ms ease;
 }
 
 headerbar button:hover {
-    background-color: #1e293b;
-    color: #38bdf8;
-    border-color: #38bdf8;
+    background-color: #D6E9EE;
+    color: #0C5B73;
+    border-color: #0E7490;
+}
+
+headerbar button:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
 }
 
 /* Search Entry */
 searchentry {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
+    background-color: #FFFFFF;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    color: #f8fafc;
+    color: #0F172A;
     padding: 6px 12px;
-    min-width: 280px;
-    transition: all 120ms ease;
+    min-width: 260px;
+    transition: border-color 120ms ease;
 }
 
 searchentry:focus {
-    border-color: #38bdf8;
-    background-color: #111c33;
-    box-shadow: 0 0 0 1px #38bdf8;
+    border: 2px solid #0E7490;
+    background-color: #FFFFFF;
 }
 
 /* Sidebar Box */
 .sidebar-box {
-    background-color: #0f172a;
-    border-right: 1px solid #1e293b;
+    background-color: #E9F1F4;
+    border-right: 1px solid #D5E2E7;
     padding: 14px 10px;
 }
 
 .sidebar-title {
-    color: #94a3b8;
-    font-size: 10px;
+    color: #475569;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.06em;
     padding: 8px 10px 4px 10px;
 }
 
 .sidebar-button {
     background-color: transparent;
     border: 1px solid transparent;
+    border-left: 3px solid transparent;
     border-radius: 8px;
     padding: 8px 10px;
     margin: 2px 0px;
-    transition: all 120ms ease;
+    transition: background-color 120ms ease;
 }
 
 .sidebar-button:hover {
-    background-color: #162238;
+    background-color: #DCE9EE;
+}
+
+.sidebar-button:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 1px;
 }
 
 .sidebar-button.active {
-    background-color: #1e293b;
-    border-left: 3px solid #38bdf8;
+    background-color: #D6E9EE;
+    border-left: 3px solid #0E7490;
 }
 
 .sidebar-btn-label {
-    color: #94a3b8;
+    color: #475569;
     font-size: 13px;
     font-weight: 500;
 }
 
+.sidebar-button:hover .sidebar-btn-label {
+    color: #0F172A;
+}
+
 .sidebar-button.active .sidebar-btn-label {
-    color: #f8fafc;
+    color: #0F172A;
     font-weight: 600;
 }
 
 .sidebar-badge {
-    background-color: #1e293b;
-    color: #38bdf8;
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    color: #0C5B73;
     border-radius: 10px;
-    padding: 2px 8px;
+    padding: 1px 8px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
-/* Content Area */
+/* Dual Engine Banner in Sidebar */
+.engine-banner {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 10px;
+}
+
+.engine-banner-title {
+    color: #0F172A;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.engine-banner-desc {
+    color: #475569;
+    font-size: 11px;
+}
+
+/* Main Content Area */
 .content-area {
-    background-color: #0b1120;
-    padding: 16px 20px;
+    background-color: #F5F7F7;
+    padding: 18px 22px;
 }
 
 .section-header {
-    color: #f8fafc;
-    font-size: 18px;
+    color: #0F172A;
+    font-size: 19px;
     font-weight: 700;
 }
 
 .section-desc {
-    color: #94a3b8;
-    font-size: 12px;
+    color: #475569;
+    font-size: 13px;
 }
 
 .section-count {
-    color: #38bdf8;
+    color: #0C5B73;
     font-size: 12px;
     font-weight: 600;
 }
 
-/* Flowbox & Cards */
+/* Error / Notice Banner */
+.notice-banner-error {
+    background-color: #FEE2E2;
+    border: 1px solid #FCA5A5;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #991B1B;
+}
+
+.notice-banner-warn {
+    background-color: #FEF3C7;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #9A3412;
+}
+
+.notice-banner-text {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.btn-banner {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.btn-banner:hover {
+    background-color: #D6E9EE;
+    border-color: #0E7490;
+    color: #0C5B73;
+}
+
+/* Empty & Loading State Cards */
+.state-card {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 12px;
+    padding: 28px 32px;
+}
+
+.state-title {
+    color: #0F172A;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.state-desc {
+    color: #475569;
+    font-size: 13px;
+}
+
+/* Flowbox & App Cards */
 flowbox {
     background-color: transparent;
 }
@@ -177,51 +287,57 @@ flowboxchild:selected {
     background-color: transparent;
 }
 
+flowboxchild:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
 .app-card {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
     padding: 14px 16px;
-    transition: all 150ms ease-in-out;
+    transition: border-color 120ms ease;
 }
 
 .app-card:hover {
-    border-color: #38bdf8;
-    background-color: #131d33;
+    border-color: #0E7490;
 }
 
 .app-card-name {
-    color: #f8fafc;
-    font-size: 13px;
+    color: #0F172A;
+    font-size: 14px;
     font-weight: 700;
 }
 
 .app-card-summary {
-    color: #94a3b8;
+    color: #475569;
     font-size: 12px;
     line-height: 1.35;
 }
 
 .app-card-size {
-    color: #94a3b8;
+    color: #475569;
     font-size: 11px;
     font-weight: 500;
 }
 
 /* Badges */
 .badge-category {
-    background-color: #1e293b;
-    color: #94a3b8;
+    background-color: #F1F5F9;
+    border: 1px solid #CBD5E1;
+    color: #475569;
     border-radius: 6px;
     padding: 2px 7px;
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .badge-flathub {
-    background-color: rgba(56, 189, 248, 0.12);
-    border: 1px solid rgba(56, 189, 248, 0.4);
-    color: #38bdf8;
+    background-color: #E0F2FE;
+    border: 1px solid #7DD3FC;
+    color: #0C5B73;
     border-radius: 6px;
     padding: 2px 7px;
     font-size: 10px;
@@ -229,68 +345,83 @@ flowboxchild:selected {
 }
 
 .badge-debian {
-    background-color: rgba(16, 185, 129, 0.12);
-    border: 1px solid rgba(16, 185, 129, 0.4);
-    color: #34d399;
+    background-color: #DCFCE7;
+    border: 1px solid #86EFAC;
+    color: #166534;
     border-radius: 6px;
     padding: 2px 7px;
     font-size: 10px;
     font-weight: 600;
 }
 
-/* Action Buttons */
+/* Compact Proportional Action Buttons */
 .btn-install {
-    background-color: #38bdf8;
-    color: #0b1120;
-    border-radius: 7px;
-    font-weight: 700;
+    background-color: #0E7490;
+    color: #FFFFFF;
+    border: 1px solid #0E7490;
+    border-radius: 8px;
+    font-weight: 600;
     font-size: 12px;
     min-height: 30px;
-    padding: 6px 16px;
-    border: none;
-    transition: all 120ms ease;
+    padding: 5px 14px;
+    transition: background-color 120ms ease;
 }
 
 .btn-install:hover {
-    background-color: #7dd3fc;
+    background-color: #0C627A;
+    border-color: #0C627A;
+}
+
+.btn-install:focus {
+    outline: 2px solid #0F172A;
+    outline-offset: 2px;
 }
 
 .btn-remove {
-    background-color: transparent;
-    color: #f87171;
-    border: 1px solid rgba(248, 113, 113, 0.5);
-    border-radius: 7px;
+    background-color: #FFFFFF;
+    color: #B91C1C;
+    border: 1px solid #FCA5A5;
+    border-radius: 8px;
     font-weight: 600;
     font-size: 12px;
-    padding: 5px 14px;
-    transition: all 120ms ease;
+    min-height: 30px;
+    padding: 5px 12px;
+    transition: background-color 120ms ease;
 }
 
 .btn-remove:hover {
-    background-color: rgba(239, 68, 68, 0.15);
-    border-color: #ef4444;
-    color: #fca5a5;
+    background-color: #FEE2E2;
+    border-color: #F87171;
+    color: #991B1B;
+}
+
+.btn-remove:focus {
+    outline: 2px solid #991B1B;
+    outline-offset: 2px;
 }
 
 .btn-busy {
-    background-color: #1e293b;
-    color: #94a3b8;
-    border: 1px solid #334155;
-    border-radius: 7px;
-    font-size: 11px;
+    background-color: #E9F1F4;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    min-height: 30px;
     padding: 5px 12px;
 }
 
 /* Footer & Status Bar */
 .status-bar-box {
-    background-color: #0f172a;
-    border-top: 1px solid #1e293b;
-    padding: 6px 16px;
+    background-color: #E9F1F4;
+    border-top: 1px solid #D5E2E7;
+    padding: 7px 16px;
 }
 
 .status-label {
-    color: #94a3b8;
+    color: #475569;
     font-size: 11px;
+    font-weight: 500;
 }
 
 /* Scrollbars */
@@ -299,36 +430,133 @@ scrollbar {
 }
 
 scrollbar slider {
-    background-color: #1e293b;
+    background-color: rgba(71, 85, 105, 0.28);
     border-radius: 6px;
     min-width: 6px;
     min-height: 6px;
 }
 
 scrollbar slider:hover {
-    background-color: #38bdf8;
-}
-
-/* Dual Engine Banner in Sidebar */
-.engine-banner {
-    background-color: #111a2e;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
-    padding: 10px;
-    margin-top: 12px;
-}
-
-.engine-banner-title {
-    color: #38bdf8;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.engine-banner-desc {
-    color: #94a3b8;
-    font-size: 10px;
+    background-color: #0E7490;
 }
 """
+
+# ------------------------------------------------------------------------------
+# Inline Uniform-Stroke SVG Icon Registry (Zero Emojis)
+# ------------------------------------------------------------------------------
+SVG_PATHS = {
+    "brand": (
+        '<path d="M6 8h12l1.2 12a2 2 0 0 1-2 2.2H6.8a2 2 0 0 1-2-2.2L6 8z"/>'
+        '<path d="M9 8V6a3 3 0 0 1 6 0v2"/>'
+        '<path d="M9.5 14.5l5-3.5"/>'
+    ),
+    "all": (
+        '<rect x="3" y="3" width="7" height="7" rx="1.5"/>'
+        '<rect x="14" y="3" width="7" height="7" rx="1.5"/>'
+        '<rect x="3" y="14" width="7" height="7" rx="1.5"/>'
+        '<rect x="14" y="14" width="7" height="7" rx="1.5"/>'
+    ),
+    "installed": (
+        '<rect x="3" y="3" width="18" height="18" rx="3"/>'
+        '<polyline points="8 12 11 15 16 9"/>'
+    ),
+    "featured": (
+        '<path d="M19 21l-7-4.5L5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>'
+    ),
+    "internet": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<line x1="3" y1="12" x2="21" y2="12"/>'
+        '<path d="M12 3a14.5 14.5 0 0 1 3.5 9 14.5 14.5 0 0 1-3.5 9 14.5 14.5 0 0 1-3.5-9A14.5 14.5 0 0 1 12 3z"/>'
+    ),
+    "development": (
+        '<polyline points="16 18 22 12 16 6"/>'
+        '<polyline points="8 6 2 12 8 18"/>'
+        '<line x1="14" y1="4" x2="10" y2="20"/>'
+    ),
+    "office": (
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+        '<polyline points="14 2 14 8 20 8"/>'
+        '<line x1="8" y1="13" x2="16" y2="13"/>'
+        '<line x1="8" y1="17" x2="14" y2="17"/>'
+    ),
+    "media": (
+        '<rect x="2" y="4" width="20" height="16" rx="2"/>'
+        '<polygon points="10 9 16 12 10 15 10 9"/>'
+    ),
+    "gaming": (
+        '<rect x="2" y="6" width="20" height="12" rx="4"/>'
+        '<line x1="6" y1="12" x2="10" y2="12"/>'
+        '<line x1="8" y1="10" x2="8" y2="14"/>'
+        '<circle cx="15.5" cy="10.5" r="0.8"/>'
+        '<circle cx="17.5" cy="13.5" r="0.8"/>'
+    ),
+    "utilities": (
+        '<line x1="4" y1="21" x2="4" y2="14"/>'
+        '<line x1="4" y1="10" x2="4" y2="3"/>'
+        '<line x1="12" y1="21" x2="12" y2="12"/>'
+        '<line x1="12" y1="8" x2="12" y2="3"/>'
+        '<line x1="20" y1="21" x2="20" y2="16"/>'
+        '<line x1="20" y1="12" x2="20" y2="3"/>'
+        '<line x1="2" y1="14" x2="6" y2="14"/>'
+        '<line x1="10" y1="8" x2="14" y2="8"/>'
+        '<line x1="18" y1="16" x2="22" y2="16"/>'
+    ),
+    "package": (
+        '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'
+        '<polyline points="3.3 7 12 12 20.7 7"/>'
+        '<line x1="12" y1="22" x2="12" y2="12"/>'
+    ),
+    "install": (
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+        '<polyline points="7 10 12 15 17 10"/>'
+        '<line x1="12" y1="15" x2="12" y2="3"/>'
+    ),
+    "remove": (
+        '<polyline points="3 6 5 6 21 6"/>'
+        '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'
+        '<path d="M10 11v6"/>'
+        '<path d="M14 11v6"/>'
+        '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'
+    ),
+    "refresh": (
+        '<polyline points="23 4 23 10 17 10"/>'
+        '<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'
+    ),
+    "search": (
+        '<circle cx="11" cy="11" r="7"/>'
+        '<line x1="21" y1="21" x2="16.65" y2="16.65"/>'
+    ),
+    "alert": (
+        '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+        '<line x1="12" y1="9" x2="12" y2="13"/>'
+        '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+    ),
+}
+
+def make_svg_pixbuf(name, color="#475569", size=16):
+    path_data = SVG_PATHS.get(name, SVG_PATHS["package"])
+    svg_xml = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" '
+        f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+        f'{path_data}</svg>'
+    ).encode("utf-8")
+    try:
+        loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+        loader.set_size(size, size)
+        loader.write(svg_xml)
+        loader.close()
+        return loader.get_pixbuf()
+    except Exception:
+        return None
+
+def svg_icon(name, color="#475569", size=16):
+    pixbuf = make_svg_pixbuf(name, color=color, size=size)
+    if pixbuf is not None:
+        return Gtk.Image.new_from_pixbuf(pixbuf)
+    img = Gtk.Image.new_from_icon_name("application-x-executable", Gtk.IconSize.MENU)
+    img.set_pixel_size(size)
+    return img
 
 # ------------------------------------------------------------------------------
 # Helpers: File & Path Resolution
@@ -356,8 +584,19 @@ def resolve_backend_path():
             return path
     return "/usr/local/bin/brisk-store-backend"
 
+def is_live_session():
+    if os.path.isdir("/run/live/medium") or os.path.isdir("/run/live"):
+        return True
+    try:
+        with open("/proc/cmdline", "r", encoding="utf-8", errors="ignore") as f:
+            if "boot=live" in f.read():
+                return True
+    except Exception:
+        pass
+    return False
+
 # ------------------------------------------------------------------------------
-# Fallback Builtin Curated Catalog (Safety net if file is missing)
+# Fallback Builtin Curated Catalog (Offline safety net if catalog.json missing)
 # ------------------------------------------------------------------------------
 FALLBACK_CATALOG = [
     {
@@ -375,7 +614,7 @@ FALLBACK_CATALOG = [
     {
         "id": "visual-studio-code",
         "name": "Visual Studio Code",
-        "summary": "Editor kode canggih dan terekstensibel untuk para pengembang",
+        "summary": "Editor kode lengkap dengan ekstensi untuk pengembang",
         "category": "development",
         "source": "flathub",
         "package": "com.visualstudio.code",
@@ -387,7 +626,7 @@ FALLBACK_CATALOG = [
     {
         "id": "vlc",
         "name": "VLC Media Player",
-        "summary": "Pemutar multimedia universal yang ringan dan bebas format",
+        "summary": "Pemutar multimedia ringan yang mendukung beragam format",
         "category": "media",
         "source": "apt",
         "package": "vlc",
@@ -399,7 +638,7 @@ FALLBACK_CATALOG = [
     {
         "id": "gimp",
         "name": "GIMP Image Editor",
-        "summary": "Manipulasi grafis dan raster profesional tingkat lanjut",
+        "summary": "Penyuntingan grafis dan foto profesional sumber terbuka",
         "category": "media",
         "source": "apt",
         "package": "gimp",
@@ -415,13 +654,12 @@ FALLBACK_CATALOG = [
 # ------------------------------------------------------------------------------
 def create_app_icon(icon_name, category):
     theme = Gtk.IconTheme.get_default()
-    size = 42
 
-    # Check if direct icon name exists
-    if icon_name and theme.has_icon(icon_name):
-        return Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND)
+    if icon_name and theme is not None and theme.has_icon(icon_name):
+        img = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND)
+        img.set_pixel_size(40)
+        return img
 
-    # Specific common alternatives
     alt_map = {
         "google-chrome": ["google-chrome-stable", "browser", "web-browser"],
         "com.visualstudio.code": ["visual-studio-code", "vscode", "text-editor"],
@@ -431,25 +669,30 @@ def create_app_icon(icon_name, category):
         "obsidian": ["accessories-text-editor", "text-editor"],
         "steam": ["steam-launcher", "games"],
     }
-    for alt in alt_map.get(icon_name, []):
-        if theme.has_icon(alt):
-            return Gtk.Image.new_from_icon_name(alt, Gtk.IconSize.DND)
+    if theme is not None:
+        for alt in alt_map.get(icon_name, []):
+            if theme.has_icon(alt):
+                img = Gtk.Image.new_from_icon_name(alt, Gtk.IconSize.DND)
+                img.set_pixel_size(40)
+                return img
 
-    # Category-based fallback
-    cat_map = {
-        "internet": "web-browser",
-        "development": "applications-development",
-        "coding": "applications-development",
-        "office": "x-office-document",
-        "media": "applications-multimedia",
-        "gaming": "applications-games",
-        "utilities": "applications-system",
-    }
-    cat_icon = cat_map.get(category.lower(), "application-x-executable")
-    if theme.has_icon(cat_icon):
-        return Gtk.Image.new_from_icon_name(cat_icon, Gtk.IconSize.DND)
+        cat_map = {
+            "internet": "web-browser",
+            "development": "applications-development",
+            "coding": "applications-development",
+            "office": "x-office-document",
+            "media": "applications-multimedia",
+            "gaming": "applications-games",
+            "utilities": "applications-system",
+        }
+        cat_icon = cat_map.get(category.lower(), "application-x-executable")
+        if theme.has_icon(cat_icon):
+            img = Gtk.Image.new_from_icon_name(cat_icon, Gtk.IconSize.DND)
+            img.set_pixel_size(40)
+            return img
 
-    return Gtk.Image.new_from_icon_name("application-x-executable", Gtk.IconSize.DND)
+    svg_key = category.lower() if category.lower() in SVG_PATHS else "package"
+    return svg_icon(svg_key, color="#0E7490", size=38)
 
 # ------------------------------------------------------------------------------
 # Main Application Window
@@ -457,41 +700,54 @@ def create_app_icon(icon_name, category):
 class BriskStoreWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title=APP_NAME)
-        self.set_default_size(920, 620)
+        self.set_default_size(940, 640)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_icon_name(APP_ID)
 
         self.catalog = []
+        self.catalog_warning = None
         self.installed_ids = set()
-        self.active_status = "all"        # "all" or "installed"
-        self.active_category = "featured" # "featured", "all", "internet", "development", "office", "media", "gaming", "utilities"
+        self.active_status = "all"          # "all" or "installed"
+        self.active_category = "featured"   # "featured", "internet", "development", "office", "media", "gaming", "utilities"
         self.search_query = ""
+        self.is_loading = True
+        self._did_initial_focus = False
 
         self.app_cards = []
         self.app_buttons = {}
         self.sidebar_buttons = {}
+        self.sidebar_icons = {}             # key -> (Gtk.Image, svg_name)
 
         self.load_catalog()
         self.setup_ui()
         self.connect("destroy", self.on_destroy)
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("map-event", self.on_first_map)
 
-        # Trigger background inventory of installed apps
+        # Trigger background inventory of installed apps without blocking startup
         threading.Thread(target=self.async_fetch_installed_apps, daemon=True).start()
 
     # --------------------------------------------------------------------------
-    # Catalog Loading
+    # Catalog Loading (Local & Offline-Safe)
     # --------------------------------------------------------------------------
     def load_catalog(self):
         cat_file = resolve_catalog_path()
         if os.path.isfile(cat_file):
             try:
                 with open(cat_file, "r", encoding="utf-8") as f:
-                    self.catalog = json.load(f)
+                    data = json.load(f)
+                if isinstance(data, list):
+                    self.catalog = data
+                else:
+                    self.catalog = FALLBACK_CATALOG
+                    self.catalog_warning = f"Format katalog {cat_file} tidak valid; menggunakan katalog cadangan offline."
             except Exception as e:
                 print(f"[Brisk Store] Warning: Failed to parse catalog {cat_file}: {e}", file=sys.stderr)
                 self.catalog = FALLBACK_CATALOG
+                self.catalog_warning = "Katalog utama tidak dapat dibaca; menampilkan katalog cadangan offline."
         else:
             self.catalog = FALLBACK_CATALOG
+            self.catalog_warning = "Katalog sistem belum ditemukan; menampilkan katalog cadangan offline."
 
     # --------------------------------------------------------------------------
     # UI Setup
@@ -501,88 +757,86 @@ class BriskStoreWindow(Gtk.Window):
         header = Gtk.HeaderBar()
         header.set_show_close_button(True)
         header.set_title(APP_NAME)
-        header.set_subtitle("Pusat Aplikasi Modern & Ringan BriskOS")
+        header.set_subtitle("Pusat Aplikasi Ringan BriskOS")
 
-        # Left branding icon
-        brand_icon = Gtk.Image.new_from_icon_name(APP_ID, Gtk.IconSize.LARGE_TOOLBAR)
+        brand_icon = svg_icon("brand", color="#0E7490", size=20)
         header.pack_start(brand_icon)
 
-        # Center Search Entry
+        # Search Entry (never auto-focused on launch)
         self.search_entry = Gtk.SearchEntry()
-        self.search_entry.set_placeholder_text("Cari aplikasi di Brisk Store...")
-        self.search_entry.set_width_chars(34)
+        self.search_entry.set_placeholder_text("Cari aplikasi (Ctrl+F)...")
+        self.search_entry.set_width_chars(28)
+        self.search_entry.get_accessible().set_name("Cari aplikasi di Brisk Store")
         self.search_entry.connect("search-changed", self.on_search_changed)
         header.pack_end(self.search_entry)
 
-        # Refresh button
-        btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
+        # Refresh Button
+        btn_refresh = Gtk.Button()
+        btn_refresh.set_image(svg_icon("refresh", color="#0F172A", size=16))
         btn_refresh.set_tooltip_text("Segarkan status aplikasi dan katalog")
+        btn_refresh.get_accessible().set_name("Segarkan status aplikasi")
         btn_refresh.connect("clicked", self.on_refresh_clicked)
         header.pack_end(btn_refresh)
 
         self.set_titlebar(header)
 
-        # 2. Main Layout Container (Vertical Box)
+        # 2. Main Layout Container
         root_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(root_vbox)
 
-        # Main Body: Horizontal Box (Sidebar + Content)
         body_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         root_vbox.pack_start(body_hbox, True, True, 0)
 
         # ----------------------------------------------------------------------
-        # Sidebar
+        # Left Sidebar
         # ----------------------------------------------------------------------
         sidebar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         sidebar_box.get_style_context().add_class("sidebar-box")
-        sidebar_box.set_size_request(230, -1)
+        sidebar_box.set_size_request(232, -1)
         body_hbox.pack_start(sidebar_box, False, False, 0)
 
-        # Section: STATUS
         lbl_status_sec = Gtk.Label(label="STATUS", xalign=0)
         lbl_status_sec.get_style_context().add_class("sidebar-title")
         sidebar_box.pack_start(lbl_status_sec, False, False, 0)
 
-        self.btn_status_all = self.create_sidebar_item("status_all", "Semua", self.on_status_clicked, "all")
+        self.btn_status_all = self.create_sidebar_item("status_all", "all", "Semua", self.on_status_clicked, "all")
         self.lbl_all_count = Gtk.Label(label=str(len(self.catalog)))
         self.lbl_all_count.get_style_context().add_class("sidebar-badge")
-        self.btn_status_all.pack_end(self.lbl_all_count, False, False, 0)
+        self.btn_status_all.get_child().pack_end(self.lbl_all_count, False, False, 0)
         sidebar_box.pack_start(self.btn_status_all, False, False, 0)
 
-        self.btn_status_installed = self.create_sidebar_item("status_installed", "Terpasang", self.on_status_clicked, "installed")
+        self.btn_status_installed = self.create_sidebar_item("status_installed", "installed", "Terpasang", self.on_status_clicked, "installed")
         self.lbl_installed_count = Gtk.Label(label="0")
         self.lbl_installed_count.get_style_context().add_class("sidebar-badge")
-        self.btn_status_installed.pack_end(self.lbl_installed_count, False, False, 0)
+        self.btn_status_installed.get_child().pack_end(self.lbl_installed_count, False, False, 0)
         sidebar_box.pack_start(self.btn_status_installed, False, False, 0)
 
-        # Separator
         sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep.set_margin_top(8)
         sep.set_margin_bottom(8)
         sidebar_box.pack_start(sep, False, False, 0)
 
-        # Section: KATEGORI
         lbl_cat_sec = Gtk.Label(label="KATEGORI", xalign=0)
         lbl_cat_sec.get_style_context().add_class("sidebar-title")
         sidebar_box.pack_start(lbl_cat_sec, False, False, 0)
 
         self.categories_def = [
-            ("featured", "Unggulan", "Pilihan aplikasi terbaik dan esensial untuk BriskOS"),
-            ("internet", "Internet", "Peramban web, aplikasi pesan, dan komunikasi"),
-            ("development", "Coding", "Editor kode, kompiler, dan perkakas developer"),
-            ("office", "Office", "Paket perkantoran, catatan, dan pengolah dokumen"),
-            ("media", "Media", "Pemutar audio-video, desain grafis, dan multimedia"),
-            ("gaming", "Gaming", "Peluncur gim, emulator, dan perkakas gaming"),
-            ("utilities", "Utilitas", "Perkakas sistem, pemeliharaan, dan utilitas"),
+            ("featured", "featured", "Unggulan", "Pilihan aplikasi esensial untuk penggunaan sehari-hari"),
+            ("internet", "internet", "Internet", "Peramban web, aplikasi pesan, dan komunikasi"),
+            ("development", "development", "Coding", "Editor kode, kompiler, dan perkakas pengembang"),
+            ("office", "office", "Office", "Paket perkantoran, catatan, dan pengolah dokumen"),
+            ("media", "media", "Media", "Pemutar audio-video, desain grafis, dan multimedia"),
+            ("gaming", "gaming", "Gaming", "Peluncur gim, emulator, dan perkakas bermain"),
+            ("utilities", "utilities", "Utilitas", "Perkakas sistem, pemeliharaan, dan utilitas"),
         ]
 
-        for cat_key, cat_label, _ in self.categories_def:
-            btn = self.create_sidebar_item(f"cat_{cat_key}", cat_label, self.on_category_clicked, cat_key)
+        for cat_key, icon_key, cat_label, _ in self.categories_def:
+            btn = self.create_sidebar_item(f"cat_{cat_key}", icon_key, cat_label, self.on_category_clicked, cat_key)
             sidebar_box.pack_start(btn, False, False, 0)
 
-        # Active item styling init
-        self.btn_status_all.get_style_context().add_class("active")
-        self.sidebar_buttons["cat_featured"].get_style_context().add_class("active")
+        # Initialize active sidebar highlights
+        self._set_sidebar_group_active("status_", "status_all")
+        self._set_sidebar_group_active("cat_", "cat_featured")
 
         # Bottom Dual Engine Information Banner
         engine_banner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -605,18 +859,39 @@ class BriskStoreWindow(Gtk.Window):
         content_box.get_style_context().add_class("content-area")
         body_hbox.pack_start(content_box, True, True, 0)
 
+        # Dismissible Error / Warning Banner (R-27)
+        self.banner_revealer = Gtk.Revealer()
+        self.banner_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.banner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.banner_box.get_style_context().add_class("notice-banner-error")
+        self.banner_icon = svg_icon("alert", color="#991B1B", size=16)
+        self.banner_label = Gtk.Label(xalign=0)
+        self.banner_label.set_line_wrap(True)
+        self.banner_label.get_style_context().add_class("notice-banner-text")
+        btn_banner_close = Gtk.Button(label="Tutup")
+        btn_banner_close.get_style_context().add_class("btn-banner")
+        btn_banner_close.connect("clicked", lambda *_: self.banner_revealer.set_reveal_child(False))
+        self.banner_box.pack_start(self.banner_icon, False, False, 0)
+        self.banner_box.pack_start(self.banner_label, True, True, 0)
+        self.banner_box.pack_end(btn_banner_close, False, False, 0)
+        self.banner_revealer.add(self.banner_box)
+        content_box.pack_start(self.banner_revealer, False, False, 0)
+
         # Section Heading Bar
         sec_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         content_box.pack_start(sec_bar, False, False, 0)
 
+        self.sec_icon_img = svg_icon("featured", color="#0E7490", size=22)
+        sec_bar.pack_start(self.sec_icon_img, False, False, 0)
+
         sec_titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         sec_bar.pack_start(sec_titles, True, True, 0)
 
-        self.lbl_sec_title = Gtk.Label(label="⭐ Aplikasi Unggulan", xalign=0)
+        self.lbl_sec_title = Gtk.Label(label="Aplikasi Unggulan", xalign=0)
         self.lbl_sec_title.get_style_context().add_class("section-header")
         sec_titles.pack_start(self.lbl_sec_title, False, False, 0)
 
-        self.lbl_sec_desc = Gtk.Label(label="Pilihan aplikasi terbaik dan esensial untuk BriskOS", xalign=0)
+        self.lbl_sec_desc = Gtk.Label(label="Pilihan aplikasi esensial untuk penggunaan sehari-hari", xalign=0)
         self.lbl_sec_desc.get_style_context().add_class("section-desc")
         sec_titles.pack_start(self.lbl_sec_desc, False, False, 0)
 
@@ -624,11 +899,34 @@ class BriskStoreWindow(Gtk.Window):
         self.lbl_sec_count.get_style_context().add_class("section-count")
         sec_bar.pack_end(self.lbl_sec_count, False, False, 0)
 
-        # Scrolled FlowBox Container
+        # Content Stack: Loading / Catalog Grid / Empty State (R-27)
+        self.content_stack = Gtk.Stack()
+        self.content_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.content_stack.set_transition_duration(120)
+        content_box.pack_start(self.content_stack, True, True, 0)
+
+        # View 1: Loading State
+        loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        loading_box.set_valign(Gtk.Align.CENTER)
+        loading_box.set_halign(Gtk.Align.CENTER)
+        loading_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        loading_card.get_style_context().add_class("state-card")
+        self.loading_spinner = Gtk.Spinner()
+        self.loading_spinner.set_size_request(28, 28)
+        self.loading_spinner.start()
+        lbl_load_title = Gtk.Label(label="Memuat katalog aplikasi...")
+        lbl_load_title.get_style_context().add_class("state-title")
+        lbl_load_desc = Gtk.Label(label="Memeriksa status paket terpasang pada sistem.")
+        lbl_load_desc.get_style_context().add_class("state-desc")
+        loading_card.pack_start(self.loading_spinner, False, False, 0)
+        loading_card.pack_start(lbl_load_title, False, False, 0)
+        loading_card.pack_start(lbl_load_desc, False, False, 0)
+        loading_box.pack_start(loading_card, False, False, 0)
+        self.content_stack.add_named(loading_box, "loading")
+
+        # View 2: Catalog FlowBox Grid
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        content_box.pack_start(scrolled, True, True, 0)
-
         self.flowbox = Gtk.FlowBox()
         self.flowbox.set_valign(Gtk.Align.START)
         self.flowbox.set_max_children_per_line(3)
@@ -637,12 +935,44 @@ class BriskStoreWindow(Gtk.Window):
         self.flowbox.set_homogeneous(True)
         self.flowbox.set_filter_func(self.filter_app_card)
         scrolled.add(self.flowbox)
+        self.content_stack.add_named(scrolled, "grid")
 
-        # Build Card Widgets
+        # View 3: Empty State (cause + actionable recovery button)
+        empty_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        empty_outer.set_valign(Gtk.Align.CENTER)
+        empty_outer.set_halign(Gtk.Align.CENTER)
+        empty_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        empty_card.get_style_context().add_class("state-card")
+        self.empty_icon_img = svg_icon("search", color="#0E7490", size=32)
+        self.lbl_empty_title = Gtk.Label(label="Tidak ada aplikasi ditemukan")
+        self.lbl_empty_title.get_style_context().add_class("state-title")
+        self.lbl_empty_desc = Gtk.Label(label="Coba ubah filter atau kata kunci pencarian.")
+        self.lbl_empty_desc.set_line_wrap(True)
+        self.lbl_empty_desc.set_max_width_chars(46)
+        self.lbl_empty_desc.get_style_context().add_class("state-desc")
+        self.btn_empty_action = Gtk.Button(label="Tampilkan Semua Aplikasi")
+        self.btn_empty_action.set_halign(Gtk.Align.CENTER)
+        self.btn_empty_action.get_style_context().add_class("btn-install")
+        self.btn_empty_action.connect("clicked", self.on_empty_action_clicked)
+        empty_card.pack_start(self.empty_icon_img, False, False, 0)
+        empty_card.pack_start(self.lbl_empty_title, False, False, 0)
+        empty_card.pack_start(self.lbl_empty_desc, False, False, 0)
+        empty_card.pack_start(self.btn_empty_action, False, False, 4)
+        empty_outer.pack_start(empty_card, False, False, 0)
+        self.content_stack.add_named(empty_outer, "empty")
+
+        # Populate cards immediately from local catalog
         self.populate_cards()
+        if self.catalog:
+            self.content_stack.set_visible_child_name("grid")
+        else:
+            self.content_stack.set_visible_child_name("loading")
+
+        if self.catalog_warning:
+            self.show_banner(self.catalog_warning, is_error=False)
 
         # ----------------------------------------------------------------------
-        # Bottom Status Bar / Notification Toast
+        # Bottom Status Bar
         # ----------------------------------------------------------------------
         status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         status_bar.get_style_context().add_class("status-bar-box")
@@ -651,28 +981,132 @@ class BriskStoreWindow(Gtk.Window):
         self.spinner = Gtk.Spinner()
         status_bar.pack_start(self.spinner, False, False, 0)
 
-        self.lbl_status = Gtk.Label(label=f"Siap. {len(self.catalog)} aplikasi terkurasi tersedia di Brisk Store.", xalign=0)
+        live_note = " (Mode Live: katalog lokal siap)" if is_live_session() else ""
+        self.lbl_status = Gtk.Label(
+            label=f"Siap. {len(self.catalog)} aplikasi tersedia di katalog{live_note}.",
+            xalign=0
+        )
         self.lbl_status.get_style_context().add_class("status-label")
         status_bar.pack_start(self.lbl_status, True, True, 0)
 
-        lbl_foot = Gtk.Label(label="BriskOS 1.0 LTS • Sub-25 MB", xalign=1)
+        lbl_foot = Gtk.Label(label="BriskOS 1.0 LTS | APT + Flathub", xalign=1)
         lbl_foot.get_style_context().add_class("status-label")
         status_bar.pack_end(lbl_foot, False, False, 0)
 
     # --------------------------------------------------------------------------
-    # Widget Generators
+    # Widget Generators & Focus Control
     # --------------------------------------------------------------------------
-    def create_sidebar_item(self, key, label_text, callback, param):
+    def on_first_map(self, *args):
+        if not self._did_initial_focus:
+            self._did_initial_focus = True
+            GLib.idle_add(self._focus_default_nav)
+        return False
+
+    def _focus_default_nav(self):
+        target = self.sidebar_buttons.get("cat_featured")
+        if target is not None:
+            target.grab_focus()
+        return False
+
+    def on_key_press(self, widget, event):
+        state = event.state & Gtk.accelerator_get_default_mod_mask()
+        if state == Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_f, Gdk.KEY_F):
+            self.search_entry.grab_focus()
+            return True
+        if event.keyval == Gdk.KEY_Escape:
+            if self.search_entry.has_focus():
+                if self.search_entry.get_text():
+                    self.search_entry.set_text("")
+                self._focus_default_nav()
+                return True
+            if self.banner_revealer.get_reveal_child():
+                self.banner_revealer.set_reveal_child(False)
+                return True
+        return False
+
+    def show_banner(self, message, is_error=True):
+        ctx = self.banner_box.get_style_context()
+        ctx.remove_class("notice-banner-error")
+        ctx.remove_class("notice-banner-warn")
+        if is_error:
+            ctx.add_class("notice-banner-error")
+            pix = make_svg_pixbuf("alert", color="#991B1B", size=16)
+        else:
+            ctx.add_class("notice-banner-warn")
+            pix = make_svg_pixbuf("alert", color="#9A3412", size=16)
+        if pix is not None:
+            self.banner_icon.set_from_pixbuf(pix)
+        self.banner_label.set_text(message)
+        self.banner_revealer.set_reveal_child(True)
+
+    def create_sidebar_item(self, key, icon_name, label_text, callback, param):
         btn = Gtk.Button()
         btn.get_style_context().add_class("sidebar-button")
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        img = svg_icon(icon_name, color="#475569", size=16)
         lbl = Gtk.Label(label=label_text, xalign=0)
         lbl.get_style_context().add_class("sidebar-btn-label")
+        box.pack_start(img, False, False, 0)
         box.pack_start(lbl, True, True, 0)
         btn.add(box)
         btn.connect("clicked", callback, param)
         self.sidebar_buttons[key] = btn
+        self.sidebar_icons[key] = (img, icon_name)
         return btn
+
+    def _set_sidebar_group_active(self, prefix, active_key):
+        for key, btn in self.sidebar_buttons.items():
+            if not key.startswith(prefix):
+                continue
+            is_act = (key == active_key)
+            ctx = btn.get_style_context()
+            if is_act:
+                ctx.add_class("active")
+            else:
+                ctx.remove_class("active")
+            img_widget, icon_name = self.sidebar_icons[key]
+            pix = make_svg_pixbuf(icon_name, color="#0E7490" if is_act else "#475569", size=16)
+            if pix is not None:
+                img_widget.set_from_pixbuf(pix)
+
+    def _make_action_button_content(self, icon_name, label_text, color):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        box.set_halign(Gtk.Align.CENTER)
+        box.pack_start(svg_icon(icon_name, color=color, size=14), False, False, 0)
+        lbl = Gtk.Label(label=label_text)
+        box.pack_start(lbl, False, False, 0)
+        box.show_all()
+        return box
+
+    def _set_action_button_state(self, button, state):
+        ctx = button.get_style_context()
+        ctx.remove_class("btn-install")
+        ctx.remove_class("btn-remove")
+        ctx.remove_class("btn-busy")
+
+        for child in button.get_children():
+            button.remove(child)
+
+        if state == "installed":
+            ctx.add_class("btn-remove")
+            button.add(self._make_action_button_content("remove", "Copot", "#B91C1C"))
+            button.set_tooltip_text("Copot aplikasi dari sistem")
+            button.get_accessible().set_name("Copot aplikasi")
+            button.set_sensitive(True)
+        elif state == "busy_install":
+            ctx.add_class("btn-busy")
+            button.set_label("Memasang...")
+            button.set_sensitive(False)
+        elif state == "busy_remove":
+            ctx.add_class("btn-busy")
+            button.set_label("Mencopot...")
+            button.set_sensitive(False)
+        else:
+            ctx.add_class("btn-install")
+            button.add(self._make_action_button_content("install", "Pasang", "#FFFFFF"))
+            button.set_tooltip_text("Pasang aplikasi ke sistem")
+            button.get_accessible().set_name("Pasang aplikasi")
+            button.set_sensitive(True)
 
     def populate_cards(self):
         for app in self.catalog:
@@ -686,18 +1120,16 @@ class BriskStoreWindow(Gtk.Window):
     def build_card_widget(self, app):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.get_style_context().add_class("app-card")
-        card.set_size_request(280, 145)
+        card.set_size_request(270, 148)
 
         # Top Row: App Icon + Titles & Badges
         top_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         card.pack_start(top_hbox, False, False, 0)
 
-        # App Icon
         icon_img = create_app_icon(app.get("icon", ""), app.get("category", "utilities"))
         top_hbox.pack_start(icon_img, False, False, 0)
 
-        # Title + Tags Column
-        col_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        col_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         top_hbox.pack_start(col_vbox, True, True, 0)
 
         lbl_name = Gtk.Label(label=app.get("name", "Aplikasi"), xalign=0)
@@ -708,18 +1140,16 @@ class BriskStoreWindow(Gtk.Window):
         tags_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         col_vbox.pack_start(tags_hbox, False, False, 0)
 
-        # Category Tag
         cat_tag = Gtk.Label(label=app.get("category", "App").capitalize())
         cat_tag.get_style_context().add_class("badge-category")
         tags_hbox.pack_start(cat_tag, False, False, 0)
 
-        # Source Badge ('Flathub • Versi Baru' in Ice Cyan, 'Debian • Native' in Emerald)
         src = app.get("source", "flathub").lower()
         if src == "apt":
-            badge_src = Gtk.Label(label="Debian • Native")
+            badge_src = Gtk.Label(label="Debian Native")
             badge_src.get_style_context().add_class("badge-debian")
         else:
-            badge_src = Gtk.Label(label="Flathub • Versi Baru")
+            badge_src = Gtk.Label(label="Flathub")
             badge_src.get_style_context().add_class("badge-flathub")
         tags_hbox.pack_start(badge_src, False, False, 0)
 
@@ -733,21 +1163,22 @@ class BriskStoreWindow(Gtk.Window):
         lbl_desc.get_style_context().add_class("app-card-summary")
         card.pack_start(lbl_desc, True, True, 0)
 
-        # Bottom Row: Size Metric + Action Button
+        # Bottom Row: Size Metric + Compact Action Button
         bottom_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         card.pack_end(bottom_hbox, False, False, 0)
 
-        lbl_size = Gtk.Label(label=f"📦 {app.get('size', 'N/A')}", xalign=0)
+        size_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        size_box.pack_start(svg_icon("package", color="#475569", size=13), False, False, 0)
+        lbl_size = Gtk.Label(label=app.get("size", "N/A"), xalign=0)
         lbl_size.get_style_context().add_class("app-card-size")
-        bottom_hbox.pack_start(lbl_size, False, False, 0)
+        size_box.pack_start(lbl_size, False, False, 0)
+        bottom_hbox.pack_start(size_box, False, False, 0)
 
-        # Expander spacer
         spacer = Gtk.Box()
         bottom_hbox.pack_start(spacer, True, True, 0)
 
-        # 1-Click Action Button: '+ Pasang' (Ice Cyan) or '🗑️ Copot' (Muted red border)
-        btn_action = Gtk.Button(label="+ Pasang")
-        btn_action.get_style_context().add_class("btn-install")
+        btn_action = Gtk.Button()
+        self._set_action_button_state(btn_action, "not_installed")
         btn_action.connect("clicked", self.on_action_clicked, app)
         bottom_hbox.pack_end(btn_action, False, False, 0)
 
@@ -771,12 +1202,11 @@ class BriskStoreWindow(Gtk.Window):
         if self.active_status == "installed" and not is_installed:
             return False
 
-        # 2. Filter by Category
+        # 2. Filter by Category (when search is empty, apply category; when searching across catalog, allow category or all)
         if self.active_category == "featured":
-            if not is_featured:
+            if not is_featured and not self.search_query.strip():
                 return False
         elif self.active_category != "all":
-            # Map aliases
             target_cat = self.active_category
             if target_cat == "development" and category not in ("development", "coding"):
                 return False
@@ -795,8 +1225,7 @@ class BriskStoreWindow(Gtk.Window):
             name = app.get("name", "").lower()
             summary = app.get("summary", "").lower()
             pkg = app.get("package", "").lower()
-            cat = category
-            if q not in name and q not in summary and q not in pkg and q not in cat and q not in app_id.lower():
+            if q not in name and q not in summary and q not in pkg and q not in category and q not in app_id.lower():
                 return False
 
         return True
@@ -804,43 +1233,83 @@ class BriskStoreWindow(Gtk.Window):
     def update_filter_view(self):
         self.flowbox.invalidate_filter()
 
-        # Update category header and descriptions
-        if self.active_category == "featured":
-            self.lbl_sec_title.set_text("⭐ Aplikasi Unggulan")
-            self.lbl_sec_desc.set_text("Pilihan aplikasi terbaik dan esensial untuk BriskOS")
-        elif self.active_category == "all":
-            self.lbl_sec_title.set_text("📦 Seluruh Aplikasi")
-            self.lbl_sec_desc.set_text("Katalog lengkap aplikasi Flathub dan APT Debian")
+        if self.active_status == "installed":
+            self.lbl_sec_title.set_text("Aplikasi Terpasang")
+            self.lbl_sec_desc.set_text("Daftar aplikasi katalog yang sudah terpasang di sistem Anda")
+            pix = make_svg_pixbuf("installed", color="#0E7490", size=22)
+            if pix is not None:
+                self.sec_icon_img.set_from_pixbuf(pix)
+        elif self.active_category == "featured":
+            self.lbl_sec_title.set_text("Aplikasi Unggulan")
+            self.lbl_sec_desc.set_text("Pilihan aplikasi esensial untuk penggunaan sehari-hari")
+            pix = make_svg_pixbuf("featured", color="#0E7490", size=22)
+            if pix is not None:
+                self.sec_icon_img.set_from_pixbuf(pix)
         else:
-            for cat_k, cat_l, cat_d in self.categories_def:
+            for cat_k, icon_k, cat_l, cat_d in self.categories_def:
                 if cat_k == self.active_category:
                     self.lbl_sec_title.set_text(cat_l)
                     self.lbl_sec_desc.set_text(cat_d)
+                    pix = make_svg_pixbuf(icon_k, color="#0E7490", size=22)
+                    if pix is not None:
+                        self.sec_icon_img.set_from_pixbuf(pix)
                     break
 
-        # Calculate visible count
         visible_count = 0
         for child in self.app_cards:
             if self.filter_app_card(child):
                 visible_count += 1
-        self.lbl_sec_count.set_text(f"{visible_count} aplikasi ditemukan")
+        self.lbl_sec_count.set_text(f"{visible_count} aplikasi")
+
+        if visible_count == 0:
+            self._update_empty_state()
+            self.content_stack.set_visible_child_name("empty")
+        else:
+            self.content_stack.set_visible_child_name("grid")
+
+    def _update_empty_state(self):
+        q = self.search_query.strip()
+        if q:
+            pix = make_svg_pixbuf("search", color="#0E7490", size=32)
+            if pix is not None:
+                self.empty_icon_img.set_from_pixbuf(pix)
+            self.lbl_empty_title.set_text(f"Tidak ada hasil untuk \"{q}\"")
+            self.lbl_empty_desc.set_text("Coba kata kunci yang lebih singkat atau hapus pencarian untuk melihat seluruh katalog.")
+            self.btn_empty_action.set_label("Reset Pencarian")
+        elif self.active_status == "installed":
+            pix = make_svg_pixbuf("installed", color="#0E7490", size=32)
+            if pix is not None:
+                self.empty_icon_img.set_from_pixbuf(pix)
+            self.lbl_empty_title.set_text("Belum ada aplikasi katalog yang terpasang")
+            self.lbl_empty_desc.set_text("Buka tampilan Semua untuk menelusuri dan memasang aplikasi dari APT atau Flathub.")
+            self.btn_empty_action.set_label("Lihat Semua Aplikasi")
+        else:
+            pix = make_svg_pixbuf("package", color="#0E7490", size=32)
+            if pix is not None:
+                self.empty_icon_img.set_from_pixbuf(pix)
+            self.lbl_empty_title.set_text("Belum ada aplikasi di kategori ini")
+            self.lbl_empty_desc.set_text("Pilih kategori lain di bilah kiri atau tampilkan aplikasi unggulan.")
+            self.btn_empty_action.set_label("Kembali ke Unggulan")
+
+    def on_empty_action_clicked(self, widget):
+        if self.search_query.strip():
+            self.search_entry.set_text("")
+        elif self.active_status == "installed":
+            self.on_status_clicked(self.btn_status_all, "all")
+        else:
+            self.on_category_clicked(self.sidebar_buttons["cat_featured"], "featured")
 
     # --------------------------------------------------------------------------
     # Event Handlers: Navigation & Search
     # --------------------------------------------------------------------------
     def on_status_clicked(self, widget, status_mode):
         self.active_status = status_mode
-        self.btn_status_all.get_style_context().remove_class("active")
-        self.btn_status_installed.get_style_context().remove_class("active")
-        widget.get_style_context().add_class("active")
+        self._set_sidebar_group_active("status_", f"status_{status_mode}")
         self.update_filter_view()
 
     def on_category_clicked(self, widget, cat_key):
         self.active_category = cat_key
-        for key, btn in self.sidebar_buttons.items():
-            if key.startswith("cat_"):
-                btn.get_style_context().remove_class("active")
-        widget.get_style_context().add_class("active")
+        self._set_sidebar_group_active("cat_", f"cat_{cat_key}")
         self.update_filter_view()
 
     def on_search_changed(self, entry):
@@ -848,7 +1317,7 @@ class BriskStoreWindow(Gtk.Window):
         self.update_filter_view()
 
     def on_refresh_clicked(self, widget):
-        self.set_status("Menyinkronkan status paket...")
+        self.set_status("Menyegarkan status paket lokal...", True)
         threading.Thread(target=self.async_fetch_installed_apps, daemon=True).start()
 
     # --------------------------------------------------------------------------
@@ -866,21 +1335,25 @@ class BriskStoreWindow(Gtk.Window):
         GLib.idle_add(_apply)
 
     def async_fetch_installed_apps(self):
-        GLib.idle_add(self.set_status, "Memeriksa inventaris paket terpasang...", True)
+        GLib.idle_add(self.set_status, "Memeriksa daftar aplikasi terpasang...", True)
         backend = resolve_backend_path()
         found_installed = set()
+        backend_failed = False
 
         if os.path.exists(backend) and os.access(backend, os.X_OK):
             try:
-                res = subprocess.run([backend, "list-installed", "--json"], capture_output=True, text=True, timeout=12)
+                res = subprocess.run([backend, "list-installed", "--json"], capture_output=True, text=True, timeout=10)
                 if res.returncode == 0 and res.stdout.strip():
                     data = json.loads(res.stdout.strip())
                     if isinstance(data, list):
                         found_installed = set(data)
+                elif res.returncode != 0:
+                    backend_failed = True
             except Exception as e:
+                backend_failed = True
                 print(f"[Brisk Store] Warning during list-installed: {e}", file=sys.stderr)
 
-        # Fallback inspection if list-installed returned empty
+        # Safe local binary fallback if backend returned empty or failed
         if not found_installed:
             for app in self.catalog:
                 cmd_str = app.get("command", "")
@@ -889,49 +1362,36 @@ class BriskStoreWindow(Gtk.Window):
                     if bin_name != "flatpak" and shutil.which(bin_name):
                         found_installed.add(app.get("id"))
 
-        GLib.idle_add(self.sync_installed_state, found_installed)
+        GLib.idle_add(self.sync_installed_state, found_installed, backend_failed)
 
-    def sync_installed_state(self, found_set):
+    def sync_installed_state(self, found_set, backend_failed=False):
+        self.is_loading = False
         self.installed_ids = found_set
         self.lbl_installed_count.set_text(str(len(self.installed_ids)))
 
         for app_id, btn in self.app_buttons.items():
-            ctx = btn.get_style_context()
-            ctx.remove_class("btn-install")
-            ctx.remove_class("btn-remove")
-            ctx.remove_class("btn-busy")
-
-            if app_id in self.installed_ids:
-                btn.set_label("🗑️ Copot")
-                ctx.add_class("btn-remove")
-                btn.set_tooltip_text("Copot aplikasi dari sistem")
-            else:
-                btn.set_label("+ Pasang")
-                ctx.add_class("btn-install")
-                btn.set_tooltip_text("Pasang aplikasi ke sistem")
-            btn.set_sensitive(True)
+            state = "installed" if app_id in self.installed_ids else "not_installed"
+            self._set_action_button_state(btn, state)
 
         self.update_filter_view()
-        self.set_status(f"Siap. {len(self.installed_ids)} terpasang dari {len(self.catalog)} aplikasi katalog.")
+        if backend_failed:
+            self.set_status("Mode lokal aktif: pemeriksaan paket menggunakan deteksi biner langsung.", False)
+        elif is_live_session():
+            self.set_status(f"Mode Live siap: {len(self.installed_ids)} terpasang dari {len(self.catalog)} aplikasi katalog.", False)
+        else:
+            self.set_status(f"Siap. {len(self.installed_ids)} terpasang dari {len(self.catalog)} aplikasi katalog.", False)
 
     def on_action_clicked(self, button, app):
         app_id = app.get("id")
         is_installed = app_id in self.installed_ids
         action = "remove" if is_installed else "install"
 
-        # Update button to busy state
-        button.set_sensitive(False)
-        ctx = button.get_style_context()
-        ctx.remove_class("btn-install")
-        ctx.remove_class("btn-remove")
-        ctx.add_class("btn-busy")
-
         if action == "install":
-            button.set_label("⏳ Memasang...")
-            self.set_status(f"Sedang memasang {app.get('name')}... Mohon tunggu.", True)
+            self._set_action_button_state(button, "busy_install")
+            self.set_status(f"Memasang {app.get('name')}... Mohon tunggu.", True)
         else:
-            button.set_label("⏳ Mencopot...")
-            self.set_status(f"Sedang mencopot {app.get('name')}... Mohon tunggu.", True)
+            self._set_action_button_state(button, "busy_remove")
+            self.set_status(f"Mencopot {app.get('name')}... Mohon tunggu.", True)
 
         threading.Thread(target=self.async_execute_action, args=(app, action, button), daemon=True).start()
 
@@ -939,15 +1399,33 @@ class BriskStoreWindow(Gtk.Window):
         app_id = app.get("id")
         backend = resolve_backend_path()
 
-        cmd = []
+        if not (os.path.exists(backend) and os.access(backend, os.X_OK)):
+            GLib.idle_add(
+                self.on_action_finished,
+                app, action, button, False,
+                f"Backend tidak ditemukan di {backend}."
+            )
+            return
+
         is_root = False
         try:
             is_root = (os.geteuid() == 0)
         except AttributeError:
             is_root = False
 
-        if not is_root and shutil.which("sudo"):
-            cmd = ["sudo", "-n", backend, action, app_id]
+        if is_root:
+            cmd = [backend, action, app_id]
+        elif shutil.which("sudo"):
+            # Verify passwordless sudo; otherwise fall back to pkexec
+            chk = subprocess.run(["sudo", "-n", "-l", backend], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if chk.returncode == 0:
+                cmd = ["sudo", "-n", backend, action, app_id]
+            elif shutil.which("pkexec"):
+                cmd = ["pkexec", backend, action, app_id]
+            else:
+                cmd = ["sudo", "-n", backend, action, app_id]
+        elif shutil.which("pkexec"):
+            cmd = ["pkexec", backend, action, app_id]
         else:
             cmd = [backend, action, app_id]
 
@@ -982,37 +1460,26 @@ class BriskStoreWindow(Gtk.Window):
 
     def on_action_finished(self, app, action, button, success, last_log):
         app_id = app.get("id")
-        button.set_sensitive(True)
-        ctx = button.get_style_context()
-        ctx.remove_class("btn-busy")
 
         if success:
+            self.banner_revealer.set_reveal_child(False)
             if action == "install":
                 self.installed_ids.add(app_id)
-                button.set_label("🗑️ Copot")
-                ctx.add_class("btn-remove")
-                button.set_tooltip_text("Copot aplikasi dari sistem")
-                msg = f"✓ Berhasil memasang {app.get('name')}! Siap digunakan."
-                self.notify_desktop(APP_NAME, f"Aplikasi {app.get('name')} berhasil dipasang!")
+                self._set_action_button_state(button, "installed")
+                msg = f"Berhasil memasang {app.get('name')}. Siap digunakan."
+                self.notify_desktop(APP_NAME, f"Aplikasi {app.get('name')} berhasil dipasang.")
             else:
                 self.installed_ids.discard(app_id)
-                button.set_label("+ Pasang")
-                ctx.add_class("btn-install")
-                button.set_tooltip_text("Pasang aplikasi ke sistem")
-                msg = f"✓ Berhasil mencopot {app.get('name')}."
+                self._set_action_button_state(button, "not_installed")
+                msg = f"Berhasil mencopot {app.get('name')}."
                 self.notify_desktop(APP_NAME, f"Aplikasi {app.get('name')} berhasil dicopot.")
 
             self.set_status(msg, False)
         else:
-            # Restore previous state
-            if action == "install":
-                button.set_label("+ Pasang")
-                ctx.add_class("btn-install")
-            else:
-                button.set_label("🗑️ Copot")
-                ctx.add_class("btn-remove")
-            err_summary = last_log if last_log else "Terjadi kesalahan sistem."
-            self.set_status(f"⚠️ Gagal {action} {app.get('name')}: {err_summary}", False)
+            self._set_action_button_state(button, "installed" if action == "remove" else "not_installed")
+            err_summary = last_log if last_log else "Terjadi kesalahan saat mengakses repositori atau koneksi internet."
+            self.show_banner(f"Gagal memproses {app.get('name')}: {err_summary}", is_error=True)
+            self.set_status(f"Gagal {action} {app.get('name')}. Periksa koneksi internet atau log sistem.", False)
 
         self.lbl_installed_count.set_text(str(len(self.installed_ids)))
         self.update_filter_view()
@@ -1020,14 +1487,16 @@ class BriskStoreWindow(Gtk.Window):
     def notify_desktop(self, title, message):
         if shutil.which("notify-send"):
             try:
-                subprocess.Popen(["notify-send", "-i", APP_ID, "-a", APP_NAME, title, message],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    ["notify-send", "-i", APP_ID, "-a", APP_NAME, title, message],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
             except Exception:
                 pass
 
     def on_destroy(self, *args):
         Gtk.main_quit()
-        sys.exit(0)
 
 # ------------------------------------------------------------------------------
 # Entry Point
@@ -1036,7 +1505,7 @@ def apply_styling():
     screen = Gdk.Screen.get_default()
     if screen is not None:
         provider = Gtk.CssProvider()
-        provider.load_from_data(NIGHT_GLASS_CSS)
+        provider.load_from_data(MORNING_BREEZE_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             screen,
             provider,
@@ -1045,6 +1514,8 @@ def apply_styling():
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+    GLib.set_prgname(APP_ID)
+    GLib.set_application_name(APP_NAME)
 
     if not Gtk.init_check()[0]:
         print("Error: Could not initialize GTK display (no X11/Wayland display server found).", file=sys.stderr)

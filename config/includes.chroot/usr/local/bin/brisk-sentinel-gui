@@ -1,352 +1,367 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ==============================================================================
-# Brisk Battery Sentinel - Graphical Control Panel
-# Elegant Zenity interface adhering strictly to Antislop UI guidelines
+# brisk-sentinel-gui: Brisk Power & Battery Sentinel Desktop Control
+# Clean Zenity GUI frontend for brisk-sentinel with Morning Breeze Pango colors.
 # ==============================================================================
-
 set -euo pipefail
 
 export GDK_BACKEND="wayland,x11"
 
-APP_NAME="Brisk Battery Sentinel"
-APP_ICON="battery-good"
 SENTINEL_CLI="/usr/local/bin/brisk-sentinel"
+APP_TITLE_PLAIN="Brisk Sentinel: Power & Battery Manager"
 
-# Check dependencies
-if ! command -v zenity >/dev/null 2>&1; then
-    echo "Error: zenity is required to display the Battery Sentinel control panel." >&2
-    exit 1
-fi
+# Telemetry state defaults
+PROFILE="balanced"
+CAPACITY="0"
+STATUS="Unknown"
+HEALTH="Unknown"
+DISCHARGE_RATE="N/A"
+TEMPERATURE="N/A"
+REMAINING="N/A"
+THRESHOLD="100"
+GLIDE_AUTO_ENABLED="false"
+GLIDE_THRESHOLD="15"
+GLIDE_AUTO_DIM="true"
+GLIDE_DIM_LEVEL="35"
+GLIDE_DEBOUNCE_SECONDS="3"
+GLIDE_NOTIFY="true"
+GLIDE_ACTIVE="false"
+GLIDE_DAEMON_RUNNING="false"
 
-notify() {
-    local title="$1"
-    local message="$2"
-    local icon="${3:-$APP_ICON}"
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send -i "$icon" -a "$APP_NAME" "$title" "$message" || true
+sanitize_int() {
+    local raw="${1:-}"
+    local fallback="${2:-0}"
+    local digits="${raw//[^0-9]/}"
+    if [[ -n "$digits" ]]; then
+        printf '%s' "$digits"
+    else
+        printf '%s' "$fallback"
     fi
 }
 
-# Safely parse KEY=VALUE output from brisk-sentinel --raw without eval
+pango_escape() {
+    local text="${1:-}"
+    text="${text//&/&amp;}"
+    text="${text//</&lt;}"
+    text="${text//>/&gt;}"
+    printf '%s' "$text"
+}
+
+show_error_dialog() {
+    local msg="${1:-An unexpected error occurred.}"
+    zenity --error \
+        --title="$APP_TITLE_PLAIN" \
+        --width=440 \
+        --text="$(pango_escape "$msg")" 2>/dev/null || true
+}
+
+run_sentinel_action() {
+    local action_desc="$1"
+    shift
+    local err_out=""
+    if ! err_out="$("$SENTINEL_CLI" "$@" 2>&1)"; then
+        if [[ -z "$err_out" ]]; then
+            err_out="Command returned non-zero exit status."
+        fi
+        show_error_dialog "Failed to ${action_desc}: ${err_out}"
+        return 1
+    fi
+    return 0
+}
+
 load_kv_output() {
-    local raw_text="$1"
+    local raw_data="${1:-}"
     local line key val
     while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        case "$line" in
-            *=*)
-                key="${line%%=*}"
-                val="${line#*=}"
-                if [[ "$val" == \"*\" ]] && [[ "$val" == *\" ]] && [ "${#val}" -ge 2 ]; then
-                    val="${val:1:${#val}-2}"
-                elif [[ "$val" == \'*\' ]] && [[ "$val" == *\' ]] && [ "${#val}" -ge 2 ]; then
-                    val="${val:1:${#val}-2}"
-                fi
-                case "$key" in
-                    PROFILE|CAPACITY|STATUS|HEALTH|DISCHARGE_RATE|TEMPERATURE|REMAINING|THRESHOLD|GLIDE_AUTO_ENABLED|GLIDE_THRESHOLD|GLIDE_AUTO_DIM|GLIDE_DIM_LEVEL|GLIDE_DEBOUNCE_SECONDS|GLIDE_NOTIFY|GLIDE_ACTIVE|GLIDE_DAEMON_RUNNING)
-                        printf -v "$key" '%s' "$val"
-                        ;;
-                esac
-                ;;
+        [[ -z "$line" || "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        key="${key//[[:space:]]/}"
+        val="${val%\"}"
+        val="${val#\"}"
+        val="${val%\'}"
+        val="${val#\'}"
+        case "$key" in
+            PROFILE) PROFILE="$val" ;;
+            CAPACITY) CAPACITY="$val" ;;
+            STATUS) STATUS="$val" ;;
+            HEALTH) HEALTH="$val" ;;
+            DISCHARGE_RATE) DISCHARGE_RATE="$val" ;;
+            TEMPERATURE) TEMPERATURE="$val" ;;
+            REMAINING) REMAINING="$val" ;;
+            THRESHOLD) THRESHOLD="$val" ;;
+            GLIDE_AUTO_ENABLED) GLIDE_AUTO_ENABLED="$val" ;;
+            GLIDE_THRESHOLD) GLIDE_THRESHOLD="$val" ;;
+            GLIDE_AUTO_DIM) GLIDE_AUTO_DIM="$val" ;;
+            GLIDE_DIM_LEVEL) GLIDE_DIM_LEVEL="$val" ;;
+            GLIDE_DEBOUNCE_SECONDS) GLIDE_DEBOUNCE_SECONDS="$val" ;;
+            GLIDE_NOTIFY) GLIDE_NOTIFY="$val" ;;
+            GLIDE_ACTIVE) GLIDE_ACTIVE="$val" ;;
+            GLIDE_DAEMON_RUNNING) GLIDE_DAEMON_RUNNING="$val" ;;
         esac
-    done <<< "$raw_text"
+    done <<< "$raw_data"
+
+    THRESHOLD="$(sanitize_int "$THRESHOLD" "100")"
+    GLIDE_THRESHOLD="$(sanitize_int "$GLIDE_THRESHOLD" "15")"
+    GLIDE_DIM_LEVEL="$(sanitize_int "$GLIDE_DIM_LEVEL" "35")"
+    GLIDE_DEBOUNCE_SECONDS="$(sanitize_int "$GLIDE_DEBOUNCE_SECONDS" "3")"
+}
+
+refresh_telemetry() {
+    local raw_data=""
+    if ! raw_data="$("$SENTINEL_CLI" status --raw 2>/dev/null)"; then
+        return 1
+    fi
+    load_kv_output "$raw_data"
+
+    local glide_raw=""
+    if glide_raw="$("$SENTINEL_CLI" glide status --raw 2>/dev/null)"; then
+        load_kv_output "$glide_raw"
+    fi
+    return 0
+}
+
+show_diagnostics_dialog() {
+    local diag_tmp
+    diag_tmp="$(mktemp /tmp/brisk-sentinel-diag.XXXXXX)"
+    {
+        printf 'Brisk Sentinel Hardware & Battery Diagnostics\n'
+        printf '=============================================\n\n'
+        if ! "$SENTINEL_CLI" status 2>&1; then
+            printf '\n[Warning] brisk-sentinel status exited with an error.\n'
+        fi
+        if command -v tlp-stat >/dev/null 2>&1; then
+            printf '\n--- TLP Battery Status ---\n'
+            tlp-stat -b 2>&1 || true
+        fi
+    } > "$diag_tmp"
+
+    zenity --text-info \
+        --title="Battery and Power Diagnostics: Brisk Sentinel" \
+        --filename="$diag_tmp" \
+        --width=720 \
+        --height=500 \
+        --ok-label="Close" 2>/dev/null || true
+
+    rm -f "$diag_tmp"
 }
 
 show_glide_settings_dialog() {
     while true; do
-        # Fetch current Glide settings from CLI
-        local RAW_GLIDE=""
-        if [ -x "$SENTINEL_CLI" ]; then
-            RAW_GLIDE="$("$SENTINEL_CLI" glide status --raw 2>/dev/null || true)"
+        refresh_telemetry || true
+
+        local auto_check="[ ]"
+        local auto_color="#475569"
+        local auto_label="DISABLED"
+        local toggle_auto_action="Auto-Switch: Enable Glide"
+        local toggle_auto_desc="Automatically switch to Eco mode when battery drops below ${GLIDE_THRESHOLD}%"
+        if [[ "$GLIDE_AUTO_ENABLED" == "true" ]]; then
+            auto_check="[x]"
+            auto_color="#166534"
+            auto_label="ENABLED"
+            toggle_auto_action="Auto-Switch: Disable Glide"
+            toggle_auto_desc="Currently active: auto-switches to Eco below ${GLIDE_THRESHOLD}%"
         fi
 
-        local GLIDE_AUTO_ENABLED="true"
-        local GLIDE_THRESHOLD="20"
-        local GLIDE_AUTO_DIM="true"
-        local GLIDE_DIM_LEVEL="35"
-        local GLIDE_DEBOUNCE_SECONDS="3"
-        local GLIDE_ACTIVE="false"
-        local GLIDE_DAEMON_RUNNING="false"
-
-        if [ -n "$RAW_GLIDE" ]; then
-            load_kv_output "$RAW_GLIDE"
+        local dim_check="[ ]"
+        local dim_color="#475569"
+        local dim_desc="Display stays at current brightness; only CPU and hardware power are saved"
+        if [[ "$GLIDE_AUTO_DIM" == "true" ]]; then
+            dim_check="[x]"
+            dim_color="#0C5B73"
+            dim_desc="Dims screen to ${GLIDE_DIM_LEVEL}% when Glide activates"
         fi
 
-        # UI Badge Indicators adhering to Antislop UI aesthetics
-        local AUTO_CHECK="[✓]"
-        local AUTO_DESC="Auto-Guard aktif (hemat baterai otomatis saat kritis)"
-        local AUTO_COLOR="#4ade80"
-        local AUTO_STATUS_TEXT="AKTIF"
-        if [ "${GLIDE_AUTO_ENABLED:-true}" != "true" ]; then
-            AUTO_CHECK="[ ]"
-            AUTO_DESC="Auto-Guard nonaktif (hanya kontrol manual)"
-            AUTO_COLOR="#94a3b8"
-            AUTO_STATUS_TEXT="NONAKTIF"
+        local debounce_check="[ ]"
+        local debounce_color="#475569"
+        local debounce_desc="Instant switching (0s delay)"
+        local next_debounce="3"
+        if [[ "$GLIDE_DEBOUNCE_SECONDS" -ge 1 ]]; then
+            debounce_check="[x]"
+            debounce_color="#0C5B73"
+            debounce_desc="Anti-flicker guard active (${GLIDE_DEBOUNCE_SECONDS}s delay)"
+            next_debounce="0"
         fi
 
-        local DIM_CHECK="[✓]"
-        local DIM_DESC="Layar redup halus ke ${GLIDE_DIM_LEVEL:-35}% saat Glide Mode aktif"
-        local DIM_COLOR="#4ade80"
-        local DIM_STATUS_TEXT="Peredupan Halus (${GLIDE_DIM_LEVEL:-35}%)"
-        if [ "${GLIDE_AUTO_DIM:-true}" != "true" ]; then
-            DIM_CHECK="[ ]"
-            DIM_DESC="Layar TETAP TERANG — Hanya CPU & hardware dihemat"
-            DIM_COLOR="#f59e0b"
-            DIM_STATUS_TEXT="Layar Tetap Terang (CPU Saja)"
+        local daemon_badge="<span color='#9A3412'>Standby</span>"
+        if [[ "$GLIDE_DAEMON_RUNNING" == "true" ]]; then
+            daemon_badge="<span color='#166534'>Daemon Active</span>"
         fi
 
-        local DEBOUNCE_CHECK="[✓]"
-        local DEBOUNCE_DESC="Jeda 3 detik anti-kedip (abaikan charger tersenggol)"
-        local DEBOUNCE_COLOR="#4ade80"
-        local DEBOUNCE_STATUS_TEXT="${GLIDE_DEBOUNCE_SECONDS:-3} Detik"
-        if [ "${GLIDE_DEBOUNCE_SECONDS:-3}" -eq 0 ]; then
-            DEBOUNCE_CHECK="[ ]"
-            DEBOUNCE_DESC="Tanpa jeda pengaman (reaksi instan 0 detik)"
-            DEBOUNCE_COLOR="#94a3b8"
-            DEBOUNCE_STATUS_TEXT="Instan (0 Detik)"
+        local active_badge=""
+        if [[ "$GLIDE_ACTIVE" == "true" ]]; then
+            active_badge=" | <span color='#B91C1C'><b>GLIDE ACTIVE NOW</b></span>"
         fi
 
-        local ENGAGED_BADGE=""
-        if [ "${GLIDE_ACTIVE:-false}" = "true" ]; then
-            ENGAGED_BADGE="<span color='#f43f5e'><b>[SEDANG BERJALAN / ENGAGED]</b></span>"
-        else
-            ENGAGED_BADGE="<span color='#38bdf8'><b>[SIAGA / STANDBY]</b></span>"
-        fi
+        local glide_header
+        glide_header="<span size='large' weight='bold' color='#0F172A'>Brisk Glide: Smart Low-Battery Failover</span>\n"
+        glide_header+="<span color='#475569'>Automatic anti-flicker power failover when battery runs low</span>\n\n"
+        glide_header+="<b>Status:</b> <span color='${auto_color}'><b>${auto_label}</b></span> (${daemon_badge})${active_badge}\n"
+        glide_header+="<b>Trigger:</b> <span color='#0C5B73'><b>${GLIDE_THRESHOLD}%</b></span>  |  "
+        glide_header+="<b>Auto-Dim:</b> <span color='${dim_color}'>${auto_check} $(pango_escape "$dim_desc")</span>\n"
+        glide_header+="<b>Debounce:</b> <span color='${debounce_color}'>${debounce_check} $(pango_escape "$debounce_desc")</span>"
 
-        local GLIDE_HEADER="<big><b>🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)</b></big>\n\n"
-        GLIDE_HEADER+="Auto-pilot hemat daya laptop cerdas saat baterai menipis.\n"
-        GLIDE_HEADER+="Transisi cerdas & anti-kedip melindungi produktivitas dan baterai Anda.\n\n"
-        GLIDE_HEADER+="<b>Status:</b> <span color='${AUTO_COLOR}'><b>${AUTO_STATUS_TEXT}</b></span> ${ENGAGED_BADGE}    "
-        GLIDE_HEADER+="<b>Ambang Batas:</b> <span color='#38bdf8'><b>${GLIDE_THRESHOLD:-20}%</b></span>\n"
-        GLIDE_HEADER+="<b>Peredupan Layar:</b> <span color='${DIM_COLOR}'><b>${DIM_STATUS_TEXT}</b></span>    "
-        GLIDE_HEADER+="<b>Debounce:</b> <span color='${DEBOUNCE_COLOR}'><b>${DEBOUNCE_STATUS_TEXT}</b></span>\n"
-        GLIDE_HEADER+="────────────────────────────────────────────────────────────\n"
-        GLIDE_HEADER+="Pilih pengaturan untuk mengaktifkan/menyesuaikan, atau uji coba langsung:"
+        local t20_mark="[ ]" t15_mark="[ ]" t10_mark="[ ]"
+        case "$GLIDE_THRESHOLD" in
+            20) t20_mark="[x]" ;;
+            15) t15_mark="[x]" ;;
+            10) t10_mark="[x]" ;;
+        esac
 
-        local SUB_CHOICE
-        SUB_CHOICE=$(zenity --list \
-            --title="Brisk Glide Mode - Pengaturan Cerdas" \
-            --window-icon="$APP_ICON" \
-            --width=760 \
-            --height=500 \
-            --text="$GLIDE_HEADER" \
-            --column="Key" \
-            --column="Fitur / Opsi Pengaturan" \
-            --column="Penjelasan Detail & Perilaku" \
-            --hide-column=1 \
-            --ok-label="Pilih / Ubah" \
-            --cancel-label="Kembali ke Menu Utama" \
-            "TOGGLE_AUTO" "${AUTO_CHECK} Aktifkan Glide Mode otomatis saat baterai menipis" "$AUTO_DESC" \
-            "SET_THRESHOLD" "🎯 Pilihan Ambang Batas: 20%, 15%, atau 10%" "Pemicu transisi otomatis (Saat ini aktif pada ${GLIDE_THRESHOLD:-20}%)" \
-            "TOGGLE_DIM" "${DIM_CHECK} Redupkan layar secara halus saat Glide Mode aktif" "Jika tidak dicentang, layar TETAP TERANG dan hanya performa CPU/perangkat keras yang dihemat!" \
-            "TOGGLE_DEBOUNCE" "${DEBOUNCE_CHECK} Jeda Pengaman 3 Detik (Debounce anti-kedip)" "$DEBOUNCE_DESC" \
-            "TEST_GLIDE" "⚡ Uji Coba Glide Mode Sekarang" "Simulasi transisi 5 detik untuk menguji peredupan layar & profil hemat daya" \
-            2>/dev/null || true)
+        local choice=""
+        choice="$(zenity --list \
+            --title="Brisk Glide Settings" \
+            --text="$glide_header" \
+            --radiolist \
+            --width=660 \
+            --height=460 \
+            --ok-label="Apply Setting" \
+            --cancel-label="Back" \
+            --column="Select" --column="ID" --column="Setting" --column="Details" \
+            --hide-column=2 --print-column=2 \
+            TRUE  "toggle_auto" "${auto_check} ${toggle_auto_action}" "$toggle_auto_desc" \
+            FALSE "thresh_20"   "${t20_mark} Trigger Threshold: 20%" "Activate Eco failover early at 20% remaining charge" \
+            FALSE "thresh_15"   "${t15_mark} Trigger Threshold: 15%" "Balanced reserve trigger at 15% remaining charge" \
+            FALSE "thresh_10"   "${t10_mark} Trigger Threshold: 10%" "Last-mile emergency trigger at 10% remaining charge" \
+            FALSE "toggle_dim"  "${dim_check} Toggle Screen Auto-Dim" "$dim_desc" \
+            FALSE "debounce"    "${debounce_check} Toggle Anti-Flicker Debounce" "Switch between 3s stabilization delay and 0s instant mode" \
+            FALSE "test_glide"  "Run Glide Transition Test" "Trigger a test check against current battery state" 2>/dev/null)" || return 0
 
-        if [ -z "$SUB_CHOICE" ]; then
-            break
-        fi
-
-        case "$SUB_CHOICE" in
-            TOGGLE_AUTO)
-                if [ "${GLIDE_AUTO_ENABLED:-true}" = "true" ]; then
-                    "$SENTINEL_CLI" glide off
-                    notify "Glide Mode Dinonaktifkan" "Auto-pilot baterai dinonaktifkan. Sistem tetap pada profil manual." "battery-good"
+        case "$choice" in
+            toggle_auto)
+                if [[ "$GLIDE_AUTO_ENABLED" == "true" ]]; then
+                    run_sentinel_action "disable Brisk Glide" glide off || true
                 else
-                    "$SENTINEL_CLI" glide on
-                    notify "Glide Mode Diaktifkan" "Auto-pilot cerdas aktif saat baterai mencapai ${GLIDE_THRESHOLD:-20}%." "battery-caution"
+                    run_sentinel_action "enable Brisk Glide" glide on || true
                 fi
                 ;;
-            SET_THRESHOLD)
-                local NEW_THRESH
-                NEW_THRESH=$(zenity --list --radiolist \
-                    --title="Pilihan Ambang Batas Glide Mode" \
-                    --window-icon="$APP_ICON" \
-                    --width=540 \
-                    --height=320 \
-                    --text="Pilih persentase sisa baterai untuk memicu Glide Mode secara otomatis:" \
-                    --column="Pilih" --column="Ambang" --column="Rekomendasi Profil Daya" \
-                    --hide-column=2 \
-                    $([ "${GLIDE_THRESHOLD:-20}" = "20" ] && echo "TRUE" || echo "FALSE") "20" "20% (Disarankan - Perlindungan awal, transisi ultra-halus)" \
-                    $([ "${GLIDE_THRESHOLD:-20}" = "15" ] && echo "TRUE" || echo "FALSE") "15" "15% (Seimbang - Waktu performa penuh lebih panjang)" \
-                    $([ "${GLIDE_THRESHOLD:-20}" = "10" ] && echo "TRUE" || echo "FALSE") "10" "10% (Kritis - Daya tahan darurat level paling akhir)" \
-                    2>/dev/null || true)
-                if [ -n "$NEW_THRESH" ]; then
-                    "$SENTINEL_CLI" glide threshold "$NEW_THRESH"
-                    notify "Ambang Batas Diperbarui" "Glide Mode akan aktif otomatis ketika sisa baterai <= ${NEW_THRESH}%." "battery-good"
-                fi
+            thresh_20)
+                run_sentinel_action "set Glide threshold to 20%" glide threshold 20 || true
                 ;;
-            TOGGLE_DIM)
-                "$SENTINEL_CLI" glide toggle-dim
-                if [ "${GLIDE_AUTO_DIM:-true}" = "true" ]; then
-                    notify "Peredupan Layar Dinonaktifkan" "Layar akan TETAP TERANG saat Glide Mode aktif. Hanya profil CPU/perangkat keras yang dihemat!" "display"
-                else
-                    notify "Peredupan Layar Diaktifkan" "Layar akan meredup halus hingga 35% saat Glide Mode aktif untuk menghemat daya." "display"
-                fi
+            thresh_15)
+                run_sentinel_action "set Glide threshold to 15%" glide threshold 15 || true
                 ;;
-            TOGGLE_DEBOUNCE)
-                if [ "${GLIDE_DEBOUNCE_SECONDS:-3}" -ge 1 ]; then
-                    "$SENTINEL_CLI" glide debounce 0
-                    notify "Jeda Pengaman Dinonaktifkan" "Glide Mode akan aktif seketika tanpa jeda 3 detik." "dialog-information"
-                else
-                    "$SENTINEL_CLI" glide debounce 3
-                    notify "Jeda Pengaman 3 Detik Diaktifkan" "Jeda anti-kedip aktif untuk mengabaikan senggolan kabel charger." "dialog-information"
-                fi
+            thresh_10)
+                run_sentinel_action "set Glide threshold to 10%" glide threshold 10 || true
                 ;;
-            TEST_GLIDE)
-                (
-                    echo "10"; echo "# Mempersiapkan pengujian Glide Mode..."; sleep 1
-                    echo "30"; echo "# Mengaktifkan profil Eco Saver & peredupan halus..."; sleep 1
-                    echo "60"; echo "# Simulasi Glide Mode berjalan (5 detik)..."; sleep 2
-                    echo "90"; echo "# Memulihkan profil daya & kecerahan semula..."; sleep 1
-                    echo "100"; echo "# Selesai!"
-                ) | zenity --progress \
-                    --title="Uji Coba Glide Mode" \
-                    --window-icon="$APP_ICON" \
-                    --width=480 \
-                    --auto-close \
-                    --pulsate \
-                    2>/dev/null &
-                local TEST_PID=$!
-                "$SENTINEL_CLI" glide test >/dev/null 2>&1 || true
-                wait "$TEST_PID" 2>/dev/null || true
-                zenity --info \
-                    --title="Uji Coba Glide Mode Selesai" \
-                    --window-icon="$APP_ICON" \
-                    --width=480 \
-                    --text="⚡ <b>Uji Coba Glide Mode Berhasil!</b>\n\nTransisi otomatis profil daya dan respon kecerahan layar telah diuji dan dikembalikan ke kondisi semula dengan sempurna." \
-                    2>/dev/null || true
+            toggle_dim)
+                run_sentinel_action "toggle Glide auto-dim" glide toggle-dim || true
+                ;;
+            debounce)
+                run_sentinel_action "set Glide debounce to ${next_debounce}s" glide debounce "$next_debounce" || true
+                ;;
+            test_glide)
+                run_sentinel_action "run Glide transition test" glide test || true
+                ;;
+            *)
+                return 0
                 ;;
         esac
     done
 }
 
-while true; do
-    # Fetch fresh metrics from CLI
-    PROFILE="balanced"
-    CAPACITY="100%"
-    STATUS="Normal"
-    HEALTH="100.0%"
-    DISCHARGE_RATE="0.00 W"
-    TEMPERATURE="Normal"
-    REMAINING="AC Power"
-    THRESHOLD="80"
-    GLIDE_AUTO_ENABLED="true"
-    GLIDE_THRESHOLD="20"
-    GLIDE_AUTO_DIM="true"
-    GLIDE_ACTIVE="false"
+main() {
+    if [[ ! -x "$SENTINEL_CLI" ]]; then
+        show_error_dialog "Brisk Sentinel CLI was not found at ${SENTINEL_CLI}."
+        exit 1
+    fi
 
-    if [ -x "$SENTINEL_CLI" ]; then
-        RAW_DATA="$("$SENTINEL_CLI" status --raw 2>/dev/null || true)"
-        if [ -n "$RAW_DATA" ]; then
-            load_kv_output "$RAW_DATA"
+    while true; do
+        local telemetry_ok=1
+        if ! refresh_telemetry; then
+            telemetry_ok=0
         fi
-    fi
 
-    # Format Human-Friendly Profile Badge
-    CURRENT_PROFILE_BADGE="⚖️ Balanced"
-    case "${PROFILE:-balanced}" in
-        eco) CURRENT_PROFILE_BADGE="🍃 Eco Saver" ;;
-        turbo) CURRENT_PROFILE_BADGE="⚡ Turbo Performance" ;;
-        balanced) CURRENT_PROFILE_BADGE="⚖️ Balanced" ;;
-    esac
+        local profile_color="#0C5B73"
+        local profile_label="Balanced"
+        local sel_balanced="FALSE" sel_eco="FALSE" sel_turbo="FALSE"
+        case "$PROFILE" in
+            eco)
+                profile_color="#166534"
+                profile_label="Eco (Power Saver)"
+                sel_eco="TRUE"
+                ;;
+            turbo)
+                profile_color="#9A3412"
+                profile_label="Turbo (Max Performance)"
+                sel_turbo="TRUE"
+                ;;
+            *)
+                profile_color="#0C5B73"
+                profile_label="Balanced (Adaptive)"
+                sel_balanced="TRUE"
+                ;;
+        esac
 
-    # Format Lifespan Protector Status
-    PROTECTOR_BADGE="80% (Preservation Active)"
-    if [ "${THRESHOLD:-80}" -ge 98 ]; then
-        PROTECTOR_BADGE="100% (Standard / Travel Mode)"
-    else
-        PROTECTOR_BADGE="${THRESHOLD}% (Lifespan Saver Active)"
-    fi
+        local glide_status_pango="<span color='#475569'>Off</span>"
+        if [[ "$GLIDE_AUTO_ENABLED" == "true" ]]; then
+            glide_status_pango="<span color='#166534'>On (at ${GLIDE_THRESHOLD}%)</span>"
+        fi
+        if [[ "$GLIDE_ACTIVE" == "true" ]]; then
+            glide_status_pango="<span color='#B91C1C'><b>Active Now</b></span>"
+        fi
 
-    # Format Glide Mode Badge
-    GLIDE_BADGE="🪽 Auto (${GLIDE_THRESHOLD:-20}%, Dim On)"
-    if [ "${GLIDE_ACTIVE:-false}" = "true" ]; then
-        GLIDE_BADGE="🪽 Engaged (Active)"
-    elif [ "${GLIDE_AUTO_ENABLED:-true}" != "true" ]; then
-        GLIDE_BADGE="🪽 Disabled"
-    elif [ "${GLIDE_AUTO_DIM:-true}" != "true" ]; then
-        GLIDE_BADGE="🪽 Auto (${GLIDE_THRESHOLD:-20}%, Dim Off)"
-    fi
+        local thresh_label="${THRESHOLD}% Cap"
+        if [[ "$THRESHOLD" -le 85 ]]; then
+            thresh_label="${THRESHOLD}% (Longevity Guard)"
+        fi
 
-    HEADER_PANGO="<big><b>⚡ Brisk Battery Sentinel</b></big>\n\n"
-    HEADER_PANGO+="<b>Battery Level:</b> <span color='#38bdf8'><b>${CAPACITY}</b></span> (${STATUS})    "
-    HEADER_PANGO+="<b>Health:</b> <span color='#4ade80'><b>${HEALTH}</b></span>\n"
-    HEADER_PANGO+="<b>Power Draw:</b> ${DISCHARGE_RATE}    <b>Temp:</b> ${TEMPERATURE}\n"
-    HEADER_PANGO+="<b>Estimated Runtime:</b> ${REMAINING}\n\n"
-    HEADER_PANGO+="<b>Active Profile:</b> <b>${CURRENT_PROFILE_BADGE}</b>    "
-    HEADER_PANGO+="<b>Charge Ceiling:</b> <b>${PROTECTOR_BADGE}</b>\n"
-    HEADER_PANGO+="<b>Glide Mode:</b> <b>${GLIDE_BADGE}</b>\n"
-    HEADER_PANGO+="────────────────────────────────────────────────────────────\n"
-    HEADER_PANGO+="Select an optimization action or profile switch below:"
+        local header_pango
+        header_pango="<span size='large' weight='bold' color='#0F172A'>Brisk Sentinel: Power &amp; Battery Control</span>\n"
+        if [[ "$telemetry_ok" -eq 0 ]]; then
+            header_pango+="<span color='#B91C1C'><b>Notice:</b> Unable to read live telemetry from brisk-sentinel. Displaying defaults.</span>\n"
+        fi
+        header_pango+="<b>Profile:</b> <span color='${profile_color}'><b>$(pango_escape "$profile_label")</b></span>  |  "
+        header_pango+="<b>Brisk Glide:</b> ${glide_status_pango}\n"
+        header_pango+="<b>Battery:</b> <span color='#0F172A'>$(pango_escape "$CAPACITY")%</span> ($(pango_escape "$STATUS"))  |  "
+        header_pango+="<b>Health:</b> $(pango_escape "$HEALTH")  |  "
+        header_pango+="<b>Charge Limit:</b> $(pango_escape "$thresh_label")\n"
+        header_pango+="<span color='#475569'>Draw: $(pango_escape "$DISCHARGE_RATE")  |  Temp: $(pango_escape "$TEMPERATURE")  |  Remaining: $(pango_escape "$REMAINING")</span>"
 
-    CHOICE=$(zenity --list \
-        --title="$APP_NAME" \
-        --window-icon="$APP_ICON" \
-        --width=720 \
-        --height=520 \
-        --text="$HEADER_PANGO" \
-        --column="Key" \
-        --column="Profile / Operation" \
-        --column="Description & Impact" \
-        --hide-column=1 \
-        "ECO" "🍃 Switch to ECO SAVER Profile" "Capped CPU, powersave governor, +60% battery life" \
-        "BALANCED" "⚖️ Switch to BALANCED Profile" "Smart adaptive scaling (ideal everyday balance)" \
-        "TURBO" "⚡ Switch to TURBO PERFORMANCE" "Max clock speed & uncapped boost for heavy workloads" \
-        "GLIDE" "🪽 Pengaturan Cerdas Glide Mode (Auto-Guard)" "Auto-pilot baterai: peredupan halus, ambang batas & proteksi hemat daya" \
-        "PROTECT_80" "🛡️ Enable 80% Lifespan Protection" "Extends battery lifespan 3x by capping top voltage" \
-        "PROTECT_100" "🔋 Allow 100% Full Charge (Travel)" "Charges battery to full capacity for travel" \
-        "DIAGNOSTICS" "📊 View Detailed Power Diagnostics" "Detailed breakdown of battery wear, watts & TLP" \
-        "REFRESH" "🔄 Refresh System Metrics" "Query immediate hardware sensor updates" \
-        2>/dev/null || true)
+        local action=""
+        action="$(zenity --list \
+            --title="$APP_TITLE_PLAIN" \
+            --text="$header_pango" \
+            --radiolist \
+            --width=700 \
+            --height=490 \
+            --ok-label="Apply Selection" \
+            --cancel-label="Close" \
+            --column="Select" --column="ID" --column="Power Mode / Action" --column="Description and Impact" \
+            --hide-column=2 --print-column=2 \
+            "$sel_balanced" "balanced"  "Balanced Mode" "Adaptive performance scaling and normal thermal limits" \
+            "$sel_eco"      "eco"       "Eco Mode" "Extend battery runtime with conservative CPU scaling" \
+            "$sel_turbo"    "turbo"     "Turbo Mode" "Prioritize peak clock speeds and high responsiveness" \
+            FALSE           "glide"     "Brisk Glide Settings" "Configure automatic low-battery failover (${GLIDE_THRESHOLD}% trigger)" \
+            FALSE           "thresh80"  "Battery Longevity (80% Charge Limit)" "Stop charging at 80% to reduce battery wear" \
+            FALSE           "thresh100" "Full Charge (100% Charge Limit)" "Allow full 100% charge for travel autonomy" \
+            FALSE           "diag"      "Hardware Diagnostics" "Inspect raw battery cells, health, and TLP power logs" \
+            FALSE           "refresh"   "Refresh Telemetry" "Re-read live sensor and battery values" 2>/dev/null)" || exit 0
 
-    if [ -z "$CHOICE" ]; then
-        # User pressed Cancel or closed window
-        exit 0
-    fi
+        case "$action" in
+            balanced|eco|turbo)
+                run_sentinel_action "switch power profile to ${action}" profile "$action" || true
+                ;;
+            glide)
+                show_glide_settings_dialog
+                ;;
+            thresh80)
+                run_sentinel_action "set charge limit to 80%" threshold 80 || true
+                ;;
+            thresh100)
+                run_sentinel_action "set charge limit to 100%" threshold 100 || true
+                ;;
+            diag)
+                show_diagnostics_dialog
+                ;;
+            refresh)
+                continue
+                ;;
+            "")
+                exit 0
+                ;;
+        esac
+    done
+}
 
-    case "$CHOICE" in
-        ECO)
-            "$SENTINEL_CLI" profile eco
-            notify "Profile Switched: Eco Saver" "Aggressive power saving engaged. CPU ceiling capped to extend battery life." "battery-good"
-            ;;
-        BALANCED)
-            "$SENTINEL_CLI" profile balanced
-            notify "Profile Switched: Balanced" "Adaptive dynamic frequency scaling enabled for everyday productivity." "battery-good"
-            ;;
-        TURBO)
-            "$SENTINEL_CLI" profile turbo
-            notify "Profile Switched: Turbo Performance" "Maximum frequency boost and sustained performance governor enabled." "battery-full"
-            ;;
-        GLIDE)
-            show_glide_settings_dialog
-            ;;
-        PROTECT_80)
-            "$SENTINEL_CLI" threshold 80
-            notify "Lifespan Protector Enabled" "Battery charge limit set to 80% to protect cell longevity." "battery-good"
-            ;;
-        PROTECT_100)
-            "$SENTINEL_CLI" threshold 100
-            notify "Full 100% Charge Mode" "Battery charge ceiling set to 100% for maximum unplugged travel time." "battery-charging"
-            ;;
-        DIAGNOSTICS)
-            STATUS_TEXT="$("$SENTINEL_CLI" status 2>&1 || true)"
-            if command -v tlp-stat >/dev/null 2>&1; then
-                STATUS_TEXT+=$'\n\n----------------- TLP Battery Details -----------------\n'
-                STATUS_TEXT+="$(tlp-stat -b 2>&1 || true)"
-            fi
-            zenity --text-info \
-                --title="Brisk Battery Sentinel - Hardware Diagnostics" \
-                --window-icon="$APP_ICON" \
-                --width=680 \
-                --height=520 \
-                --ok-label="Close Diagnostics" \
-                --cancel-label="Back" \
-                <<< "$STATUS_TEXT" 2>/dev/null || true
-            ;;
-        REFRESH)
-            # Loop continues and re-reads metrics
-            sleep 0.2
-            ;;
-    esac
-done
+main "$@"

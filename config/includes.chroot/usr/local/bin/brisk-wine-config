@@ -1,162 +1,814 @@
-#!/bin/bash
+#!/usr/bin/env python3
 # ==============================================================================
-# BriskOS Wine Control Panel
-# Quick GUI control panel for Wine configuration, winetricks, and prefix management.
+# Brisk Wine Configuration - Morning Breeze GTK3 Desktop App
+# Manage Wine prefix, winecfg, winetricks, taskmgr, regedit, and clean resets.
 # ==============================================================================
-set -euo pipefail
 
-export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+import os
+import sys
+import time
+import shutil
+import signal
+import subprocess
+import threading
 
-# Check for zenity and graphical display
-if ! command -v zenity &>/dev/null || [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-    echo "ERROR: Graphical environment or zenity is not available." >&2
-    echo "Run 'winecfg' directly from the terminal." >&2
-    exit 1
-fi
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("Pango", "1.0")
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango
 
-notify() {
-    local msg="$1"
-    if command -v notify-send &>/dev/null; then
-        notify-send -i wine "BriskOS Windows Layer" "$msg" 2>/dev/null || true
-    fi
+APP_ID = "brisk-wine-config"
+APP_NAME = "Brisk Wine Configuration"
+WINEPREFIX = os.environ.get("WINEPREFIX") or os.path.expanduser("~/.wine")
+
+MORNING_BREEZE_CSS = b"""
+window,
+dialog,
+button,
+scrolledwindow,
+viewport {
+    background-image: none;
+    box-shadow: none;
 }
 
-show_error() {
-    local msg="$1"
-    zenity --error --title="Wine Control Panel" --text="$msg" --width=380 2>/dev/null || true
+scrolledwindow,
+viewport {
+    background-color: transparent;
 }
 
-reset_wine_prefix() {
-    if zenity --question \
-        --title="Reset Wine Prefix" \
-        --text="Are you sure you want to reset your Wine environment (~/.wine)?\n\nThis will backup your existing prefix and initialize a clean 64-bit Windows environment.\n\nInstalled Windows applications and settings in ~/.wine will be archived." \
-        --width=420 \
-        --ok-label="Reset Prefix" \
-        --cancel-label="Cancel"; then
-
-        local backup_dir="$HOME/.wine.backup.$(date +%Y%m%d_%H%M%S)"
-        
-        # Kill running wine processes
-        if command -v wineserver &>/dev/null; then
-            wineserver -k 2>/dev/null || true
-            sleep 1
-        fi
-
-        if [ -d "$WINEPREFIX" ]; then
-            mv "$WINEPREFIX" "$backup_dir"
-        fi
-
-        # Re-initialize clean 64-bit prefix with prompts suppressed
-        export WINEARCH="win64"
-        export WINEDLLOVERRIDES="mscoree,mshtml="
-        notify "Initializing clean 64-bit Wine prefix..."
-        wineboot --init 2>/dev/null || true
-
-        zenity --info \
-            --title="Wine Prefix Reset Complete" \
-            --text="Wine environment has been reset to clean factory defaults.\n\nPrevious prefix backup saved to:\n$backup_dir" \
-            --width=420 2>/dev/null || true
-    fi
+window,
+dialog {
+    background-color: #F5F7F7;
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", sans-serif;
 }
 
-open_winetricks() {
-    if ! command -v winetricks &>/dev/null; then
-        show_error "Winetricks is not installed.\n\nYou can install it with:\nsudo apt install winetricks"
-        return
-    fi
-    notify "Launching Winetricks..."
-    winetricks --gui 2>/dev/null &
+.top-banner {
+    background-color: #E9F1F4;
+    border-bottom: 1px solid #D5E2E7;
+    padding: 16px 22px;
 }
 
-open_winecfg() {
-    if ! command -v winecfg &>/dev/null; then
-        show_error "winecfg is not installed or not in PATH.\nPlease ensure Wine is properly installed."
-        return
-    fi
-    notify "Launching Wine Configuration..."
-    winecfg 2>/dev/null &
+.top-title {
+    color: #0F172A;
+    font-size: 17px;
+    font-weight: 700;
 }
 
-open_taskmgr() {
-    if ! command -v wine &>/dev/null; then
-        show_error "Wine is not installed."
-        return
-    fi
-    notify "Launching Windows Task Manager..."
-    wine taskmgr 2>/dev/null &
+.top-subtitle {
+    color: #475569;
+    font-size: 12.5px;
 }
 
-open_regedit() {
-    if ! command -v wine &>/dev/null; then
-        show_error "Wine is not installed."
-        return
-    fi
-    notify "Launching Windows Registry Editor..."
-    wine regedit 2>/dev/null &
+.content-area {
+    background-color: #F5F7F7;
+    padding: 18px 22px;
 }
 
-kill_wineserver() {
-    if command -v wineserver &>/dev/null; then
-        wineserver -k 2>/dev/null || true
-        zenity --info \
-            --title="Wine Processes Terminated" \
-            --text="All running Wine processes and background servers have been stopped." \
-            --width=350 2>/dev/null || true
-    else
-        show_error "wineserver command not found."
-    fi
+.status-card {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
+    padding: 14px 18px;
 }
 
-# Main Control Panel Loop
-while true; do
-    ACTION=$(zenity --list \
-        --title="BriskOS Wine Control Panel" \
-        --text="Select a Windows Compatibility tool or maintenance task:" \
-        --width=560 \
-        --height=400 \
-        --column="ID" \
-        --column="Tool" \
-        --column="Description" \
-        --hide-column=1 \
-        "winecfg" "Wine Configuration (winecfg)" "Configure audio, graphics, desktop integration & Windows version" \
-        "winetricks" "Install Windows DLLs (winetricks)" "Install DirectX, Visual C++ runtimes, MS fonts & core components" \
-        "reset" "Reset Wine Prefix" "Reset ~/.wine to factory clean state with automatic backup" \
-        "taskmgr" "Windows Task Manager" "View and manage active Windows processes" \
-        "regedit" "Windows Registry Editor" "Inspect and edit Wine Windows registry entries" \
-        "kill" "Stop All Wine Processes" "Force close hanging Windows applications (wineserver -k)" \
-        2>/dev/null) || break
+.status-heading {
+    color: #0F172A;
+    font-size: 13.5px;
+    font-weight: 700;
+}
 
-    if [ -z "$ACTION" ]; then
-        break
-    fi
+.status-meta {
+    color: #475569;
+    font-size: 12.5px;
+}
 
-    case "$ACTION" in
-        winecfg)
-            open_winecfg
-            break
-            ;;
-        winetricks)
-            open_winetricks
-            break
-            ;;
-        reset)
-            reset_wine_prefix
-            ;;
-        taskmgr)
-            open_taskmgr
-            break
-            ;;
-        regedit)
-            open_regedit
-            break
-            ;;
-        kill)
-            kill_wineserver
-            ;;
-        *)
-            break
-            ;;
-    esac
-done
+.pill-ready {
+    background-color: #DCFCE7;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
 
-exit 0
+.pill-init {
+    background-color: #FEF3C7;
+    color: #9A3412;
+    border: 1px solid #FDE68A;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.pill-missing {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FECACA;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.action-card {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
+    padding: 12px 16px;
+}
+
+.row-title {
+    color: #0F172A;
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.row-desc {
+    color: #475569;
+    font-size: 12px;
+}
+
+.notice-info {
+    background-color: #E0F2FE;
+    border: 1px solid #BAE6FD;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-info-text {
+    color: #0C5B73;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.notice-success {
+    background-color: #DCFCE7;
+    border: 1px solid #BBF7D0;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-success-text {
+    color: #166534;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.notice-error {
+    background-color: #FEE2E2;
+    border: 1px solid #FECACA;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-error-text {
+    color: #991B1B;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.footer-bar {
+    background-color: #E9F1F4;
+    border-top: 1px solid #D5E2E7;
+    padding: 12px 22px;
+}
+
+button.btn-primary {
+    background-color: #0E7490;
+    color: #FFFFFF;
+    border: 1px solid #0E7490;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+button.btn-primary:hover {
+    background-color: #0C627A;
+    border-color: #0C627A;
+}
+
+button.btn-secondary {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+button.btn-secondary:hover {
+    background-color: #F1F5F9;
+    border-color: #64748B;
+}
+
+button.btn-danger-outline {
+    background-color: #FFFFFF;
+    color: #B91C1C;
+    border: 1px solid #FCA5A5;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+button.btn-danger-outline:hover {
+    background-color: #FEE2E2;
+    border-color: #B91C1C;
+}
+
+button.btn-danger-solid {
+    background-color: #B91C1C;
+    color: #FFFFFF;
+    border: 1px solid #B91C1C;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+button.btn-danger-solid:hover {
+    background-color: #991B1B;
+    border-color: #991B1B;
+}
+
+button:disabled {
+    opacity: 0.55;
+}
+
+button:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+}
+"""
+
+SVG_TEMPLATES = {
+    "brand": (
+        '<rect x="3" y="4" width="18" height="16" rx="2"/>'
+        '<line x1="12" y1="4" x2="12" y2="20"/>'
+        '<line x1="3" y1="12" x2="21" y2="12"/>'
+    ),
+    "sliders": (
+        '<line x1="4" y1="21" x2="4" y2="14"/>'
+        '<line x1="4" y1="10" x2="4" y2="3"/>'
+        '<line x1="12" y1="21" x2="12" y2="12"/>'
+        '<line x1="12" y1="8" x2="12" y2="3"/>'
+        '<line x1="20" y1="21" x2="20" y2="16"/>'
+        '<line x1="20" y1="12" x2="20" y2="3"/>'
+        '<line x1="1" y1="14" x2="7" y2="14"/>'
+        '<line x1="9" y1="8" x2="15" y2="8"/>'
+        '<line x1="17" y1="16" x2="23" y2="16"/>'
+    ),
+    "package": (
+        '<path d="M16.5 9.4l-9-5.19"/>'
+        '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'
+        '<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>'
+        '<line x1="12" y1="22.08" x2="12" y2="12"/>'
+    ),
+    "activity": (
+        '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
+    ),
+    "key": (
+        '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>'
+    ),
+    "power": (
+        '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>'
+        '<line x1="12" y1="2" x2="12" y2="12"/>'
+    ),
+    "reset": (
+        '<polyline points="1 4 1 10 7 10"/>'
+        '<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>'
+    ),
+    "info": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<line x1="12" y1="16" x2="12" y2="12"/>'
+        '<line x1="12" y1="8" x2="12.01" y2="8"/>'
+    ),
+    "warn": (
+        '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+        '<line x1="12" y1="9" x2="12" y2="13"/>'
+        '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+    ),
+    "check": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<polyline points="9 12 11.5 14.5 16 9.5"/>'
+    ),
+}
+
+
+def svg_icon(name, color="#0E7490", size=18):
+    inner = SVG_TEMPLATES.get(name, SVG_TEMPLATES["info"])
+    svg_xml = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" '
+        f'stroke-linecap="round" stroke-linejoin="round">{inner}</svg>'
+    ).encode("utf-8")
+    loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+    loader.set_size(size, size)
+    loader.write(svg_xml)
+    loader.close()
+    return Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
+
+
+class BriskWineConfigWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title=APP_NAME)
+        self.set_default_size(600, 620)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("wine")
+
+        self.is_busy = False
+        self.wine_buttons = []
+        self.wine_available = shutil.which("wine") is not None
+
+        self.build_ui()
+        self.connect("destroy", self.on_destroy)
+        self.connect("key-press-event", self.on_key_press)
+
+        self.refresh_status_async()
+
+    def build_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(root)
+
+        # Header Banner (#E9F1F4)
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        top_bar.get_style_context().add_class("top-banner")
+        root.pack_start(top_bar, False, False, 0)
+
+        top_bar.pack_start(svg_icon("brand", color="#0E7490", size=26), False, False, 0)
+
+        title_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_title = Gtk.Label(label=APP_NAME, xalign=0)
+        lbl_title.get_style_context().add_class("top-title")
+        lbl_sub = Gtk.Label(
+            label="Manage Windows compatibility prefix, libraries, and runtime tools",
+            xalign=0,
+        )
+        lbl_sub.get_style_context().add_class("top-subtitle")
+        title_col.pack_start(lbl_title, False, False, 0)
+        title_col.pack_start(lbl_sub, False, False, 0)
+        top_bar.pack_start(title_col, True, True, 0)
+
+        # Canvas (#F5F7F7)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.get_style_context().add_class("content-area")
+        root.pack_start(content, True, True, 0)
+
+        # Notice Banner (R-27)
+        self.banner_revealer = Gtk.Revealer()
+        self.banner_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.banner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.banner_box.get_style_context().add_class("notice-info")
+        self.banner_icon_slot = Gtk.Box()
+        self.banner_spinner = Gtk.Spinner()
+        self.banner_spinner.set_no_show_all(True)
+        self.banner_icon = svg_icon("info", color="#0C5B73", size=18)
+        self.banner_icon.set_no_show_all(True)
+        self.banner_icon_slot.pack_start(self.banner_spinner, False, False, 0)
+        self.banner_icon_slot.pack_start(self.banner_icon, False, False, 0)
+        self.banner_label = Gtk.Label(xalign=0)
+        self.banner_label.set_line_wrap(True)
+        self.banner_label.get_style_context().add_class("notice-info-text")
+        self.banner_box.pack_start(self.banner_icon_slot, False, False, 0)
+        self.banner_box.pack_start(self.banner_label, True, True, 0)
+        self.banner_revealer.add(self.banner_box)
+        content.pack_start(self.banner_revealer, False, False, 0)
+
+        # Prefix Status Card
+        status_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        status_card.get_style_context().add_class("status-card")
+        content.pack_start(status_card, False, False, 0)
+
+        st_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        lbl_st_title = Gtk.Label(label="Wine Prefix Status", xalign=0)
+        lbl_st_title.get_style_context().add_class("status-heading")
+        self.lbl_prefix_pill = Gtk.Label(label="Checking...")
+        self.lbl_prefix_pill.get_style_context().add_class("pill-init")
+        st_top.pack_start(lbl_st_title, True, True, 0)
+        st_top.pack_end(self.lbl_prefix_pill, False, False, 0)
+        status_card.pack_start(st_top, False, False, 0)
+
+        self.lbl_prefix_path = Gtk.Label(label=f"Prefix: {WINEPREFIX}", xalign=0)
+        self.lbl_prefix_path.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        self.lbl_prefix_path.get_style_context().add_class("status-meta")
+        status_card.pack_start(self.lbl_prefix_path, False, False, 0)
+
+        self.lbl_wine_version = Gtk.Label(label="Runtime: Checking installed Wine version...", xalign=0)
+        self.lbl_wine_version.get_style_context().add_class("status-meta")
+        status_card.pack_start(self.lbl_wine_version, False, False, 0)
+
+        # Action Rows
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        scroll.add(rows_box)
+        content.pack_start(scroll, True, True, 0)
+
+        actions = [
+            (
+                "sliders",
+                "#0E7490",
+                "Wine Configuration",
+                "Configure Windows target version, graphics settings, drives, and audio",
+                "Open winecfg",
+                "btn-primary",
+                self.on_run_winecfg,
+                True,
+            ),
+            (
+                "package",
+                "#0E7490",
+                "Install Windows DLLs and Fonts",
+                "Launch Winetricks to add Visual C++ runtimes, DirectX libraries, or fonts",
+                "Open Winetricks",
+                "btn-secondary",
+                self.on_run_winetricks,
+                True,
+            ),
+            (
+                "activity",
+                "#0E7490",
+                "Windows Task Manager",
+                "Inspect and terminate active Windows processes running inside the prefix",
+                "Launch Task Manager",
+                "btn-secondary",
+                self.on_run_taskmgr,
+                True,
+            ),
+            (
+                "key",
+                "#0E7490",
+                "Windows Registry Editor",
+                "Edit Wine registry keys inside the active Windows compatibility prefix",
+                "Open Regedit",
+                "btn-secondary",
+                self.on_run_regedit,
+                True,
+            ),
+            (
+                "power",
+                "#475569",
+                "Stop All Wine Processes",
+                "Send a clean termination signal to wineserver for hanging Windows apps",
+                "Stop Processes",
+                "btn-secondary",
+                self.on_kill_wineserver,
+                True,
+            ),
+            (
+                "reset",
+                "#B91C1C",
+                "Reset Wine Prefix",
+                "Back up the current prefix and initialize a clean 64-bit Windows environment",
+                "Reset Prefix",
+                "btn-danger-outline",
+                self.on_reset_prefix,
+                True,
+            ),
+        ]
+
+        for icon_name, icon_color, title, desc, btn_label, btn_cls, handler, requires_wine in actions:
+            card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            card.get_style_context().add_class("action-card")
+
+            card.pack_start(svg_icon(icon_name, color=icon_color, size=20), False, False, 0)
+
+            txt_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl_r_title = Gtk.Label(label=title, xalign=0)
+            lbl_r_title.get_style_context().add_class("row-title")
+            lbl_r_desc = Gtk.Label(label=desc, xalign=0)
+            lbl_r_desc.set_line_wrap(True)
+            lbl_r_desc.get_style_context().add_class("row-desc")
+            txt_col.pack_start(lbl_r_title, False, False, 0)
+            txt_col.pack_start(lbl_r_desc, False, False, 0)
+            card.pack_start(txt_col, True, True, 0)
+
+            btn = Gtk.Button(label=btn_label)
+            btn.set_valign(Gtk.Align.CENTER)
+            btn.get_style_context().add_class(btn_cls)
+            btn.connect("clicked", handler)
+            card.pack_end(btn, False, False, 0)
+
+            if requires_wine:
+                self.wine_buttons.append(btn)
+
+            rows_box.pack_start(card, False, False, 0)
+
+        # Footer (#E9F1F4)
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        footer.get_style_context().add_class("footer-bar")
+        root.pack_end(footer, False, False, 0)
+
+        lbl_foot = Gtk.Label(label="BriskOS Windows Compatibility Layer", xalign=0)
+        lbl_foot.get_style_context().add_class("status-meta")
+        footer.pack_start(lbl_foot, True, True, 0)
+
+        self.btn_close = Gtk.Button(label="Close")
+        self.btn_close.get_style_context().add_class("btn-secondary")
+        self.btn_close.connect("clicked", lambda *_: self.close())
+        footer.pack_end(self.btn_close, False, False, 0)
+
+        if not self.wine_available:
+            self.set_actions_sensitive(False)
+            self.show_banner(
+                "error",
+                "Wine runtime was not found on PATH. Install the Wine package from Brisk Store to use Windows compatibility tools.",
+                spinning=False,
+            )
+
+    def set_actions_sensitive(self, enabled):
+        for btn in self.wine_buttons:
+            btn.set_sensitive(enabled and self.wine_available)
+
+    def show_banner(self, kind, text, spinning=False):
+        ctx = self.banner_box.get_style_context()
+        lbl_ctx = self.banner_label.get_style_context()
+        for cls in ("notice-info", "notice-success", "notice-error"):
+            ctx.remove_class(cls)
+        for cls in ("notice-info-text", "notice-success-text", "notice-error-text"):
+            lbl_ctx.remove_class(cls)
+
+        styles = {
+            "info": ("notice-info", "notice-info-text", "info", "#0C5B73"),
+            "success": ("notice-success", "notice-success-text", "check", "#166534"),
+            "error": ("notice-error", "notice-error-text", "warn", "#991B1B"),
+        }
+        box_cls, txt_cls, icon_name, icon_color = styles.get(kind, styles["info"])
+        ctx.add_class(box_cls)
+        lbl_ctx.add_class(txt_cls)
+        self.banner_label.set_text(text)
+
+        self.banner_icon_slot.remove(self.banner_icon)
+        self.banner_icon = svg_icon(icon_name, color=icon_color, size=18)
+        self.banner_icon.set_no_show_all(True)
+        self.banner_icon_slot.pack_start(self.banner_icon, False, False, 0)
+
+        if spinning:
+            self.banner_icon.hide()
+            self.banner_spinner.show()
+            self.banner_spinner.start()
+        else:
+            self.banner_spinner.stop()
+            self.banner_spinner.hide()
+            self.banner_icon.show()
+
+        self.banner_revealer.set_reveal_child(True)
+
+    def update_prefix_badge(self):
+        ctx = self.lbl_prefix_pill.get_style_context()
+        for cls in ("pill-ready", "pill-init", "pill-missing"):
+            ctx.remove_class(cls)
+
+        if not self.wine_available:
+            self.lbl_prefix_pill.set_text("Wine Missing")
+            ctx.add_class("pill-missing")
+        elif os.path.isdir(WINEPREFIX):
+            self.lbl_prefix_pill.set_text("Initialized")
+            ctx.add_class("pill-ready")
+        else:
+            self.lbl_prefix_pill.set_text("Not Initialized")
+            ctx.add_class("pill-init")
+
+    def refresh_status_async(self):
+        self.update_prefix_badge()
+        if not self.wine_available:
+            self.lbl_wine_version.set_text("Runtime: Not installed")
+            return
+
+        def _worker():
+            ver_text = "Detected (version unknown)"
+            try:
+                res = subprocess.run(["wine", "--version"], capture_output=True, text=True, timeout=5)
+                out = res.stdout.strip()
+                if out:
+                    ver_text = out
+            except Exception:
+                pass
+            GLib.idle_add(self._apply_version, ver_text)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_version(self, ver_text):
+        self.lbl_wine_version.set_text(f"Runtime: {ver_text}")
+        self.update_prefix_badge()
+        return False
+
+    def _spawn_tool(self, cmd, label):
+        if self.is_busy:
+            return
+        env = os.environ.copy()
+        env["WINEPREFIX"] = WINEPREFIX
+        try:
+            subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.show_banner("info", f"Launched {label}.", spinning=False)
+        except Exception as exc:
+            self.show_banner("error", f"Unable to launch {label}: {exc}", spinning=False)
+
+    def on_run_winecfg(self, _btn):
+        if not shutil.which("winecfg") and not shutil.which("wine"):
+            self.show_banner("error", "winecfg executable was not found.", spinning=False)
+            return
+        cmd = ["winecfg"] if shutil.which("winecfg") else ["wine", "winecfg"]
+        self._spawn_tool(cmd, "Wine Configuration (winecfg)")
+
+    def on_run_winetricks(self, _btn):
+        if not shutil.which("winetricks"):
+            self.show_banner(
+                "error",
+                "Winetricks is not installed. Install 'winetricks' via Brisk Store or APT to manage DLL components.",
+                spinning=False,
+            )
+            return
+        self._spawn_tool(["winetricks", "--gui"], "Winetricks")
+
+    def on_run_taskmgr(self, _btn):
+        self._spawn_tool(["wine", "taskmgr"], "Windows Task Manager")
+
+    def on_run_regedit(self, _btn):
+        self._spawn_tool(["wine", "regedit"], "Windows Registry Editor")
+
+    def on_kill_wineserver(self, _btn):
+        if self.is_busy:
+            return
+        wineserver = shutil.which("wineserver")
+        if not wineserver:
+            self.show_banner("error", "wineserver utility was not found on PATH.", spinning=False)
+            return
+
+        self.is_busy = True
+        self.set_actions_sensitive(False)
+        self.show_banner("info", "Stopping active Wine processes...", spinning=True)
+
+        def _worker():
+            env = os.environ.copy()
+            env["WINEPREFIX"] = WINEPREFIX
+            err = None
+            try:
+                subprocess.run([wineserver, "-k"], env=env, capture_output=True, text=True, timeout=10)
+            except Exception as exc:
+                err = str(exc)
+            GLib.idle_add(self._finish_kill, err)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _finish_kill(self, err):
+        self.is_busy = False
+        self.set_actions_sensitive(True)
+        if err:
+            self.show_banner("error", f"Failed to stop Wine processes: {err}", spinning=False)
+        else:
+            self.show_banner("success", "All active Wine processes in the current prefix were stopped.", spinning=False)
+        return False
+
+    def on_reset_prefix(self, _btn):
+        if self.is_busy:
+            return
+
+        dialog = Gtk.Dialog(
+            title="Confirm Wine Prefix Reset",
+            transient_for=self,
+            modal=True,
+        )
+        dialog.set_default_size(450, 180)
+        content = dialog.get_content_area()
+        content.set_border_width(18)
+        content.set_spacing(12)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        row.pack_start(svg_icon("warn", color="#B91C1C", size=24), False, False, 0)
+
+        msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        lbl_h = Gtk.Label(label="Reset Wine compatibility prefix?", xalign=0)
+        lbl_h.get_style_context().add_class("row-title")
+        lbl_b = Gtk.Label(
+            label=(
+                f"Any active Wine apps will be closed. Your existing prefix at {WINEPREFIX} "
+                "will be moved to a timestamped backup folder, and a fresh 64-bit Windows prefix will be initialized."
+            ),
+            xalign=0,
+        )
+        lbl_b.set_line_wrap(True)
+        lbl_b.set_max_width_chars(48)
+        lbl_b.get_style_context().add_class("row-desc")
+        msg_box.pack_start(lbl_h, False, False, 0)
+        msg_box.pack_start(lbl_b, False, False, 0)
+        row.pack_start(msg_box, True, True, 0)
+        content.pack_start(row, True, True, 0)
+
+        btn_cancel = dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        btn_cancel.get_style_context().add_class("btn-secondary")
+        btn_confirm = dialog.add_button("Reset Prefix", Gtk.ResponseType.OK)
+        btn_confirm.get_style_context().add_class("btn-danger-solid")
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        dialog.show_all()
+
+        response = dialog.run()
+        dialog.destroy()
+        if response != Gtk.ResponseType.OK:
+            return
+
+        self.is_busy = True
+        self.set_actions_sensitive(False)
+        self.btn_close.set_sensitive(False)
+        self.show_banner("info", "Backing up existing prefix and initializing fresh 64-bit Wine environment...", spinning=True)
+
+        threading.Thread(target=self._reset_prefix_worker, daemon=True).start()
+
+    def _reset_prefix_worker(self):
+        env = os.environ.copy()
+        env["WINEPREFIX"] = WINEPREFIX
+        env["WINEARCH"] = "win64"
+        env["WINEDLLOVERRIDES"] = "mscoree,mshtml="
+
+        backup_path = None
+        err = None
+        try:
+            wineserver = shutil.which("wineserver")
+            if wineserver:
+                subprocess.run([wineserver, "-k"], env=env, capture_output=True, timeout=10)
+                time.sleep(0.5)
+
+            if os.path.exists(WINEPREFIX):
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                backup_path = f"{WINEPREFIX}.backup.{stamp}"
+                shutil.move(WINEPREFIX, backup_path)
+
+            wineboot = shutil.which("wineboot")
+            cmd = [wineboot, "--init"] if wineboot else ["wine", "wineboot", "--init"]
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=90)
+            if res.returncode != 0:
+                detail = (res.stderr or res.stdout or "").strip()
+                err = detail or f"wineboot exited with status {res.returncode}."
+        except Exception as exc:
+            err = str(exc)
+
+        GLib.idle_add(self._finish_reset_prefix, backup_path, err)
+
+    def _finish_reset_prefix(self, backup_path, err):
+        self.is_busy = False
+        self.set_actions_sensitive(True)
+        self.btn_close.set_sensitive(True)
+        self.update_prefix_badge()
+
+        if err:
+            self.show_banner("error", f"Wine prefix reset encountered an error: {err}", spinning=False)
+        else:
+            note = f" Previous prefix archived to {backup_path}." if backup_path else ""
+            self.show_banner("success", f"Fresh 64-bit Wine prefix initialized.{note}", spinning=False)
+            if shutil.which("notify-send"):
+                try:
+                    subprocess.Popen(
+                        ["notify-send", "-a", APP_NAME, "Wine Prefix Reset", "A clean 64-bit Wine environment is ready."],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    pass
+        return False
+
+    def on_key_press(self, _win, event):
+        if event.keyval == Gdk.KEY_Escape and not self.is_busy:
+            self.close()
+            return True
+        return False
+
+    def on_destroy(self, *_args):
+        Gtk.main_quit()
+
+
+def apply_styling():
+    screen = Gdk.Screen.get_default()
+    if screen is not None:
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MORNING_BREEZE_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+
+def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    GLib.set_prgname(APP_ID)
+    GLib.set_application_name(APP_NAME)
+
+    if not Gtk.init_check()[0]:
+        print("Error: Unable to initialize GTK3 display.", file=sys.stderr)
+        sys.exit(1)
+
+    apply_styling()
+    win = BriskWineConfigWindow()
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

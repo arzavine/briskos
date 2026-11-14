@@ -1,370 +1,396 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ==============================================================================
-# Brisk Time-Travel Graphical Control Panel
-# Elegant Zenity interface for system snapshots, rollback, and APT automation.
-# Adheres strictly to BriskOS Antislop UI design standards.
+# brisk-timetravel-gui: Brisk System Snapshot & Rollback Center
+# Clean Zenity GUI frontend for brisk-timetravel with safe cancel handling.
 # ==============================================================================
-
 set -euo pipefail
 
-APP_TITLE="Brisk Time-Travel Recovery"
-APP_ICON="document-revert"
+export GDK_BACKEND="wayland,x11"
+
 CLI_BIN="/usr/local/bin/brisk-timetravel"
 CONFIG_FILE="/etc/brisk/timetravel.conf"
+APP_TITLE="Brisk Time-Travel: Snapshot & Rollback Center"
 
-# Verify dependencies
-if ! command -v zenity >/dev/null 2>&1; then
-    echo "Error: zenity is required to display the Time-Travel GUI." >&2
-    exit 1
-fi
+pango_escape() {
+    local text="${1:-}"
+    text="${text//&/&amp;}"
+    text="${text//</&lt;}"
+    text="${text//>/&gt;}"
+    printf '%s' "$text"
+}
 
-if [ ! -x "$CLI_BIN" ]; then
+show_error() {
+    local msg="${1:-An unexpected error occurred.}"
     zenity --error \
         --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --width=420 \
-        --text="The Time-Travel engine (${CLI_BIN}) is not found or not executable."
-    exit 1
-fi
-
-# Helper for desktop notifications
-send_notification() {
-    local title="$1"
-    local message="$2"
-    local urgency="${3:-normal}"
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send -i "$APP_ICON" -u "$urgency" "$title" "$message" 2>/dev/null || true
-    fi
+        --width=450 \
+        --text="$(pango_escape "$msg")" 2>/dev/null || true
 }
 
-# Action 1: Create Instant System Checkpoint
-action_create() {
-    local default_comment="Manual checkpoint $(date +'%Y-%m-%d %H:%M')"
-    local comment
-    comment=$(zenity --entry \
-        --title="Create System Checkpoint" \
-        --window-icon="$APP_ICON" \
-        --text="Enter a descriptive label or tag for this checkpoint:" \
-        --entry-text="$default_comment" \
-        --width=480) || true
-
-    if [ -z "$comment" ]; then
-        return 0
-    fi
-
-    local temp_log
-    temp_log=$(mktemp /tmp/brisk-timetravel-create-XXXXXX.log 2>/dev/null || echo "/tmp/brisk-tt-$$.log")
-
-    if (
-        sudo "$CLI_BIN" create "$comment" > "$temp_log" 2>&1
-    ) | zenity --progress \
+show_info() {
+    local msg="$1"
+    zenity --info \
         --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --text="Capturing instantaneous system checkpoint...\nPlease wait a moment." \
+        --width=440 \
+        --text="$(pango_escape "$msg")" 2>/dev/null || true
+}
+
+run_with_progress() {
+    local title="$1"
+    local text="$2"
+    shift 2
+
+    local status_file log_file rc=0
+    status_file="$(mktemp /tmp/brisk-tt-rc.XXXXXX)"
+    log_file="$(mktemp /tmp/brisk-tt-log.XXXXXX)"
+
+    (
+        set +e
+        "$@" >"$log_file" 2>&1
+        printf '%s' "$?" > "$status_file"
+    ) | zenity --progress \
+        --title="$title" \
+        --text="$(pango_escape "$text")" \
         --pulsate \
         --auto-close \
-        --width=460; then
+        --no-cancel \
+        --width=420 2>/dev/null || true
 
-        local snap_id
-        snap_id=$(tail -n1 "$temp_log" 2>/dev/null || echo "")
-        rm -f "$temp_log"
-
-        send_notification "System Checkpoint Captured" "Saved snapshot: ${comment}" "normal"
-
-        zenity --info \
-            --title="Checkpoint Created" \
-            --window-icon="$APP_ICON" \
-            --width=450 \
-            --text="<b>System Checkpoint Created Successfully!</b>\n\n<b>Identifier:</b> ${snap_id}\n<b>Description:</b> ${comment}\n\nYour system configuration and installed packages are safely preserved."
+    wait || true
+    if [[ -s "$status_file" ]]; then
+        rc="$(cat "$status_file")"
     else
-        local err_msg
-        err_msg=$(tail -n 6 "$temp_log" 2>/dev/null || echo "Unknown error occurred.")
-        rm -f "$temp_log"
-
-        zenity --error \
-            --title="Checkpoint Failed" \
-            --window-icon="$APP_ICON" \
-            --width=460 \
-            --text="Failed to create system checkpoint:\n\n${err_msg}"
+        rc=1
     fi
+
+    local output=""
+    if [[ -s "$log_file" ]]; then
+        output="$(cat "$log_file")"
+    fi
+    rm -f "$status_file" "$log_file"
+
+    if [[ "$rc" -ne 0 ]]; then
+        LAST_CMD_OUTPUT="$output"
+        return "$rc"
+    fi
+    LAST_CMD_OUTPUT="$output"
+    return 0
 }
 
-# Action 2: Restore to Previous Checkpoint
-action_restore() {
-    local raw_list
-    raw_list=$(sudo "$CLI_BIN" list --raw 2>/dev/null || true)
+fetch_raw_snapshots() {
+    local out=""
+    if ! out="$(sudo "$CLI_BIN" list --raw 2>&1)"; then
+        show_error "Failed to query snapshots from ${CLI_BIN}: ${out}"
+        return 1
+    fi
+    printf '%s' "$out"
+    return 0
+}
 
-    if [ -z "$raw_list" ]; then
-        zenity --warning \
-            --title="$APP_TITLE" \
-            --window-icon="$APP_ICON" \
-            --width=440 \
-            --text="<b>No Checkpoints Available</b>\n\nThere are currently no saved system checkpoints to restore.\nCreate a checkpoint first to enable rollback capability."
+action_create() {
+    local comment=""
+    if ! comment="$(zenity --entry \
+        --title="Create System Checkpoint" \
+        --text="<span weight='bold' color='#0F172A'>Create Instant System Checkpoint</span>\n<span color='#475569'>Enter an optional description for this restore point:</span>" \
+        --entry-text="Before system update" \
+        --ok-label="Create Checkpoint" \
+        --cancel-label="Cancel" \
+        --width=460 2>/dev/null)"; then
         return 0
     fi
 
-    # Build zenity radiolist arguments
-    local zenity_args=()
-    local first=true
+    if [[ -z "${comment// /}" ]]; then
+        comment="Manual snapshot"
+    fi
 
+    LAST_CMD_OUTPUT=""
+    if run_with_progress \
+        "Creating Checkpoint" \
+        "Saving system checkpoint '${comment}'. Please wait..." \
+        sudo "$CLI_BIN" create "$comment"; then
+        show_info "Checkpoint created successfully: ${comment}"
+    else
+        show_error "Failed to create checkpoint: ${LAST_CMD_OUTPUT:-Unknown error}"
+    fi
+}
+
+action_delete() {
+    local raw_list=""
+    if ! raw_list="$(fetch_raw_snapshots)"; then
+        return 0
+    fi
+
+    if [[ -z "${raw_list//[$'\r\n ']/}" ]]; then
+        show_info "No saved checkpoints are available to delete."
+        return 0
+    fi
+
+    local rows=()
+    local first="TRUE"
+    local sid sdate stype ssize scomment
     while IFS='|' read -r sid sdate stype ssize scomment; do
-        [ -z "$sid" ] && continue
-        if [ "$first" = true ]; then
-            zenity_args+=(TRUE "$sid" "$sdate" "$stype" "$ssize" "$scomment")
-            first=false
-        else
-            zenity_args+=(FALSE "$sid" "$sdate" "$stype" "$ssize" "$scomment")
-        fi
+        [[ -z "${sid:-}" ]] && continue
+        rows+=("$first" "$sid" "${sdate:-Unknown}" "${stype:-manual}" "${ssize:-N/A}" "${scomment:-}")
+        first="FALSE"
     done <<< "$raw_list"
 
-    local selected_id
-    selected_id=$(zenity --list \
-        --title="Select Rollback Checkpoint" \
-        --window-icon="$APP_ICON" \
-        --text="Select a system checkpoint to restore your computer to:" \
+    if [[ "${#rows[@]}" -eq 0 ]]; then
+        show_info "No valid checkpoints found."
+        return 0
+    fi
+
+    local to_delete=""
+    to_delete="$(zenity --list \
+        --title="Delete Checkpoint" \
+        --text="<span weight='bold' color='#0F172A'>Select a checkpoint to permanently remove</span>" \
         --radiolist \
-        --column="Select" \
-        --column="Checkpoint ID" \
-        --column="Date & Time" \
-        --column="Engine" \
-        --column="Size" \
-        --column="Description" \
-        "${zenity_args[@]}" \
         --width=720 \
-        --height=400) || true
-
-    if [ -z "$selected_id" ]; then
-        return 0
-    fi
-
-    # Confirmation warning before executing rollback
-    if ! zenity --question \
-        --title="Confirm System Rollback" \
-        --window-icon="$APP_ICON" \
-        --width=520 \
-        --ok-label="Rollback Now" \
+        --height=420 \
+        --ok-label="Delete Selected" \
         --cancel-label="Cancel" \
-        --text="<b>⚠️ SYSTEM ROLLBACK CONFIRMATION</b>\n\nYou are about to restore all system files to checkpoint:\n<b>${selected_id}</b>\n\n• A pre-restore safety checkpoint will be generated automatically before changes occur.\n• User documents in /home are preserved.\n• System binaries and packages will revert to this checkpoint.\n\nDo you want to proceed with the rollback?"; then
+        --column="Select" --column="ID" --column="Date" --column="Type" --column="Size" --column="Note" \
+        --print-column=2 \
+        "${rows[@]}" 2>/dev/null)" || return 0
+
+    [[ -z "$to_delete" ]] && return 0
+
+    if ! zenity --question \
+        --title="Confirm Checkpoint Deletion" \
+        --default-cancel \
+        --ok-label="Delete Permanently" \
+        --cancel-label="Keep Checkpoint" \
+        --width=440 \
+        --text="<span weight='bold' color='#B91C1C'>Delete Checkpoint ${to_delete}?</span>\n\nThis frees storage immediately and cannot be undone." 2>/dev/null; then
         return 0
     fi
 
-    local restore_log
-    restore_log=$(mktemp /tmp/brisk-timetravel-restore-XXXXXX.log 2>/dev/null || echo "/tmp/brisk-tt-res-$$.log")
-
-    if (
-        sudo "$CLI_BIN" restore "$selected_id" > "$restore_log" 2>&1
-    ) | zenity --progress \
-        --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --text="Rolling back system files to ${selected_id}...\nPlease do not interrupt or power off the machine." \
-        --pulsate \
-        --auto-close \
-        --width=500; then
-
-        rm -f "$restore_log"
-        send_notification "System Rollback Completed" "Restored system files to ${selected_id}." "critical"
-
-        if zenity --question \
-            --title="Rollback Complete" \
-            --window-icon="$APP_ICON" \
-            --width=500 \
-            --ok-label="Reboot Now" \
-            --cancel-label="Later" \
-            --text="<b>System Rollback Completed Successfully!</b>\n\nAll system files have been restored to checkpoint:\n<b>${selected_id}</b>\n\nA reboot is strongly recommended to reload kernel modules and running system services.\n\nWould you like to reboot the computer now?"; then
-            systemctl reboot
-        fi
+    LAST_CMD_OUTPUT=""
+    if run_with_progress \
+        "Deleting Checkpoint" \
+        "Removing checkpoint ${to_delete}..." \
+        sudo "$CLI_BIN" delete "$to_delete"; then
+        show_info "Checkpoint ${to_delete} was deleted."
     else
-        local err_msg
-        err_msg=$(tail -n 8 "$restore_log" 2>/dev/null || echo "Unknown error occurred.")
-        rm -f "$restore_log"
-
-        zenity --error \
-            --title="Rollback Failed" \
-            --window-icon="$APP_ICON" \
-            --width=480 \
-            --text="An error occurred during system rollback:\n\n${err_msg}"
+        show_error "Failed to delete checkpoint ${to_delete}: ${LAST_CMD_OUTPUT:-Unknown error}"
     fi
 }
 
-# Action 3: View Snapshot History & Storage Usage
+action_restore() {
+    local raw_list=""
+    if ! raw_list="$(fetch_raw_snapshots)"; then
+        return 0
+    fi
+
+    if [[ -z "${raw_list//[$'\r\n ']/}" ]]; then
+        show_info "No system checkpoints found. Create a checkpoint first before restoring."
+        return 0
+    fi
+
+    local rows=()
+    local first="TRUE"
+    local sid sdate stype ssize scomment
+    while IFS='|' read -r sid sdate stype ssize scomment; do
+        [[ -z "${sid:-}" ]] && continue
+        rows+=("$first" "$sid" "${sdate:-Unknown}" "${stype:-manual}" "${ssize:-N/A}" "${scomment:-}")
+        first="FALSE"
+    done <<< "$raw_list"
+
+    if [[ "${#rows[@]}" -eq 0 ]]; then
+        show_info "No restorable checkpoints found."
+        return 0
+    fi
+
+    local selected_id=""
+    selected_id="$(zenity --list \
+        --title="Restore System from Checkpoint" \
+        --text="<span weight='bold' color='#0F172A'>Select a checkpoint to restore</span>\n<span color='#475569'>Personal files in /home are preserved during rollback.</span>" \
+        --radiolist \
+        --width=740 \
+        --height=440 \
+        --ok-label="Continue to Restore" \
+        --cancel-label="Cancel" \
+        --column="Select" --column="ID" --column="Date" --column="Type" --column="Size" --column="Note" \
+        --print-column=2 \
+        "${rows[@]}" 2>/dev/null)" || return 0
+
+    [[ -z "$selected_id" ]] && return 0
+
+    if ! zenity --question \
+        --title="System Rollback Confirmation" \
+        --default-cancel \
+        --ok-label="Restore System Now" \
+        --cancel-label="Cancel" \
+        --width=480 \
+        --text="<span weight='bold' color='#9A3412'>SYSTEM ROLLBACK CONFIRMATION</span>\n\nYou are about to roll back system files to checkpoint <b>$(pango_escape "$selected_id")</b>:\n- System packages, /etc, and configuration files revert to that checkpoint\n- Personal user files under /home remain untouched\n- A pre-rollback safety snapshot is recorded automatically\n\nProceed with rollback now?" 2>/dev/null; then
+        return 0
+    fi
+
+    LAST_CMD_OUTPUT=""
+    if run_with_progress \
+        "Restoring System Checkpoint" \
+        "Restoring system state from checkpoint ${selected_id}. Do not power off..." \
+        sudo "$CLI_BIN" restore "$selected_id"; then
+        show_info "System rollback to checkpoint ${selected_id} completed. Reboot when ready to load all restored system services."
+    else
+        show_error "Rollback failed for checkpoint ${selected_id}: ${LAST_CMD_OUTPUT:-Unknown error}"
+    fi
+}
+
 action_history() {
     local history_tmp
-    history_tmp=$(mktemp /tmp/brisk-timetravel-hist-XXXXXX.txt 2>/dev/null || echo "/tmp/brisk-tt-hist-$$.txt")
+    history_tmp="$(mktemp /tmp/brisk-tt-history.XXXXXX)"
+    if ! sudo "$CLI_BIN" list > "$history_tmp" 2>&1; then
+        local err_msg
+        err_msg="$(cat "$history_tmp")"
+        rm -f "$history_tmp"
+        show_error "Failed to load snapshot history: ${err_msg:-Permission or CLI error}"
+        return 0
+    fi
 
-    sudo "$CLI_BIN" list > "$history_tmp" 2>&1
+    if [[ ! -s "$history_tmp" ]]; then
+        printf 'No snapshots recorded yet.\n' > "$history_tmp"
+    fi
 
-    zenity --text-info \
-        --title="Snapshot History & Storage Usage" \
-        --window-icon="$APP_ICON" \
+    local hist_choice=""
+    hist_choice="$(zenity --text-info \
+        --title="Snapshot History: Brisk Time-Travel" \
         --filename="$history_tmp" \
         --ok-label="Close" \
-        --cancel-label="Delete Checkpoint..." \
-        --width=720 \
-        --height=450 || {
-        # If user clicks Delete Checkpoint
-        rm -f "$history_tmp"
-        action_delete
-        return 0
-    }
+        --cancel-label="Back" \
+        --extra-button="Delete Checkpoint" \
+        --width=740 \
+        --height=460 2>/dev/null || true)"
 
     rm -f "$history_tmp"
-}
 
-# Sub-action: Delete a checkpoint
-action_delete() {
-    local raw_list
-    raw_list=$(sudo "$CLI_BIN" list --raw 2>/dev/null || true)
-
-    if [ -z "$raw_list" ]; then
-        zenity --info \
-            --title="$APP_TITLE" \
-            --window-icon="$APP_ICON" \
-            --width=400 \
-            --text="No checkpoints found to delete."
-        return 0
-    fi
-
-    local zenity_args=()
-    local first=true
-    while IFS='|' read -r sid sdate stype ssize scomment; do
-        [ -z "$sid" ] && continue
-        if [ "$first" = true ]; then
-            zenity_args+=(TRUE "$sid" "$sdate" "$ssize" "$scomment")
-            first=false
-        else
-            zenity_args+=(FALSE "$sid" "$sdate" "$ssize" "$scomment")
-        fi
-    done <<< "$raw_list"
-
-    local to_delete
-    to_delete=$(zenity --list \
-        --title="Delete System Checkpoint" \
-        --window-icon="$APP_ICON" \
-        --text="Select a checkpoint to permanently remove:" \
-        --radiolist \
-        --column="Select" \
-        --column="Checkpoint ID" \
-        --column="Date" \
-        --column="Size" \
-        --column="Comment" \
-        "${zenity_args[@]}" \
-        --width=640 \
-        --height=360) || true
-
-    if [ -n "$to_delete" ]; then
-        if zenity --question \
-            --title="Confirm Deletion" \
-            --window-icon="$APP_ICON" \
-            --width=450 \
-            --text="Are you sure you want to permanently delete checkpoint:\n<b>${to_delete}</b>?\n\nThis action cannot be undone."; then
-            sudo "$CLI_BIN" delete "$to_delete"
-            send_notification "Checkpoint Deleted" "Removed checkpoint ${to_delete}." "normal"
-            zenity --info \
-                --title="Checkpoint Deleted" \
-                --window-icon="$APP_ICON" \
-                --width=400 \
-                --text="Checkpoint <b>${to_delete}</b> has been deleted."
-        fi
+    if [[ "$hist_choice" == "Delete Checkpoint" ]]; then
+        action_delete
     fi
 }
 
-# Action 4: Automatic APT Backup Settings
+load_config_safe() {
+    AUTO_BACKUP_ENABLED="true"
+    MAX_SNAPSHOTS="10"
+    BACKUP_DIR="/var/backups/brisk-timetravel/snapshots"
+    SNAPSHOT_TYPE="auto"
+
+    [[ -r "$CONFIG_FILE" ]] || return 0
+
+    local line key val
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        [[ -z "$line" || "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        key="${key//[[:space:]]/}"
+        val="${val%\"}"
+        val="${val#\"}"
+        val="${val%\'}"
+        val="${val#\'}"
+        case "$key" in
+            AUTO_BACKUP_ENABLED)
+                [[ "$val" == "true" || "$val" == "false" ]] && AUTO_BACKUP_ENABLED="$val"
+                ;;
+            MAX_SNAPSHOTS)
+                if [[ "$val" =~ ^[0-9]+$ ]] && [[ "$val" -ge 1 && "$val" -le 50 ]]; then
+                    MAX_SNAPSHOTS="$val"
+                fi
+                ;;
+            BACKUP_DIR)
+                [[ -n "$val" ]] && BACKUP_DIR="$val"
+                ;;
+            SNAPSHOT_TYPE)
+                [[ -n "$val" ]] && SNAPSHOT_TYPE="$val"
+                ;;
+        esac
+    done < "$CONFIG_FILE"
+}
+
 action_settings() {
-    local current_state="Enabled"
-    if [ -f "$CONFIG_FILE" ]; then
-        if grep -q -E '^AUTO_BACKUP_ENABLED=false' "$CONFIG_FILE"; then
-            current_state="Disabled"
-        fi
+    load_config_safe
+
+    local form_out=""
+    form_out="$(zenity --forms \
+        --title="Time-Travel Configuration" \
+        --text="<span weight='bold' color='#0F172A'>Brisk Time-Travel Settings</span>\n<span color='#475569'>Current: Auto-Backup=${AUTO_BACKUP_ENABLED}, Max Snapshots=${MAX_SNAPSHOTS}</span>" \
+        --add-combo="Auto-Backup before APT Updates" \
+        --combo-values="true|false" \
+        --add-entry="Max Retained Snapshots (1-50, current: ${MAX_SNAPSHOTS})" \
+        --ok-label="Save Settings" \
+        --cancel-label="Cancel" \
+        --width=460 2>/dev/null)" || return 0
+
+    local new_auto new_max
+    IFS='|' read -r new_auto new_max <<< "$form_out"
+
+    if [[ -z "${new_auto:-}" ]]; then
+        new_auto="$AUTO_BACKUP_ENABLED"
     fi
-
-    local opt_enabled=FALSE
-    local opt_disabled=FALSE
-    if [ "$current_state" = "Enabled" ]; then
-        opt_enabled=TRUE
-    else
-        opt_disabled=TRUE
-    fi
-
-    local choice
-    choice=$(zenity --list \
-        --title="Automatic APT Checkpoint Settings" \
-        --window-icon="$APP_ICON" \
-        --text="Configure whether BriskOS automatically creates a system checkpoint\nbefore installing package updates with APT:\n\nCurrent Status: <b>${current_state}</b>" \
-        --radiolist \
-        --column="Select" --column="Setting" --column="Description" \
-        "$opt_enabled" "Enabled" "Create zero-friction checkpoint before APT upgrades" \
-        "$opt_disabled" "Disabled" "Skip automated pre-update snapshots" \
-        --width=560 \
-        --height=300) || true
-
-    if [ -z "$choice" ]; then
+    if [[ "$new_auto" != "true" && "$new_auto" != "false" ]]; then
+        show_error "Invalid Auto-Backup value '${new_auto}'. Choose true or false."
         return 0
     fi
 
-    local new_val="true"
-    [ "$choice" = "Disabled" ] && new_val="false"
-
-    # Ensure config directory exists
-    sudo mkdir -p "$(dirname "$CONFIG_FILE")"
-
-    if [ -f "$CONFIG_FILE" ]; then
-        if grep -q -E '^AUTO_BACKUP_ENABLED=' "$CONFIG_FILE"; then
-            sudo sed -i "s/^AUTO_BACKUP_ENABLED=.*/AUTO_BACKUP_ENABLED=${new_val}/" "$CONFIG_FILE"
-        else
-            echo "AUTO_BACKUP_ENABLED=${new_val}" | sudo tee -a "$CONFIG_FILE" >/dev/null
-        fi
-    else
-        cat << EOF | sudo tee "$CONFIG_FILE" >/dev/null
-AUTO_BACKUP_ENABLED=${new_val}
-MAX_SNAPSHOTS=10
-BACKUP_DIR="/var/backups/brisk-timetravel/snapshots"
-SNAPSHOT_TYPE="auto"
-EOF
+    if [[ -z "${new_max:-}" ]]; then
+        new_max="$MAX_SNAPSHOTS"
+    fi
+    if ! [[ "$new_max" =~ ^[0-9]+$ ]] || [[ "$new_max" -lt 1 || "$new_max" -gt 50 ]]; then
+        show_error "Max Retained Snapshots must be a whole number between 1 and 50."
+        return 0
     fi
 
-    zenity --info \
-        --title="Settings Updated" \
-        --window-icon="$APP_ICON" \
-        --width=420 \
-        --text="Automatic APT pre-update snapshots are now <b>${choice}</b>."
+    local conf_payload
+    conf_payload=$(cat <<EOF
+# Brisk Time-Travel Configuration
+AUTO_BACKUP_ENABLED=${new_auto}
+MAX_SNAPSHOTS=${new_max}
+BACKUP_DIR="${BACKUP_DIR}"
+SNAPSHOT_TYPE="${SNAPSHOT_TYPE}"
+EOF
+)
+    if ! printf '%s\n' "$conf_payload" | sudo tee "$CONFIG_FILE" >/dev/null 2>&1; then
+        show_error "Failed to update ${CONFIG_FILE}. Check sudo permissions."
+        return 0
+    fi
+
+    show_info "Saved Time-Travel settings: Auto-Backup=${new_auto}, Max Snapshots=${new_max}."
 }
 
-# Main Application Loop
-while true; do
-    ACTION=$(zenity --list \
-        --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --text="Select a recovery or snapshot operation:" \
-        --radiolist \
-        --column="Select" \
-        --column="Action" \
-        --column="Description" \
-        TRUE "⚡ Create Instant Checkpoint" "Save current system state and packages" \
-        FALSE "⏪ Restore to Previous Checkpoint" "Roll back system files to an earlier checkpoint" \
-        FALSE "📜 View History & Storage Usage" "Inspect snapshots, disk space, and manage checkpoints" \
-        FALSE "⚙️ Automatic APT Backup Settings" "Configure pre-update automatic checkpoints" \
-        --ok-label="Select" \
-        --cancel-label="Exit" \
-        --width=620 \
-        --height=350) || break
+main() {
+    if [[ ! -x "$CLI_BIN" ]]; then
+        show_error "Brisk Time-Travel CLI was not found at ${CLI_BIN}."
+        exit 1
+    fi
 
-    case "$ACTION" in
-        "⚡ Create Instant Checkpoint")
-            action_create
-            ;;
-        "⏪ Restore to Previous Checkpoint")
-            action_restore
-            ;;
-        "📜 View History & Storage Usage")
-            action_history
-            ;;
-        "⚙️ Automatic APT Backup Settings")
-            action_settings
-            ;;
-        *)
-            break
-            ;;
-    esac
-done
+    while true; do
+        local header_pango
+        header_pango="<span size='large' weight='bold' color='#0F172A'>Brisk Time-Travel: System Checkpoints</span>\n"
+        header_pango+="<span color='#475569'>Create, inspect, and restore clean system checkpoints with /home preserved.</span>"
 
-exit 0
+        local action=""
+        action="$(zenity --list \
+            --title="$APP_TITLE" \
+            --text="$header_pango" \
+            --radiolist \
+            --width=660 \
+            --height=390 \
+            --ok-label="Open Action" \
+            --cancel-label="Close" \
+            --column="Select" --column="ID" --column="Action" --column="Description" \
+            --hide-column=2 --print-column=2 \
+            TRUE  "create"   "Create System Checkpoint" "Save a clean restore point right now before changes" \
+            FALSE "restore"  "Restore System" "Roll back packages and /etc configuration to a prior checkpoint" \
+            FALSE "history"  "Snapshot History" "Browse saved checkpoints or delete old restore points" \
+            FALSE "settings" "Time-Travel Settings" "Configure pre-update auto-backup and retention limit" 2>/dev/null)" || exit 0
+
+        case "$action" in
+            create)   action_create ;;
+            restore)  action_restore ;;
+            history)  action_history ;;
+            settings) action_settings ;;
+            "")       exit 0 ;;
+        esac
+    done
+}
+
+main "$@"

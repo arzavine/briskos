@@ -2,14 +2,12 @@
 # ==============================================================================
 # Brisk Floating OSD HUD (brisk-osd)
 # Ephemeral, Ultra-Lean Hardware Media & Brightness Overlay for BriskOS 1.0 LTS
-# Pure PyGObject / GTK3 + LayerShell • Sub-18 MB RAM active, 0 MB idle
-# Adheres strictly to Antislop UI rules and Supersonic Frost aesthetics.
+# Pure PyGObject / GTK3 + LayerShell, Morning Breeze light surface + SVG icons.
 # ==============================================================================
 
 import os
 import sys
 import json
-import time
 import socket
 import signal
 import subprocess
@@ -62,7 +60,6 @@ def read_volume():
 
     try:
         res = subprocess.check_output(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], text=True, stderr=subprocess.DEVNULL)
-        # Parse percentage from pactl
         for token in res.split():
             if token.endswith("%"):
                 val = int(token.rstrip("%"))
@@ -76,22 +73,36 @@ def read_volume():
     except Exception:
         pass
 
-    # Safe fallback
     return 65, False
 
 def adjust_mic(arg):
-    # Supports "toggle"/"mute", "+5", "-5"
+    # Supports "toggle"/"mute", "on"/"unmute", "off", "+5", "-5"
     action = (arg or "toggle").strip().lower()
     if action.startswith(("+", "-")):
         sign = "+" if action.startswith("+") else "-"
         val = action.strip("+-")
         step = f"{val}%{sign}"
         try:
-            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", step, "-l", "1.0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SOURCE@", step], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             try:
-                pactl_step = f"{sign}{val}%"
-                subprocess.run(["pactl", "set-source-volume", "@DEFAULT_SOURCE@", pactl_step], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["pactl", "set-source-volume", "@DEFAULT_SOURCE@", f"{sign}{val}%"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    elif action in ("on", "unmute", "0"):
+        try:
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            try:
+                subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    elif action in ("off", "1"):
+        try:
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "1"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            try:
+                subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "1"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
     else:
@@ -108,7 +119,6 @@ def read_mic():
     # Returns (percent: int, muted: bool)
     try:
         res = subprocess.check_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], text=True, stderr=subprocess.DEVNULL).strip()
-        # format: "Volume: 1.00" or "Volume: 0.75 [MUTED]"
         muted = "[MUTED]" in res
         vol = 100
         for part in res.split():
@@ -154,8 +164,6 @@ def read_brightness():
     # Returns (percent: int)
     try:
         res = subprocess.check_output(["brightnessctl", "-m"], text=True, stderr=subprocess.DEVNULL).strip()
-        # format: device,class,curr,max%,max,curr%
-        # e.g.: intel_backlight,backlight,450,100%,960,47%
         parts = res.split(",")
         if len(parts) >= 4:
             for p in reversed(parts):
@@ -180,80 +188,155 @@ def send_ipc(payload):
         return False
 
 # ------------------------------------------------------------------------------
+# Inline Uniform-Stroke SVG Icon Helpers
+# ------------------------------------------------------------------------------
+SVG_PATHS = {
+    "volume_high": (
+        '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+        '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+        '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>'
+    ),
+    "volume_mid": (
+        '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+        '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+    ),
+    "volume_low": (
+        '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+    ),
+    "volume_muted": (
+        '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+        '<line x1="22" y1="9" x2="16" y2="15"/>'
+        '<line x1="16" y1="9" x2="22" y2="15"/>'
+    ),
+    "brightness": (
+        '<circle cx="12" cy="12" r="4"/>'
+        '<line x1="12" y1="2" x2="12" y2="4"/>'
+        '<line x1="12" y1="20" x2="12" y2="22"/>'
+        '<line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/>'
+        '<line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/>'
+        '<line x1="2" y1="12" x2="4" y2="12"/>'
+        '<line x1="20" y1="12" x2="22" y2="12"/>'
+        '<line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/>'
+        '<line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/>'
+    ),
+    "mic": (
+        '<rect x="9" y="2" width="6" height="11" rx="3"/>'
+        '<path d="M5 10a7 7 0 0 0 14 0"/>'
+        '<line x1="12" y1="17" x2="12" y2="21"/>'
+        '<line x1="8" y1="21" x2="16" y2="21"/>'
+    ),
+    "mic_muted": (
+        '<rect x="9" y="2" width="6" height="11" rx="3"/>'
+        '<path d="M5 10a7 7 0 0 0 10.6 6"/>'
+        '<line x1="12" y1="17" x2="12" y2="21"/>'
+        '<line x1="8" y1="21" x2="16" y2="21"/>'
+        '<line x1="3" y1="3" x2="21" y2="21"/>'
+    ),
+}
+
+# ------------------------------------------------------------------------------
 # GUI HUD Application (PyGObject GTK3 + LayerShell)
 # ------------------------------------------------------------------------------
 def run_gui(initial_payload):
     import gi
     gi.require_version("Gtk", "3.0")
     gi.require_version("Gdk", "3.0")
-    from gi.repository import Gtk, Gdk, GLib
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
     has_layer_shell = False
     try:
         gi.require_version("GtkLayerShell", "0.1")
         from gi.repository import GtkLayerShell
-        has_layer_shell = True
+        has_layer_shell = bool(GtkLayerShell.is_supported())
     except Exception:
         has_layer_shell = False
+
+    def make_svg_pixbuf(name, color="#0E7490", size=22):
+        path_data = SVG_PATHS.get(name, SVG_PATHS["volume_high"])
+        svg_xml = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+            f'viewBox="0 0 24 24" fill="none" stroke="{color}" '
+            f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+            f'{path_data}</svg>'
+        ).encode("utf-8")
+        try:
+            loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+            loader.set_size(size, size)
+            loader.write(svg_xml)
+            loader.close()
+            return loader.get_pixbuf()
+        except Exception:
+            return None
 
     OSD_CSS = b"""
     window {
         background-color: transparent;
+        background-image: none;
     }
 
     .osd-pill {
-        background-color: rgba(11, 15, 25, 0.94);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 18px;
-        padding: 10px 18px;
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.15);
+        background-color: rgba(255, 255, 255, 0.94);
+        background-image: none;
+        border: 1px solid #CBD5E1;
+        border-radius: 14px;
+        padding: 12px 18px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
     }
 
-    .osd-icon {
-        color: #38bdf8;
-        font-size: 20px;
-        margin-right: 12px;
-    }
-
-    .osd-icon-muted {
-        color: #f43f5e;
-        font-size: 20px;
+    .osd-icon-wrap {
         margin-right: 12px;
     }
 
     .osd-title {
-        color: #94a3b8;
+        color: #475569;
         font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
+        font-weight: 700;
         letter-spacing: 0.05em;
         margin-bottom: 4px;
     }
 
     .osd-value {
-        color: #f8fafc;
+        color: #0F172A;
         font-size: 13px;
         font-weight: 700;
         margin-left: 14px;
-        min-width: 44px;
+        min-width: 48px;
     }
 
-    /* Supersonic Frost Progress Bar */
+    .osd-value-muted {
+        color: #991B1B;
+        font-size: 13px;
+        font-weight: 700;
+        margin-left: 14px;
+        min-width: 48px;
+    }
+
+    /* Morning Breeze Level Bar */
     progressbar trough {
-        background-color: #1e293b;
-        border-radius: 4px;
+        background-color: #E9F1F4;
+        background-image: none;
+        box-shadow: none;
+        border: 1px solid #CBD5E1;
+        border-radius: 5px;
         min-height: 8px;
         min-width: 170px;
     }
 
     progressbar progress {
-        background-image: linear-gradient(90deg, #38bdf8 0%, #0284c7 60%, #1d4ed8 100%);
-        border-radius: 4px;
+        background-color: #0E7490;
+        background-image: none;
+        box-shadow: none;
+        border: none;
+        border-radius: 5px;
     }
 
     .muted-bar progress {
-        background-image: linear-gradient(90deg, #f43f5e 0%, #be123c 100%);
-        border-radius: 4px;
+        background-color: #B91C1C;
+        background-image: none;
+        box-shadow: none;
+        border: none;
+        border-radius: 5px;
     }
     """
 
@@ -267,14 +350,23 @@ def run_gui(initial_payload):
             self.set_skip_pager_hint(True)
             self.set_keep_above(True)
 
+            # Request RGBA visual for crisp rounded pill transparency
+            screen = self.get_screen()
+            if screen is not None:
+                visual = screen.get_rgba_visual()
+                if visual is not None and screen.is_composited():
+                    self.set_visual(visual)
+                self.set_app_paintable(True)
+
             # Apply CSS
             provider = Gtk.CssProvider()
             provider.load_from_data(OSD_CSS)
-            Gtk.StyleContext.add_provider_for_screen(
-                Gdk.Screen.get_default(),
-                provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+            if screen is not None:
+                Gtk.StyleContext.add_provider_for_screen(
+                    screen,
+                    provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
 
             # Wayland Layer Shell Integration
             if has_layer_shell:
@@ -292,10 +384,10 @@ def run_gui(initial_payload):
             self.pill_box.get_style_context().add_class("osd-pill")
             self.add(self.pill_box)
 
-            # Icon
-            self.lbl_icon = Gtk.Label()
-            self.lbl_icon.get_style_context().add_class("osd-icon")
-            self.pill_box.pack_start(self.lbl_icon, False, False, 0)
+            # Vector SVG Icon
+            self.icon_img = Gtk.Image()
+            self.icon_img.get_style_context().add_class("osd-icon-wrap")
+            self.pill_box.pack_start(self.icon_img, False, False, 0)
 
             # Center VBox: Title + Progress Bar
             v_center = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -304,10 +396,11 @@ def run_gui(initial_payload):
             v_center.pack_start(self.lbl_title, False, False, 0)
 
             self.progress = Gtk.ProgressBar()
+            self.progress.set_show_text(False)
             v_center.pack_start(self.progress, False, False, 0)
             self.pill_box.pack_start(v_center, True, True, 0)
 
-            # Percentage Badge
+            # Percentage / Mute Label
             self.lbl_val = Gtk.Label(xalign=1)
             self.lbl_val.get_style_context().add_class("osd-value")
             self.pill_box.pack_start(self.lbl_val, False, False, 0)
@@ -331,6 +424,14 @@ def run_gui(initial_payload):
             t = threading.Thread(target=self._ipc_listener_loop, daemon=True)
             t.start()
 
+        def _set_svg_icon(self, icon_name, muted=False):
+            color = "#B91C1C" if muted else "#0E7490"
+            pixbuf = make_svg_pixbuf(icon_name, color=color, size=22)
+            if pixbuf is not None:
+                self.icon_img.set_from_pixbuf(pixbuf)
+            else:
+                self.icon_img.set_from_icon_name("audio-volume-high-symbolic", Gtk.IconSize.LARGE_TOOLBAR)
+
         def update_hud(self, data):
             htype = data.get("type", "volume")
             val = int(data.get("value", 50))
@@ -339,42 +440,45 @@ def run_gui(initial_payload):
             val = max(0, min(100, val))
             fraction = val / 100.0
 
+            val_ctx = self.lbl_val.get_style_context()
+            bar_ctx = self.progress.get_style_context()
+
             if htype == "volume":
                 self.lbl_title.set_text("VOLUME")
                 if muted:
-                    self.lbl_icon.set_text("🔇")
-                    self.lbl_icon.get_style_context().remove_class("osd-icon")
-                    self.lbl_icon.get_style_context().add_class("osd-icon-muted")
+                    self._set_svg_icon("volume_muted", muted=True)
+                    val_ctx.remove_class("osd-value")
+                    val_ctx.add_class("osd-value-muted")
                     self.lbl_val.set_text("MUTE")
-                    self.progress.get_style_context().add_class("muted-bar")
+                    bar_ctx.add_class("muted-bar")
                 else:
-                    icon_char = "🔊" if val > 60 else ("🔉" if val > 20 else "🔈")
-                    self.lbl_icon.set_text(icon_char)
-                    self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
-                    self.lbl_icon.get_style_context().add_class("osd-icon")
+                    icon_name = "volume_high" if val > 60 else ("volume_mid" if val > 20 else "volume_low")
+                    self._set_svg_icon(icon_name, muted=False)
+                    val_ctx.remove_class("osd-value-muted")
+                    val_ctx.add_class("osd-value")
                     self.lbl_val.set_text(f"{val}%")
-                    self.progress.get_style_context().remove_class("muted-bar")
+                    bar_ctx.remove_class("muted-bar")
             elif htype == "brightness":
                 self.lbl_title.set_text("KECERAHAN")
-                self.lbl_icon.set_text("☀️")
-                self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
-                self.lbl_icon.get_style_context().add_class("osd-icon")
+                self._set_svg_icon("brightness", muted=False)
+                val_ctx.remove_class("osd-value-muted")
+                val_ctx.add_class("osd-value")
                 self.lbl_val.set_text(f"{val}%")
-                self.progress.get_style_context().remove_class("muted-bar")
+                bar_ctx.remove_class("muted-bar")
             elif htype == "mic":
                 self.lbl_title.set_text("MIKROFON")
                 if muted:
-                    self.lbl_icon.set_text("🚫")
-                    self.lbl_icon.get_style_context().remove_class("osd-icon")
-                    self.lbl_icon.get_style_context().add_class("osd-icon-muted")
+                    self._set_svg_icon("mic_muted", muted=True)
+                    val_ctx.remove_class("osd-value")
+                    val_ctx.add_class("osd-value-muted")
                     self.lbl_val.set_text("MUTE")
-                    self.progress.get_style_context().add_class("muted-bar")
+                    bar_ctx.add_class("muted-bar")
                 else:
-                    self.lbl_icon.set_text("🎙️")
-                    self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
-                    self.lbl_icon.get_style_context().add_class("osd-icon")
+                    self._set_svg_icon("mic", muted=False)
+                    val_ctx.remove_class("osd-value-muted")
+                    val_ctx.add_class("osd-value")
                     self.lbl_val.set_text(f"{val}%")
-                    self.progress.get_style_context().remove_class("muted-bar")
+                    bar_ctx.remove_class("muted-bar")
 
             self.progress.set_fraction(fraction)
 
@@ -384,7 +488,6 @@ def run_gui(initial_payload):
             self.timeout_id = GLib.timeout_add(1200, self._on_timeout)
 
         def _on_timeout(self):
-            # Clean exit to preserve 0 MB RAM
             if os.path.exists(self.sock_path):
                 try:
                     os.remove(self.sock_path)
@@ -406,7 +509,7 @@ def run_gui(initial_payload):
                 except Exception:
                     break
 
-    win = BriskOSDWindow(initial_payload)
+    BriskOSDWindow(initial_payload)
     Gtk.main()
 
 # ------------------------------------------------------------------------------
@@ -433,19 +536,18 @@ def main():
         val, muted = adjust_mic(arg)
         payload = {"type": "mic", "value": val, "muted": muted}
     elif target == "preview":
-        ptype = arg if arg in ["volume", "brightness"] else "volume"
+        ptype = arg if arg in ["volume", "brightness", "mic"] else "volume"
         pval = int(sys.argv[3]) if len(sys.argv) > 3 else 75
-        payload = {"type": ptype, "value": pval, "muted": False}
+        pmuted = (len(sys.argv) > 4 and sys.argv[4].lower() in ("mute", "muted", "true", "1"))
+        payload = {"type": ptype, "value": pval, "muted": pmuted}
 
     # 1. Try sending via IPC to existing visible HUD
     if send_ipc(payload):
         sys.exit(0)
 
     # 2. No HUD running, spawn HUD daemon
-    # If stdin/stdout is terminal, fork or launch background process
     if hasattr(os, "fork"):
         if os.fork() != 0:
-            # Parent returns immediately so keyboard input never lags
             sys.exit(0)
         os.setsid()
     run_gui(payload)

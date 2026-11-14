@@ -2,32 +2,212 @@
 # ==============================================================================
 # BriskOS Calamares Installer Launcher Wrapper
 # ==============================================================================
-# Handles environment checks, Wayland/Qt session configuration, polkit elevation,
-# and structured debug logging to /var/log/calamares-installer.log.
+# Handles environment checks, Wayland/Qt session forwarding across pkexec/sudo,
+# clean fallback error dialogs in Morning Breeze style, and debug logging.
 # ==============================================================================
 
 set -eo pipefail
 
 LOG_FILE="/var/log/calamares-installer.log"
 
-# Handle internal elevated re-entry (preserves Wayland/X11 session variables across pkexec)
+# Morning Breeze GTK3 error/notice dialog helper (uses PyGObject if available, else zenity/stderr)
+show_ui_dialog() {
+    local title="$1"
+    local heading="$2"
+    local body="$3"
+    local is_error="${4:-true}"
+
+    if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+        echo "${heading}: ${body}" >&2
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import gi; gi.require_version('Gtk', '3.0')" 2>/dev/null; then
+        python3 - "$title" "$heading" "$body" "$is_error" << 'PYEOF' 2>/dev/null || true
+import sys
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gtk, Gdk, GdkPixbuf
+
+title, heading, body, is_err_str = sys.argv[1:5]
+is_err = (is_err_str == "true")
+
+CSS = b"""
+window, dialog {
+    background-color: #F5F7F7;
+    background-image: none;
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", sans-serif;
+}
+.header-strip {
+    background-color: #E9F1F4;
+    border-bottom: 1px solid #D5E2E7;
+    padding: 14px 18px;
+}
+.card-box {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
+    padding: 16px;
+}
+.title-lbl {
+    color: #0F172A;
+    font-size: 15px;
+    font-weight: 700;
+}
+.body-lbl {
+    color: #475569;
+    font-size: 13px;
+}
+button.btn-primary {
+    background-color: #0E7490;
+    background-image: none;
+    box-shadow: none;
+    color: #FFFFFF;
+    border: 1px solid #0E7490;
+    border-radius: 8px;
+    padding: 7px 18px;
+    font-weight: 600;
+}
+button.btn-primary:hover {
+    background-color: #0C627A;
+    border-color: #0C627A;
+}
+button.btn-primary:focus {
+    outline: 2px solid #0F172A;
+    outline-offset: 2px;
+}
+"""
+
+def make_icon():
+    color = "#991B1B" if is_err else "#0E7490"
+    inner = (
+        '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+        '<line x1="12" y1="9" x2="12" y2="13"/>'
+        '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+        if is_err else
+        '<circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+    )
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" '
+        f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{inner}</svg>'
+    ).encode("utf-8")
+    loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+    loader.set_size(22, 22)
+    loader.write(svg)
+    loader.close()
+    return Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
+
+if Gtk.init_check()[0]:
+    prov = Gtk.CssProvider()
+    prov.load_from_data(CSS)
+    screen = Gdk.Screen.get_default()
+    if screen is not None:
+        Gtk.StyleContext.add_provider_for_screen(screen, prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    win = Gtk.Window(title=title)
+    win.set_default_size(460, 210)
+    win.set_resizable(False)
+    win.set_position(Gtk.WindowPosition.CENTER)
+
+    root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    win.add(root)
+
+    hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    hdr.get_style_context().add_class("header-strip")
+    hdr.pack_start(make_icon(), False, False, 0)
+    lbl_h = Gtk.Label(label=heading, xalign=0)
+    lbl_h.get_style_context().add_class("title-lbl")
+    hdr.pack_start(lbl_h, True, True, 0)
+    root.pack_start(hdr, False, False, 0)
+
+    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+    content.set_margin_top(16)
+    content.set_margin_bottom(16)
+    content.set_margin_start(18)
+    content.set_margin_end(18)
+    root.pack_start(content, True, True, 0)
+
+    card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    card.get_style_context().add_class("card-box")
+    lbl_b = Gtk.Label(label=body, xalign=0)
+    lbl_b.set_line_wrap(True)
+    lbl_b.set_max_width_chars(56)
+    lbl_b.get_style_context().add_class("body-lbl")
+    card.pack_start(lbl_b, False, False, 0)
+    content.pack_start(card, True, True, 0)
+
+    btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    btn_ok = Gtk.Button(label="Close")
+    btn_ok.get_style_context().add_class("btn-primary")
+    btn_ok.connect("clicked", lambda *_: Gtk.main_quit())
+    btn_row.pack_end(btn_ok, False, False, 0)
+    content.pack_end(btn_row, False, False, 0)
+
+    win.connect("destroy", lambda *_: Gtk.main_quit())
+    win.connect("key-press-event", lambda _w, ev: Gtk.main_quit() if ev.keyval == Gdk.KEY_Escape else False)
+    win.show_all()
+    btn_ok.grab_focus()
+    Gtk.main()
+PYEOF
+    elif command -v zenity >/dev/null 2>&1; then
+        local zflag="--info"
+        [ "$is_error" = "true" ] && zflag="--error"
+        zenity "$zflag" --title="$title" --width=440 --text="${heading}\n\n${body}" 2>/dev/null || true
+    fi
+}
+
+# Handle internal elevated re-entry (preserves Wayland/X11 session variables across pkexec/sudo)
 IS_ELEVATED=false
+ORIG_XDG_RUNTIME_DIR=""
 if [ "${1:-}" = "--elevated" ] && [ "$(id -u)" -eq 0 ]; then
     IS_ELEVATED=true
     shift
-    [ -n "${1:-}" ] && export WAYLAND_DISPLAY="$1"
-    [ -n "${2:-}" ] && export DISPLAY="$2"
-    [ -n "${3:-}" ] && export XAUTHORITY="$3"
+    WL_ARG="${1:-}"
+    DISP_ARG="${2:-}"
+    XAUTH_ARG="${3:-}"
+    ORIG_XDG_RUNTIME_DIR="${4:-}"
+
     export XDG_RUNTIME_DIR="/run/user/0"
     mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+
+    if [ -n "$WL_ARG" ]; then
+        if [ -S "$WL_ARG" ]; then
+            WL_NAME="$(basename "$WL_ARG")"
+            ln -sf "$WL_ARG" "${XDG_RUNTIME_DIR}/${WL_NAME}" 2>/dev/null || true
+            export WAYLAND_DISPLAY="$WL_NAME"
+        elif [ -n "$ORIG_XDG_RUNTIME_DIR" ] && [ -S "${ORIG_XDG_RUNTIME_DIR}/${WL_ARG}" ]; then
+            ln -sf "${ORIG_XDG_RUNTIME_DIR}/${WL_ARG}" "${XDG_RUNTIME_DIR}/${WL_ARG}" 2>/dev/null || true
+            export WAYLAND_DISPLAY="$WL_ARG"
+        else
+            export WAYLAND_DISPLAY="$WL_ARG"
+        fi
+    fi
+
+    [ -n "$DISP_ARG" ] && export DISPLAY="$DISP_ARG"
+    [ -n "$XAUTH_ARG" ] && export XAUTHORITY="$XAUTH_ARG"
 fi
 
-# Function to ensure log file exists and is writable
+# Ensure log file exists and is writable without hanging on sudo
 ensure_logfile() {
-    if [ ! -f "$LOG_FILE" ]; then
-        touch "$LOG_FILE" 2>/dev/null || sudo touch "$LOG_FILE" 2>/dev/null || true
-        chmod 666 "$LOG_FILE" 2>/dev/null || sudo chmod 666 "$LOG_FILE" 2>/dev/null || true
+    if [ -w "$LOG_FILE" ]; then
+        return 0
     fi
+    if [ "$(id -u)" -eq 0 ]; then
+        mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+        if touch "$LOG_FILE" 2>/dev/null; then
+            chmod 666 "$LOG_FILE" 2>/dev/null || true
+            return 0
+        fi
+    elif [ ! -e "$LOG_FILE" ] && [ -w "$(dirname "$LOG_FILE")" ]; then
+        if touch "$LOG_FILE" 2>/dev/null; then
+            chmod 666 "$LOG_FILE" 2>/dev/null || true
+            return 0
+        fi
+    fi
+    LOG_FILE="/tmp/calamares-installer.log"
+    touch "$LOG_FILE" 2>/dev/null || true
 }
 ensure_logfile
 
@@ -39,44 +219,126 @@ log_msg() {
 
 log_msg "Starting BriskOS Calamares Installer wrapper..."
 
-# 1. Environment check: determine if running in a live session or as root
+# If invoked directly as root without display variables, probe active user Wayland socket
+if [ "$(id -u)" -eq 0 ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    for sock in /run/user/*/wayland-[0-9]*; do
+        if [ -S "$sock" ]; then
+            export XDG_RUNTIME_DIR="/run/user/0"
+            mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+            WL_NAME="$(basename "$sock")"
+            ln -sf "$sock" "${XDG_RUNTIME_DIR}/${WL_NAME}" 2>/dev/null || true
+            export WAYLAND_DISPLAY="$WL_NAME"
+            log_msg "Discovered active Wayland socket: ${sock}"
+            break
+        fi
+    done
+    if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+        export DISPLAY=":0"
+        log_msg "Discovered active X11 display :0"
+    fi
+fi
+
+# 1. Verify graphical display and Calamares binary availability
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    log_msg "Error: No Wayland or X11 display detected. Cannot launch graphical installer."
+    exit 1
+fi
+
+if ! command -v calamares >/dev/null 2>&1; then
+    log_msg "Error: calamares binary is not installed in PATH."
+    show_ui_dialog "BriskOS Installer" "Calamares Installer Not Found" \
+        "The Calamares installation binary could not be located on this system. Install the calamares package or boot from the BriskOS Live ISO." "true"
+    exit 1
+fi
+
+# 2. Environment check: determine if running in a live session or installed system
 IS_LIVE=false
-if [ -d "/run/live" ] || [ -d "/run/live/medium" ] || grep -qs "boot=live" /proc/cmdline || [ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = "overlay" ]; then
+if [ -d "/run/live" ] || [ -d "/run/live/medium" ] || grep -qs "boot=live" /proc/cmdline 2>/dev/null || [ "$(findmnt -n -o FSTYPE / 2>/dev/null || true)" = "overlay" ]; then
     IS_LIVE=true
     log_msg "Live environment detected."
 else
     log_msg "Notice: Not running from standard live media path."
     if [ "$(id -u)" -ne 0 ]; then
-        log_msg "Running as regular user in non-live system. Proceeding with caution."
+        log_msg "Running as regular user in non-live system."
     else
         log_msg "Running as root user."
     fi
 fi
 
-# 2. Display and Qt environment variables for Wayland with XCB fallback
+# 3. Configure Wayland + Qt platform environment
 export QT_QPA_PLATFORM="wayland;xcb"
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export GDK_BACKEND="wayland,x11"
-log_msg "Configured QT_QPA_PLATFORM=${QT_QPA_PLATFORM}, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-none}, DISPLAY=${DISPLAY:-none}"
+log_msg "Configured QT_QPA_PLATFORM=${QT_QPA_PLATFORM}, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-none}, DISPLAY=${DISPLAY:-none}, XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-none}"
 
 # Visual desktop notification if available (skip on elevated re-entry)
 if [ "$IS_ELEVATED" = false ] && command -v notify-send >/dev/null 2>&1; then
     notify-send -i calamares "BriskOS Installer" "Launching system installer..." 2>/dev/null || true
 fi
 
-# 3. Execute Calamares with proper elevation and debugging flags
+# 4. Execute Calamares with explicit Wayland environment forwarding
 EXIT_CODE=0
 if [ "$(id -u)" -eq 0 ]; then
-    log_msg "Executing: calamares -d directly as root"
-    calamares -d 2>&1 | tee -a "$LOG_FILE"
+    ENV_ARGS=(
+        "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/0}"
+        "QT_QPA_PLATFORM=${QT_QPA_PLATFORM}"
+        "QT_AUTO_SCREEN_SCALE_FACTOR=1"
+        "GDK_BACKEND=wayland,x11"
+    )
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        ENV_ARGS+=("WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+    fi
+    if [ -n "${DISPLAY:-}" ]; then
+        ENV_ARGS+=("DISPLAY=${DISPLAY}")
+    fi
+    if [ -n "${XAUTHORITY:-}" ]; then
+        ENV_ARGS+=("XAUTHORITY=${XAUTHORITY}")
+    fi
+
+    log_msg "Executing: env WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/0} QT_QPA_PLATFORM=${QT_QPA_PLATFORM} calamares -d"
+    set +e
+    env "${ENV_ARGS[@]}" calamares -d 2>&1 | tee -a "$LOG_FILE"
     EXIT_CODE=${PIPESTATUS[0]}
+    set -e
+
+    if [ "$EXIT_CODE" -ne 0 ]; then
+        log_msg "Calamares exited with non-zero status ${EXIT_CODE}."
+        show_ui_dialog "BriskOS Installer" "Installer Exited With Error (${EXIT_CODE})" \
+            "Calamares stopped unexpectedly. Review the diagnostic log at ${LOG_FILE} for details." "true"
+    fi
 else
     WL_SOCK="${WAYLAND_DISPLAY:-}"
     if [ -n "$WL_SOCK" ] && [[ "$WL_SOCK" != /* ]] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
         WL_SOCK="${XDG_RUNTIME_DIR}/${WL_SOCK}"
     fi
-    log_msg "Executing: pkexec /usr/local/bin/brisk-installer --elevated with polkit privilege escalation"
-    exec pkexec /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}"
+
+    if command -v pkexec >/dev/null 2>&1; then
+        log_msg "Executing: pkexec /usr/local/bin/brisk-installer --elevated"
+        set +e
+        pkexec /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+        EXIT_CODE=$?
+        set -e
+
+        # If pkexec failed because no polkit agent was active (127) and NOPASSWD sudo is permitted, fall back to sudo -n
+        if [ "$EXIT_CODE" -eq 127 ] && command -v sudo >/dev/null 2>&1 && sudo -n -l /usr/local/bin/brisk-installer >/dev/null 2>&1; then
+            log_msg "Polkit agent unavailable (exit 127); falling back to sudo -n."
+            set +e
+            sudo -n /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+            EXIT_CODE=$?
+            set -e
+        fi
+    elif command -v sudo >/dev/null 2>&1; then
+        log_msg "pkexec not found; executing via sudo."
+        set +e
+        sudo /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+        EXIT_CODE=$?
+        set -e
+    else
+        log_msg "Error: Neither pkexec nor sudo is available for privilege escalation."
+        show_ui_dialog "BriskOS Installer" "Administrator Privileges Required" \
+            "Neither pkexec nor sudo is installed on this system. Run brisk-installer as root to install BriskOS." "true"
+        exit 1
+    fi
 fi
 
 log_msg "Calamares installer terminated with exit code: ${EXIT_CODE}"

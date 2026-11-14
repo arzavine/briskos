@@ -1,159 +1,97 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" width="720" height="320">
   <defs>
-    <!-- Night Glass Base Floor Gradient -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#080d18"/>
-      <stop offset="60%" stop-color="#0b1120"/>
-      <stop offset="100%" stop-color="#0f172a"/>
+    <linearGradient id="featherPrimary" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3C96AD"/>
+      <stop offset="55%" stop-color="#0E7490"/>
+      <stop offset="100%" stop-color="#0C5B73"/>
     </linearGradient>
-
-    <!-- Ambient Cyan Radial Glow Field -->
-    <radialGradient id="welcomeBloom" cx="22%" cy="50%" r="55%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.25"/>
-      <stop offset="35%" stop-color="#0284c7" stop-opacity="0.10"/>
-      <stop offset="70%" stop-color="#1d4ed8" stop-opacity="0.04"/>
-      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
-    </radialGradient>
-
-    <!-- Unified Supersonic Frost Gradient: 4-Stop System Identity -->
-    <!-- Stop 0%: Frost White #ffffff (specular highlight tip) -->
-    <!-- Stop 30%: Ice Cyan #38bdf8 (core glow identity) -->
-    <!-- Stop 70%: Electric Sky #0284c7 (aerodynamic body) -->
-    <!-- Stop 100%: Deep Cobalt Sapphire #1d4ed8 (base foundation) -->
-    <linearGradient id="supersonicFrostGrad" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+    <linearGradient id="featherMid" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7EC8D9"/>
+      <stop offset="100%" stop-color="#0E7490"/>
     </linearGradient>
-
-    <linearGradient id="wingGrad1" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+    <linearGradient id="featherBase" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0E7490"/>
+      <stop offset="100%" stop-color="#094D61"/>
     </linearGradient>
-
-    <linearGradient id="wingGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#e0f2fe"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1e40af"/>
-    </linearGradient>
-
-    <linearGradient id="wingGrad3" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="40%" stop-color="#0284c7"/>
-      <stop offset="80%" stop-color="#1d4ed8"/>
-      <stop offset="100%" stop-color="#0f172a"/>
-    </linearGradient>
-
-    <linearGradient id="spineGrad" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
-    </linearGradient>
-
-    <!-- Translucent Card Border Gradient -->
-    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.4"/>
-      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.1"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.05"/>
-    </linearGradient>
-
-    <radialGradient id="apexGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
-      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
-    </radialGradient>
   </defs>
 
-  <!-- Base Night Glass Slate Background -->
-  <rect width="720" height="320" rx="12" fill="url(#bgGrad)"/>
-  <rect width="720" height="320" rx="12" fill="url(#welcomeBloom)"/>
-  <rect x="1" y="1" width="718" height="318" rx="11" fill="none" stroke="url(#borderGrad)" stroke-width="1.2"/>
+  <!-- Morning Breeze Light Surface Card -->
+  <rect x="0" y="0" width="720" height="320" rx="12" fill="#FFFFFF"/>
+  <rect x="1" y="1" width="718" height="318" rx="11" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
 
-  <!-- Subtle Aerodynamic Background Vectors -->
-  <path d="M -20 180 C 140 210, 320 160, 520 130 S 680 90, 740 70" 
-        fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.08"/>
-  <path d="M -20 220 C 160 250, 360 190, 560 160 S 700 120, 740 100" 
-        fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.05"/>
+  <!-- Left Ice Mist Accent Panel -->
+  <path d="M 12 1 L 256 1 L 214 319 L 12 319 C 5.9 319 1 314.1 1 308 L 1 12 C 1 5.9 5.9 1 12 1 Z"
+        fill="#E9F1F4"/>
+  <line x1="256" y1="1" x2="214" y2="319" stroke="#D5E2E7" stroke-width="1.5"/>
 
-  <!-- ==================== LEFT: BRISKOS FEATHER / WING EMBLEM ==================== -->
-  <g transform="translate(40, 20) scale(0.55)">
-    <!-- Ambient Glow behind Emblem -->
-    <circle cx="256" cy="256" r="210" fill="#38bdf8" fill-opacity="0.15"/>
+  <!-- Subtle Breeze Horizon Sweep -->
+  <path d="M 12 248 C 96 226, 178 214, 240 184"
+        fill="none" stroke="#0E7490" stroke-width="2" stroke-opacity="0.16" stroke-linecap="round"/>
 
-    <!-- Aerodynamic Streamline Guides -->
-    <path d="M 60 410 C 160 380, 310 260, 440 90" 
-          fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.3"/>
-    <path d="M 100 450 C 200 420, 350 300, 465 130" 
-          fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-opacity="0.2"/>
-
-    <!-- Wing Vanes with Unified Gradients -->
-    <path d="M 120 410 C 170 400, 240 370, 305 315 L 260 295 C 200 340, 150 375, 120 410 Z"
-          fill="url(#wingGrad3)"/>
-    <path d="M 165 365 C 230 330, 320 275, 380 205 L 325 190 C 265 245, 195 310, 165 365 Z"
-          fill="url(#wingGrad2)"/>
-    <path d="M 220 305 C 295 245, 385 170, 445 80 L 385 95 C 320 160, 245 235, 220 305 Z"
-          fill="url(#wingGrad1)"/>
-
-    <!-- Main Delta Wing -->
-    <path d="M 90 430 C 150 380, 260 260, 445 75 C 420 135, 370 265, 285 345 C 220 405, 135 435, 90 430 Z"
-          fill="url(#wingGrad1)" fill-opacity="0.95"/>
-
-    <!-- Spine -->
-    <path d="M 75 445 C 145 385, 275 255, 465 60"
-          fill="none" stroke="url(#spineGrad)" stroke-width="8" stroke-linecap="round"/>
-
-    <!-- Slots -->
-    <line x1="285" y1="210" x2="355" y2="245" stroke="#0b1120" stroke-width="4" stroke-linecap="round"/>
-    <line x1="225" y1="270" x2="285" y2="305" stroke="#0b1120" stroke-width="4" stroke-linecap="round"/>
-    <line x1="165" y1="340" x2="215" y2="368" stroke="#0b1120" stroke-width="4" stroke-linecap="round"/>
-
-    <!-- Apex Node with Specular Bloom -->
-    <circle cx="465" cy="60" r="14" fill="url(#apexGlow)"/>
-    <circle cx="465" cy="60" r="6" fill="#ffffff"/>
+  <!-- Left: BriskOS Morning Breeze Feather Emblem -->
+  <g transform="translate(24, 52) scale(0.42)">
+    <circle cx="256" cy="256" r="224" fill="#D6E9EE" stroke="#CBD5E1" stroke-width="2.5"/>
+    <path d="M 128 396 C 174 386, 238 358, 298 308 L 256 290 C 200 330, 154 364, 128 396 Z"
+          fill="url(#featherBase)"/>
+    <path d="M 170 352 C 232 318, 314 268, 370 202 L 318 188 C 262 240, 198 300, 170 352 Z"
+          fill="url(#featherMid)"/>
+    <path d="M 102 414 C 158 366, 260 256, 428 84 C 406 142, 358 262, 278 336 C 218 392, 142 418, 102 414 Z"
+          fill="url(#featherPrimary)"/>
+    <line x1="278" y1="210" x2="342" y2="242" stroke="#D6E9EE" stroke-width="6" stroke-linecap="round"/>
+    <line x1="222" y1="266" x2="278" y2="298" stroke="#D6E9EE" stroke-width="6" stroke-linecap="round"/>
+    <line x1="168" y1="330" x2="212" y2="356" stroke="#D6E9EE" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 88 426 C 154 370, 274 248, 444 70"
+          fill="none" stroke="#094D61" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="444" cy="70" r="6" fill="#0E7490"/>
   </g>
 
-  <!-- ==================== RIGHT: BRANDING TYPOGRAPHY & BADGE ==================== -->
-  <g transform="translate(360, 60)">
-    <!-- Version Tag Pill -->
-    <rect x="0" y="24" width="168" height="26" rx="13" 
-          fill="#1e293b" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.4"/>
-    <circle cx="14" cy="37" r="4" fill="#38bdf8"/>
-    <text x="26" y="41" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif" 
-          font-size="11" font-weight="700" fill="#38bdf8" letter-spacing="1">1.0 LTS • FEATHER</text>
+  <!-- Right: Clear Product Identity & Verified Feature Summary -->
+  <g transform="translate(278, 56)">
+    <text x="0" y="18" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif"
+          font-size="12" font-weight="700" fill="#0C5B73" letter-spacing="0.8">BRISKOS 1.0 LTS (FEATHER)</text>
 
-    <!-- Main Brand Header -->
-    <text x="0" y="102" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif" 
-          font-size="44" font-weight="800" fill="#f8fafc" letter-spacing="-0.5">BriskOS</text>
+    <text x="0" y="68" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif"
+          font-size="40" font-weight="800" fill="#0F172A" letter-spacing="-0.5">BriskOS</text>
 
-    <!-- Subtitle / Tagline -->
-    <text x="0" y="134" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif" 
-          font-size="16" font-weight="500" fill="#94a3b8">Fast. Elegant. Lightweight.</text>
+    <text x="0" y="98" font-family="'Inter', 'Noto Sans', 'Cantarell', sans-serif"
+          font-size="15" font-weight="500" fill="#475569">Fast, lightweight desktop built on Debian 13 (Trixie).</text>
 
-    <!-- Value Proposition Pill Highlights -->
-    <g transform="translate(0, 160)">
-      <!-- Pill 1: Wayland Core -->
-      <rect x="0" y="0" width="102" height="24" rx="6" 
-            fill="#0f172a" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-      <text x="10" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
-            font-size="11" font-weight="600" fill="#cbd5e1">⚡ Wayland</text>
+    <!-- Feature Item 1: Wayland Desktop -->
+    <g transform="translate(0, 126)">
+      <rect x="0" y="0" width="406" height="32" rx="8" fill="#F5F7F7" stroke="#CBD5E1" stroke-width="1"/>
+      <g transform="translate(10, 8)" fill="none" stroke="#0E7490" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="1" width="14" height="10" rx="2"/>
+        <line x1="5" y1="15" x2="11" y2="15"/>
+        <line x1="8" y1="11" x2="8" y2="15"/>
+      </g>
+      <text x="36" y="21" font-family="'Inter', 'Noto Sans', sans-serif"
+            font-size="12" font-weight="600" fill="#0F172A">Labwc Wayland Desktop &amp; Hardware Control Center</text>
+    </g>
 
-      <!-- Pill 2: Sub-512MB RAM Target -->
-      <rect x="110" y="0" width="124" height="24" rx="6" 
-            fill="#0f172a" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-      <text x="120" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
-            font-size="11" font-weight="600" fill="#cbd5e1">🍃 Sub-512MB RAM</text>
+    <!-- Feature Item 2: System Snapshots -->
+    <g transform="translate(0, 166)">
+      <rect x="0" y="0" width="406" height="32" rx="8" fill="#F5F7F7" stroke="#CBD5E1" stroke-width="1"/>
+      <g transform="translate(10, 8)" fill="none" stroke="#0E7490" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 2 8 A 6 6 0 1 1 4 12.2"/>
+        <polyline points="2 4 2 8 6 8"/>
+        <polyline points="8 5 8 8 10.5 9.5"/>
+      </g>
+      <text x="36" y="21" font-family="'Inter', 'Noto Sans', sans-serif"
+            font-size="12" font-weight="600" fill="#0F172A">Time-Travel Checkpoints &amp; Battery Sentinel</text>
+    </g>
 
-      <!-- Pill 3: Wine Ready -->
-      <rect x="242" y="0" width="102" height="24" rx="6" 
-            fill="#0f172a" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-      <text x="252" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
-            font-size="11" font-weight="600" fill="#cbd5e1">🍷 Wine Ready</text>
+    <!-- Feature Item 3: Wine Windows App Support -->
+    <g transform="translate(0, 206)">
+      <rect x="0" y="0" width="406" height="32" rx="8" fill="#F5F7F7" stroke="#CBD5E1" stroke-width="1"/>
+      <g transform="translate(10, 8)" fill="none" stroke="#0E7490" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/>
+        <rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/>
+        <rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/>
+        <rect x="9" y="9" width="5.5" height="5.5" rx="1"/>
+      </g>
+      <text x="36" y="21" font-family="'Inter', 'Noto Sans', sans-serif"
+            font-size="12" font-weight="600" fill="#0F172A">Wine Windows App Support &amp; Brisk Store</text>
     </g>
   </g>
 </svg>

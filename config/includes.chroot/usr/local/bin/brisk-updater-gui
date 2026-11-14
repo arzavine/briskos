@@ -1,244 +1,803 @@
-#!/bin/bash
+#!/usr/bin/env python3
 # ==============================================================================
-# BriskOS Graphical Software Updater
-# Zenity-based frontend for GitHub OTA releases and APT upgrades
+# Brisk Software Updater - Morning Breeze GTK3 Desktop App
+# Checks BriskOS release channel & executes non-interactive APT dist-upgrades.
 # ==============================================================================
 
-set -euo pipefail
+import os
+import sys
+import json
+import shutil
+import signal
+import urllib.request
+import urllib.error
+import subprocess
+import threading
 
-# Configuration
-GITHUB_REPO="briskos/briskos"
-API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-CACHE_FILE="/tmp/brisk-latest-release.json"
-APP_TITLE="BriskOS Software Updater"
-APP_ICON="system-software-update"
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("Pango", "1.0")
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango
 
-# Check for Zenity
-if ! command -v zenity >/dev/null 2>&1; then
-    echo "Error: zenity is required for BriskOS Software Updater." >&2
-    exit 1
-fi
+APP_ID = "brisk-updater-gui"
+APP_NAME = "Brisk Software Updater"
+GITHUB_API_LATEST = "https://api.github.com/repos/briskos/briskos/releases/latest"
+GITHUB_API_BETA = "https://api.github.com/repos/briskos/briskos/releases?per_page=1"
+CACHE_RELEASE_FILE = "/tmp/brisk-latest-release.json"
 
-# Determine local OS version
-get_local_version() {
-    local version="1.0"
-    if [ -f /etc/os-release ]; then
-        local parsed
-        parsed=$(grep -E '^VERSION_ID=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"'\'' ' || true)
-        if [ -n "$parsed" ]; then
-            version="$parsed"
-        fi
-    fi
-    echo "$version"
+MORNING_BREEZE_CSS = b"""
+window,
+button,
+scrolledwindow,
+viewport,
+textview,
+textview text,
+expander,
+progressbar trough,
+progressbar progress {
+    background-image: none;
+    box-shadow: none;
 }
 
-LOCAL_VERSION="$(get_local_version)"
-ACTIVE_CHANNEL="$(/usr/local/bin/brisk-channel get --raw 2>/dev/null || echo "stable")"
-REMOTE_VERSION=""
-RELEASE_NAME=""
-RELEASE_NOTES=""
+scrolledwindow,
+viewport {
+    background-color: transparent;
+}
 
-if [ "$ACTIVE_CHANNEL" = "beta" ]; then
-    API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1"
-fi
+window {
+    background-color: #F5F7F7;
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", sans-serif;
+}
 
-# Try reading from recent cache first or query GitHub API
-if [ -s "$CACHE_FILE" ]; then
-    RELEASE_JSON="$(cat "$CACHE_FILE")"
-else
-    # Fetch with 5-second timeout
-    RELEASE_JSON="$(curl -sSL --connect-timeout 5 --max-time 8 \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "User-Agent: BriskOS-Software-Updater" \
-        "$API_URL" 2>/dev/null || true)"
-fi
+.top-banner {
+    background-color: #E9F1F4;
+    border-bottom: 1px solid #D5E2E7;
+    padding: 16px 22px;
+}
 
-# Parse release info if available
-if [ -n "$RELEASE_JSON" ]; then
-    if command -v jq >/dev/null 2>&1; then
-        REMOTE_TAG=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].tag_name // empty) else (.tag_name // empty) end' 2>/dev/null || true)
-        RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].name // empty) else (.name // empty) end' 2>/dev/null || true)
-        RELEASE_NOTES=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].body // empty) else (.body // empty) end' 2>/dev/null || true)
-    else
-        REMOTE_TAG=$(echo "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-        RELEASE_NAME=$(echo "$RELEASE_JSON" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-        RELEASE_NOTES=$(echo "$RELEASE_JSON" | sed -n 's/.*"body"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-    fi
-    if [ -n "$REMOTE_TAG" ]; then
-        REMOTE_VERSION="${REMOTE_TAG#[vV]}"
-    fi
-fi
+.top-title {
+    color: #0F172A;
+    font-size: 17px;
+    font-weight: 700;
+}
 
-# Prepare temporary file for Changelog display
-CHANGELOG_TMP="$(mktemp /tmp/brisk-changelog-XXXXXX.txt 2>/dev/null || echo "/tmp/brisk-changelog-$$.txt")"
-trap 'rm -f "$CHANGELOG_TMP"' EXIT
+.top-subtitle {
+    color: #475569;
+    font-size: 12.5px;
+}
 
-{
-    echo "================================================================================"
-    echo "                    BriskOS Software Updater"
-    echo "================================================================================"
-    echo ""
-    echo "  Installed OS Version : ${LOCAL_VERSION}"
-    echo "  Active Channel       : ${ACTIVE_CHANNEL}"
-    if [ -n "$REMOTE_VERSION" ]; then
-        echo "  Latest Remote Release: ${REMOTE_VERSION} (${RELEASE_NAME:-BriskOS Update})"
-    else
-        echo "  Target Release       : Debian 13 (Trixie) / BriskOS Rolling Updates"
-    fi
-    echo ""
-    echo "================================================================================"
-    echo " Release Notes & Highlights"
-    echo "================================================================================"
-    echo ""
-    if [ -n "$RELEASE_NOTES" ] && [ "$RELEASE_NOTES" != "null" ]; then
-        printf '%b\n' "$RELEASE_NOTES"
-    else
-        cat << 'EOF'
-- Comprehensive system security and stability enhancements.
-- Wayland desktop environment (labwc, waybar, wofi) optimizations.
-- Hardware driver, firmware, and kernel patch synchronization.
-- Office document rendering and font fidelity updates.
-- Windows application compatibility runtime refinements.
+.channel-pill {
+    background-color: #D6E9EE;
+    color: #0C5B73;
+    border: 1px solid #B7D7E0;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
 
-Local package repositories will be synchronized and all installed
-components will be upgraded to their latest stable releases.
-EOF
-    fi
-    echo ""
-    echo "================================================================================"
-    echo "Click [Update Now] to proceed, or [Cancel] to exit."
-    echo "================================================================================"
-} > "$CHANGELOG_TMP"
+.content-area {
+    background-color: #F5F7F7;
+    padding: 18px 22px;
+}
 
-# Display changelog and prompt confirmation [Update Now] or [Cancel]
-if ! zenity --text-info \
-    --title="$APP_TITLE" \
-    --window-icon="$APP_ICON" \
-    --filename="$CHANGELOG_TMP" \
-    --ok-label="Update Now" \
-    --cancel-label="Cancel" \
-    --width=620 \
-    --height=480; then
-    echo "Update cancelled by user."
-    exit 0
-fi
+.card {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
+    padding: 16px 18px;
+}
 
-# Check if foot is available and if the user requested terminal mode, or offer execution mode
-CHOSEN_MODE="gui"
-if [ "${1:-}" = "--terminal" ] || [ "${1:-}" = "-t" ]; then
-    CHOSEN_MODE="terminal"
-elif [ -n "${BRISK_UPDATE_TERMINAL:-}" ]; then
-    CHOSEN_MODE="terminal"
-fi
+.card-heading {
+    color: #0F172A;
+    font-size: 14px;
+    font-weight: 700;
+}
 
-perform_update_gui() {
-    # Single pkexec escalation so user only authenticates once, propagating errors cleanly
-    local status_file
-    status_file="$(mktemp /tmp/brisk-update-status-XXXXXX 2>/dev/null || echo "/tmp/brisk-update-status-$$")"
-    rm -f "$status_file"
+.card-meta {
+    color: #475569;
+    font-size: 12.5px;
+}
 
-    (
-        echo "5"; echo "# Requesting administrator permission..."
-        if pkexec bash -e -c '
-            export DEBIAN_FRONTEND=noninteractive
-            echo "15"; echo "# Synchronizing package repositories (apt update)..."
-            apt-get update -y >/dev/null
-            echo "40"; echo "# Downloading package upgrades..."
-            apt-get -y --download-only dist-upgrade >/dev/null
-            echo "70"; echo "# Installing and configuring system packages..."
-            apt-get -y \
-                -o Dpkg::Options::="--force-confdef" \
-                -o Dpkg::Options::="--force-confold" \
-                dist-upgrade >/dev/null
-            echo "90"; echo "# Cleaning temporary package archives..."
-            apt-get -y autoremove >/dev/null
-            apt-get -y clean >/dev/null
-            echo "100"; echo "# Update complete!"
-        '; then
-            echo "0" > "$status_file"
-        else
-            echo "1" > "$status_file"
-            echo "100"; echo "# Update failed or cancelled."
-        fi
-    ) | zenity --progress \
-        --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --text="Preparing to check and apply updates..." \
-        --percentage=0 \
-        --auto-close \
-        --width=500 || {
-            rm -f "$status_file"
-            return 1
+.release-notes-wrap {
+    background-color: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+}
+
+.release-notes-view,
+.release-notes-view text {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-size: 12.5px;
+}
+
+.log-view,
+.log-view text {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11.5px;
+}
+
+.notice-info {
+    background-color: #E0F2FE;
+    border: 1px solid #BAE6FD;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-info-text {
+    color: #0C5B73;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.notice-warn {
+    background-color: #FEF3C7;
+    border: 1px solid #FDE68A;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-warn-text {
+    color: #9A3412;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.notice-success {
+    background-color: #DCFCE7;
+    border: 1px solid #BBF7D0;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-success-text {
+    color: #166534;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.notice-error {
+    background-color: #FEE2E2;
+    border: 1px solid #FECACA;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.notice-error-text {
+    color: #991B1B;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+progressbar trough {
+    background-color: #E9F1F4;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    min-height: 10px;
+}
+
+progressbar progress {
+    background-color: #0E7490;
+    border: none;
+    border-radius: 6px;
+}
+
+.footer-bar {
+    background-color: #E9F1F4;
+    border-top: 1px solid #D5E2E7;
+    padding: 12px 22px;
+}
+
+button.btn-primary {
+    background-color: #0E7490;
+    color: #FFFFFF;
+    border: 1px solid #0E7490;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+button.btn-primary:hover {
+    background-color: #0C627A;
+    border-color: #0C627A;
+}
+
+button.btn-primary:disabled {
+    background-color: #94A3B8;
+    border-color: #94A3B8;
+    color: #FFFFFF;
+}
+
+button.btn-secondary {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+button.btn-secondary:hover {
+    background-color: #F1F5F9;
+    border-color: #64748B;
+}
+
+button.btn-secondary:disabled {
+    background-color: #F1F5F9;
+    color: #64748B;
+}
+
+button:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+}
+"""
+
+SVG_TEMPLATES = {
+    "brand": (
+        '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+        '<path d="M9 12l2 2 4-4"/>'
+    ),
+    "refresh": (
+        '<polyline points="23 4 23 10 17 10"/>'
+        '<polyline points="1 20 1 14 7 14"/>'
+        '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'
+    ),
+    "download": (
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+        '<polyline points="7 10 12 15 17 10"/>'
+        '<line x1="12" y1="15" x2="12" y2="3"/>'
+    ),
+    "terminal": (
+        '<polyline points="4 17 10 11 4 5"/>'
+        '<line x1="12" y1="19" x2="20" y2="19"/>'
+    ),
+    "info": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<line x1="12" y1="16" x2="12" y2="12"/>'
+        '<line x1="12" y1="8" x2="12.01" y2="8"/>'
+    ),
+    "warn": (
+        '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+        '<line x1="12" y1="9" x2="12" y2="13"/>'
+        '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+    ),
+    "check": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<polyline points="9 12 11.5 14.5 16 9.5"/>'
+    ),
+}
+
+
+def svg_icon(name, color="#0E7490", size=18):
+    inner = SVG_TEMPLATES.get(name, SVG_TEMPLATES["info"])
+    svg_xml = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" '
+        f'stroke-linecap="round" stroke-linejoin="round">{inner}</svg>'
+    ).encode("utf-8")
+    loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+    loader.set_size(size, size)
+    loader.write(svg_xml)
+    loader.close()
+    return Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
+
+
+def read_os_version():
+    version_id = "1.0"
+    pretty = "BriskOS 1.0 LTS"
+    if os.path.isfile("/etc/os-release"):
+        try:
+            with open("/etc/os-release", "r", encoding="utf-8", errors="replace") as fh:
+                for raw in fh:
+                    line = raw.strip()
+                    if line.startswith("VERSION_ID="):
+                        version_id = line.split("=", 1)[1].strip().strip('"').strip("'") or version_id
+                    elif line.startswith("PRETTY_NAME="):
+                        pretty = line.split("=", 1)[1].strip().strip('"').strip("'") or pretty
+        except OSError:
+            pass
+    return version_id, pretty
+
+
+def read_release_channel():
+    channel_bin = "/usr/local/bin/brisk-channel"
+    if os.path.isfile(channel_bin) and os.access(channel_bin, os.X_OK):
+        try:
+            res = subprocess.run(
+                [channel_bin, "get", "--raw"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            ch = res.stdout.strip().lower()
+            if ch:
+                return ch
+        except Exception:
+            pass
+    return "stable"
+
+
+def launch_terminal_updater():
+    foot = shutil.which("foot")
+    cmd = (
+        "echo 'BriskOS System Updater (APT)'; echo; "
+        "if command -v brisk >/dev/null 2>&1; then sudo /usr/local/bin/brisk update; "
+        "else sudo apt-get update && sudo apt-get dist-upgrade; fi; "
+        "echo; read -r -p 'Press Enter to close...'"
+    )
+    if foot:
+        subprocess.Popen([foot, "-T", "BriskOS Terminal Updater", "bash", "-lc", cmd])
+    else:
+        subprocess.Popen(["bash", "-lc", cmd])
+
+
+class BriskUpdaterWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title=APP_NAME)
+        self.set_default_size(640, 520)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("system-software-update")
+
+        self.version_id, self.os_pretty = read_os_version()
+        self.channel = read_release_channel()
+        self.is_updating = False
+        self.check_generation = 0
+
+        self.build_ui()
+        self.connect("destroy", self.on_destroy)
+        self.connect("key-press-event", self.on_key_press)
+
+        self.start_release_check()
+
+    def build_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(root)
+
+        # Top Morning Breeze Banner (#E9F1F4)
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        top_bar.get_style_context().add_class("top-banner")
+        root.pack_start(top_bar, False, False, 0)
+
+        top_bar.pack_start(svg_icon("brand", color="#0E7490", size=28), False, False, 0)
+
+        title_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_title = Gtk.Label(label=APP_NAME, xalign=0)
+        lbl_title.get_style_context().add_class("top-title")
+        lbl_sub = Gtk.Label(
+            label=f"Installed system: {self.os_pretty} (Version {self.version_id})",
+            xalign=0,
+        )
+        lbl_sub.get_style_context().add_class("top-subtitle")
+        title_col.pack_start(lbl_title, False, False, 0)
+        title_col.pack_start(lbl_sub, False, False, 0)
+        top_bar.pack_start(title_col, True, True, 0)
+
+        lbl_channel = Gtk.Label(label=f"Channel: {self.channel.title()}")
+        lbl_channel.set_valign(Gtk.Align.CENTER)
+        lbl_channel.get_style_context().add_class("channel-pill")
+        top_bar.pack_end(lbl_channel, False, False, 0)
+
+        # Main Canvas (#F5F7F7)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        content.get_style_context().add_class("content-area")
+        root.pack_start(content, True, True, 0)
+
+        # Status / Alert Banner (R-27 explicit loading, error, offline, success states)
+        self.banner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.banner_box.get_style_context().add_class("notice-info")
+        self.banner_icon_slot = Gtk.Box()
+        self.banner_spinner = Gtk.Spinner()
+        self.banner_spinner.set_no_show_all(True)
+        self.banner_icon = svg_icon("info", color="#0C5B73", size=18)
+        self.banner_icon.set_no_show_all(True)
+        self.banner_icon_slot.pack_start(self.banner_spinner, False, False, 0)
+        self.banner_icon_slot.pack_start(self.banner_icon, False, False, 0)
+        self.banner_label = Gtk.Label(
+            label="Checking BriskOS release metadata and update availability...",
+            xalign=0,
+        )
+        self.banner_label.set_line_wrap(True)
+        self.banner_label.get_style_context().add_class("notice-info-text")
+        self.banner_box.pack_start(self.banner_icon_slot, False, False, 0)
+        self.banner_box.pack_start(self.banner_label, True, True, 0)
+        content.pack_start(self.banner_box, False, False, 0)
+
+        # Release Card
+        release_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        release_card.get_style_context().add_class("card")
+        content.pack_start(release_card, True, True, 0)
+
+        rel_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.lbl_rel_heading = Gtk.Label(label="Checking remote release...", xalign=0)
+        self.lbl_rel_heading.get_style_context().add_class("card-heading")
+        self.lbl_rel_meta = Gtk.Label(label="", xalign=1)
+        self.lbl_rel_meta.get_style_context().add_class("card-meta")
+        rel_hdr.pack_start(self.lbl_rel_heading, True, True, 0)
+        rel_hdr.pack_end(self.lbl_rel_meta, False, False, 0)
+        release_card.pack_start(rel_hdr, False, False, 0)
+
+        notes_scroll = Gtk.ScrolledWindow()
+        notes_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        notes_scroll.set_min_content_height(150)
+        notes_scroll.get_style_context().add_class("release-notes-wrap")
+
+        self.notes_view = Gtk.TextView()
+        self.notes_view.set_editable(False)
+        self.notes_view.set_cursor_visible(False)
+        self.notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.notes_view.set_left_margin(12)
+        self.notes_view.set_right_margin(12)
+        self.notes_view.set_top_margin(10)
+        self.notes_view.set_bottom_margin(10)
+        self.notes_view.get_style_context().add_class("release-notes-view")
+        self.notes_buffer = self.notes_view.get_buffer()
+        self.notes_buffer.set_text(
+            "Contacting release channel. Debian APT package updates can still be installed anytime via Update Now."
+        )
+        notes_scroll.add(self.notes_view)
+        release_card.pack_start(notes_scroll, True, True, 0)
+
+        # Progress Card (visible during and after updates)
+        self.progress_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.progress_card.get_style_context().add_class("card")
+        content.pack_start(self.progress_card, False, False, 0)
+
+        prog_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_step = Gtk.Label(label="Ready to update system packages via APT.", xalign=0)
+        self.lbl_step.get_style_context().add_class("card-meta")
+        self.lbl_pct = Gtk.Label(label="", xalign=1)
+        self.lbl_pct.get_style_context().add_class("card-meta")
+        prog_top.pack_start(self.lbl_step, True, True, 0)
+        prog_top.pack_end(self.lbl_pct, False, False, 0)
+        self.progress_card.pack_start(prog_top, False, False, 0)
+
+        self.progress_bar = Gtk.ProgressBar()
+        self.progress_bar.set_fraction(0.0)
+        self.progress_card.pack_start(self.progress_bar, False, False, 0)
+
+        self.log_expander = Gtk.Expander(label="Show technical APT log")
+        log_scroll = Gtk.ScrolledWindow()
+        log_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        log_scroll.set_min_content_height(95)
+        log_scroll.get_style_context().add_class("release-notes-wrap")
+        self.log_view = Gtk.TextView()
+        self.log_view.set_editable(False)
+        self.log_view.set_cursor_visible(False)
+        self.log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.log_view.set_left_margin(8)
+        self.log_view.set_right_margin(8)
+        self.log_view.set_top_margin(6)
+        self.log_view.set_bottom_margin(6)
+        self.log_view.get_style_context().add_class("log-view")
+        self.log_buffer = self.log_view.get_buffer()
+        log_scroll.add(self.log_view)
+        self.log_expander.add(log_scroll)
+        self.progress_card.pack_start(self.log_expander, False, False, 0)
+
+        # Footer Bar (#E9F1F4)
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        footer.get_style_context().add_class("footer-bar")
+        root.pack_end(footer, False, False, 0)
+
+        self.btn_refresh = Gtk.Button(label="Check Again")
+        self.btn_refresh.set_image(svg_icon("refresh", color="#0F172A", size=15))
+        self.btn_refresh.set_always_show_image(True)
+        self.btn_refresh.get_style_context().add_class("btn-secondary")
+        self.btn_refresh.connect("clicked", lambda *_: self.start_release_check())
+        footer.pack_start(self.btn_refresh, False, False, 0)
+
+        self.btn_terminal = Gtk.Button(label="Terminal Mode")
+        self.btn_terminal.set_image(svg_icon("terminal", color="#0F172A", size=15))
+        self.btn_terminal.set_always_show_image(True)
+        self.btn_terminal.get_style_context().add_class("btn-secondary")
+        self.btn_terminal.connect("clicked", lambda *_: launch_terminal_updater())
+        footer.pack_start(self.btn_terminal, False, False, 0)
+
+        footer.pack_start(Gtk.Box(), True, True, 0)
+
+        self.btn_close = Gtk.Button(label="Close")
+        self.btn_close.get_style_context().add_class("btn-secondary")
+        self.btn_close.connect("clicked", lambda *_: self.close())
+        footer.pack_end(self.btn_close, False, False, 0)
+
+        self.btn_update = Gtk.Button(label="Update Now")
+        self.btn_update.set_image(svg_icon("download", color="#FFFFFF", size=15))
+        self.btn_update.set_always_show_image(True)
+        self.btn_update.get_style_context().add_class("btn-primary")
+        self.btn_update.connect("clicked", self.on_update_clicked)
+        footer.pack_end(self.btn_update, False, False, 0)
+
+    def set_banner(self, kind, text, spinning=False):
+        ctx = self.banner_box.get_style_context()
+        lbl_ctx = self.banner_label.get_style_context()
+        for cls in ("notice-info", "notice-warn", "notice-success", "notice-error"):
+            ctx.remove_class(cls)
+        for cls in ("notice-info-text", "notice-warn-text", "notice-success-text", "notice-error-text"):
+            lbl_ctx.remove_class(cls)
+
+        style_map = {
+            "info": ("notice-info", "notice-info-text", "info", "#0C5B73"),
+            "warn": ("notice-warn", "notice-warn-text", "warn", "#9A3412"),
+            "success": ("notice-success", "notice-success-text", "check", "#166534"),
+            "error": ("notice-error", "notice-error-text", "warn", "#991B1B"),
         }
+        box_cls, txt_cls, icon_name, icon_color = style_map.get(kind, style_map["info"])
+        ctx.add_class(box_cls)
+        lbl_ctx.add_class(txt_cls)
+        self.banner_label.set_text(text)
 
-    local rc=1
-    if [ -f "$status_file" ]; then
-        rc=$(cat "$status_file" 2>/dev/null || echo "1")
-        rm -f "$status_file"
-    fi
-    return "$rc"
-}
+        self.banner_icon_slot.remove(self.banner_icon)
+        self.banner_icon = svg_icon(icon_name, color=icon_color, size=18)
+        self.banner_icon.set_no_show_all(True)
+        self.banner_icon_slot.pack_start(self.banner_icon, False, False, 0)
 
-perform_update_terminal() {
-    # Spawns terminal foot with interactive update session
-    if command -v foot >/dev/null 2>&1; then
-        foot --title="$APP_TITLE - Terminal View" bash -c '
-            echo "============================================================"
-            echo "               BriskOS Software Updater"
-            echo "============================================================"
-            echo ""
-            echo "Synchronizing package repositories and applying upgrades..."
-            echo ""
-            if pkexec bash -c "apt-get update && apt-get dist-upgrade -y"; then
-                echo ""
-                echo "============================================================"
-                echo " [SUCCESS] System updates installed successfully."
-                echo "============================================================"
-            else
-                echo ""
-                echo "============================================================"
-                echo " [ERROR] Update process encountered an issue or was cancelled."
-                echo "============================================================"
-            fi
-            echo ""
-            read -rp "Press Enter to finish..."
-        '
-    else
-        # Fallback to GUI if foot is not installed
-        perform_update_gui
-    fi
-}
+        if spinning:
+            self.banner_icon.hide()
+            self.banner_spinner.show()
+            self.banner_spinner.start()
+        else:
+            self.banner_spinner.stop()
+            self.banner_spinner.hide()
+            self.banner_icon.show()
 
-# Execute update based on selected mode
-UPDATE_SUCCESS=true
-if [ "$CHOSEN_MODE" = "terminal" ]; then
-    perform_update_terminal || UPDATE_SUCCESS=false
-else
-    if ! perform_update_gui; then
-        UPDATE_SUCCESS=false
-    fi
-fi
+    def start_release_check(self):
+        if self.is_updating:
+            return
+        self.check_generation += 1
+        gen = self.check_generation
+        self.btn_refresh.set_sensitive(False)
+        self.set_banner("info", "Checking BriskOS release metadata...", spinning=True)
+        threading.Thread(target=self._fetch_release_worker, args=(gen,), daemon=True).start()
 
-if [ "$UPDATE_SUCCESS" = true ]; then
-    # Notification that restart is optional
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send -i "$APP_ICON" -u normal \
-            "BriskOS Update Complete" \
-            "Your system is now up to date. System restart is optional."
-    fi
+    def _fetch_release_worker(self, gen):
+        data = None
+        err_msg = None
 
-    # Completion message dialog
-    zenity --info \
-        --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --width=450 \
-        --text="All system components and packages have been successfully updated!\n\nA system restart is optional, but recommended if kernel or driver updates were installed."
-else
-    zenity --warning \
-        --title="$APP_TITLE" \
-        --window-icon="$APP_ICON" \
-        --width=450 \
-        --text="The update process was cancelled or encountered an error.\nPlease check your network connection and administrator authentication."
-fi
+        if os.path.isfile(CACHE_RELEASE_FILE):
+            try:
+                with open(CACHE_RELEASE_FILE, "r", encoding="utf-8") as fh:
+                    cached = json.load(fh)
+                if isinstance(cached, list) and cached:
+                    cached = cached[0]
+                if isinstance(cached, dict) and cached.get("tag_name"):
+                    data = cached
+            except Exception:
+                data = None
 
-exit 0
+        if data is None:
+            url = GITHUB_API_BETA if self.channel == "beta" else GITHUB_API_LATEST
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "BriskOS-Software-Updater", "Accept": "application/vnd.github+json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+                if isinstance(payload, list) and payload:
+                    payload = payload[0]
+                if isinstance(payload, dict) and payload.get("tag_name"):
+                    data = payload
+                else:
+                    err_msg = "Release response contained no tag metadata."
+            except urllib.error.HTTPError as e:
+                err_msg = f"GitHub release check returned HTTP {e.code}."
+            except Exception:
+                err_msg = "Unable to reach GitHub release metadata (offline or network unavailable)."
+
+        GLib.idle_add(self._apply_release_result, gen, data, err_msg)
+
+    def _apply_release_result(self, gen, data, err_msg):
+        if gen != self.check_generation:
+            return False
+        self.btn_refresh.set_sensitive(not self.is_updating)
+
+        if data is None:
+            self.set_banner(
+                "warn",
+                f"{err_msg} Debian APT updates remain available via Update Now.",
+                spinning=False,
+            )
+            self.lbl_rel_heading.set_text("Debian APT Package Updates Ready")
+            self.lbl_rel_meta.set_text(f"Installed: v{self.version_id}")
+            self.notes_buffer.set_text(
+                "Remote GitHub release notes could not be loaded while offline.\n\n"
+                "You can still click Update Now to run APT repository updates and install all available "
+                "security and package upgrades cleanly."
+            )
+            return False
+
+        tag = str(data.get("tag_name") or "").strip()
+        rel_name = str(data.get("name") or tag or "BriskOS Release").strip()
+        published = str(data.get("published_at") or "")[:10]
+        body = str(data.get("body") or "Standard maintenance and security package updates.").strip()
+
+        clean_tag = tag.lstrip("vV")
+        self.lbl_rel_heading.set_text(rel_name)
+        self.lbl_rel_meta.set_text(f"Published: {published}" if published else tag)
+        self.notes_buffer.set_text(body)
+
+        if clean_tag and clean_tag == self.version_id:
+            self.set_banner(
+                "success",
+                f"BriskOS {self.version_id} matches the latest release tag ({tag}). You can still run Update Now for APT package updates.",
+                spinning=False,
+            )
+        else:
+            self.set_banner(
+                "info",
+                f"Release {tag or rel_name} is published on the {self.channel} channel. Click Update Now to apply APT package updates.",
+                spinning=False,
+            )
+        return False
+
+    def append_log_line(self, line):
+        end_iter = self.log_buffer.get_end_iter()
+        self.log_buffer.insert(end_iter, line + "\n")
+        mark = self.log_buffer.create_mark(None, self.log_buffer.get_end_iter(), False)
+        self.log_view.scroll_to_mark(mark, 0.0, False, 0.0, 0.0)
+        return False
+
+    def on_update_clicked(self, _btn):
+        if self.is_updating:
+            return
+
+        self.is_updating = True
+        self.btn_update.set_sensitive(False)
+        self.btn_refresh.set_sensitive(False)
+        self.btn_terminal.set_sensitive(False)
+        self.btn_close.set_sensitive(False)
+        self.log_buffer.set_text("")
+        self.progress_bar.set_fraction(0.05)
+        self.lbl_step.set_text("Requesting administrator permissions...")
+        self.lbl_pct.set_text("5%")
+        self.set_banner("info", "System update is in progress. Please keep power connected.", spinning=True)
+
+        threading.Thread(target=self._run_apt_upgrade_worker, daemon=True).start()
+
+    def _run_apt_upgrade_worker(self):
+        apt_script = (
+            "set -e\n"
+            "export DEBIAN_FRONTEND=noninteractive\n"
+            "echo '__STEP__:15:Updating APT package lists...'\n"
+            "apt-get update -y\n"
+            "echo '__STEP__:45:Downloading upgraded packages...'\n"
+            "apt-get -y --download-only dist-upgrade\n"
+            "echo '__STEP__:75:Installing system updates...'\n"
+            "apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' dist-upgrade\n"
+            "echo '__STEP__:92:Cleaning obsolete packages and cache...'\n"
+            "apt-get -y autoremove\n"
+            "apt-get -y clean\n"
+            "echo '__STEP__:100:System update complete.'\n"
+        )
+        cmd = ["bash", "-c", apt_script]
+        if os.geteuid() != 0:
+            if shutil.which("pkexec"):
+                cmd = ["pkexec"] + cmd
+            elif shutil.which("sudo"):
+                cmd = ["sudo", "-n"] + cmd
+
+        rc = 1
+        last_err = ""
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            for raw_line in iter(proc.stdout.readline, ""):
+                line = raw_line.rstrip("\r\n")
+                if not line:
+                    continue
+                if line.startswith("__STEP__:"):
+                    parts = line.split(":", 2)
+                    if len(parts) == 3:
+                        try:
+                            pct = max(0, min(100, int(parts[1])))
+                        except ValueError:
+                            pct = 50
+                        step_txt = parts[2]
+                        GLib.idle_add(self._set_progress, pct / 100.0, f"{pct}%", step_txt)
+                    continue
+                last_err = line
+                GLib.idle_add(self.append_log_line, line)
+            proc.stdout.close()
+            rc = proc.wait()
+        except Exception as exc:
+            last_err = str(exc)
+            rc = 1
+
+        GLib.idle_add(self._finish_update, rc, last_err)
+
+    def _set_progress(self, frac, pct_text, step_text):
+        self.progress_bar.set_fraction(frac)
+        self.lbl_pct.set_text(pct_text)
+        self.lbl_step.set_text(step_text)
+        return False
+
+    def _finish_update(self, rc, last_err):
+        self.is_updating = False
+        self.btn_update.set_sensitive(True)
+        self.btn_refresh.set_sensitive(True)
+        self.btn_terminal.set_sensitive(True)
+        self.btn_close.set_sensitive(True)
+
+        if rc == 0:
+            self.progress_bar.set_fraction(1.0)
+            self.lbl_pct.set_text("100%")
+            self.lbl_step.set_text("All available system updates have been installed.")
+            self.set_banner("success", "System update completed cleanly.", spinning=False)
+            if shutil.which("notify-send"):
+                try:
+                    subprocess.Popen(
+                        ["notify-send", "-a", APP_NAME, "System Update Complete", "BriskOS packages are now up to date."],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    pass
+        elif rc in (126, 127):
+            self.progress_bar.set_fraction(0.0)
+            self.lbl_pct.set_text("")
+            self.lbl_step.set_text("Update cancelled (administrator authorization was not granted).")
+            self.set_banner("warn", "Authorization cancelled or pkexec unavailable. No packages were modified.", spinning=False)
+        else:
+            self.lbl_step.set_text("Update stopped with errors. Expand log below for details.")
+            self.log_expander.set_expanded(True)
+            detail = last_err if last_err else f"Updater exited with status {rc}."
+            self.set_banner("error", f"System update failed: {detail}", spinning=False)
+        return False
+
+    def on_key_press(self, _win, event):
+        if event.keyval == Gdk.KEY_Escape and not self.is_updating:
+            self.close()
+            return True
+        return False
+
+    def on_destroy(self, *_args):
+        Gtk.main_quit()
+
+
+def apply_styling():
+    screen = Gdk.Screen.get_default()
+    if screen is not None:
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MORNING_BREEZE_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+
+def main():
+    if "--terminal" in sys.argv or "-t" in sys.argv or os.environ.get("BRISK_UPDATE_TERMINAL") == "1":
+        launch_terminal_updater()
+        return
+
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    GLib.set_prgname(APP_ID)
+    GLib.set_application_name(APP_NAME)
+
+    if not Gtk.init_check()[0]:
+        print("Error: Unable to initialize GTK3 display.", file=sys.stderr)
+        sys.exit(1)
+
+    apply_styling()
+    win = BriskUpdaterWindow()
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

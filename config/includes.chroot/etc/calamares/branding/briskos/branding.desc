@@ -1,5 +1,5 @@
 # BriskOS Calamares Branding Descriptor
-# Configures product strings, artwork assets, window geometry, and Night Glass styling
+# Configures product strings, artwork assets, window geometry, and Morning Breeze styling
 ---
 componentName: briskos
 welcomeStyle: widget
@@ -29,10 +29,10 @@ images:
 slideshow:               []
 
 style:
-   SidebarBackground:    "#0f172a"
-   SidebarText:          "#94a3b8"
-   SidebarTextSelect:    "#f8fafc"
-   SidebarTextHighlight: "#38bdf8"
+   SidebarBackground:    "#E9F1F4"
+   SidebarText:          "#475569"
+   SidebarTextSelect:    "#0F172A"
+   SidebarTextHighlight: "#D6E9EE"
 
 navigation: widget
 
