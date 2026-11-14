@@ -57,33 +57,10 @@ jobs:
           echo "Available disk space after cleanup:"
           df -h /
 
-      - name: Install Live-Build & ISO Dependencies
+      - name: Verify Docker Builder Environment
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            live-build \
-            debootstrap \
-            xorriso \
-            squashfs-tools \
-            dosfstools \
-            mtools \
-            isolinux \
-            syslinux-common \
-            grub-pc-bin \
-            grub-efi-amd64-bin \
-            debian-archive-keyring \
-            python3 \
-            binutils \
-            ca-certificates \
-            curl \
-            coreutils \
-            findutils \
-            sed \
-            gawk
-          # Ensure debootstrap knows the trixie suite even on older Ubuntu hosts
-          if [ ! -e /usr/share/debootstrap/scripts/trixie ] && [ -e /usr/share/debootstrap/scripts/sid ]; then
-            sudo ln -sf sid /usr/share/debootstrap/scripts/trixie
-          fi
+          docker --version
+          python3 --version
 
       - name: Verify Permissions & Script Syntax
         run: |
@@ -116,13 +93,13 @@ jobs:
             esac
           done
 
-      - name: Execute ISO Build Harness
+      - name: Execute ISO Build Harness (Debian Trixie Container)
         run: |
           BUILD_FLAGS=""
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.clean_build }}" = "false" ]; then
             BUILD_FLAGS="--no-clean"
           fi
-          sudo ./scripts/build-iso.sh ${BUILD_FLAGS}
+          ./scripts/build-docker.sh --build-image ${BUILD_FLAGS}
           # Ensure runner user owns generated artifacts and workspace for subsequent steps
           sudo chown -R $(id -u):$(id -g) . 2>/dev/null || true
 

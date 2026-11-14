@@ -135,8 +135,6 @@ run_container() {
     local tty_flag=""
     if [ -t 0 ] && [ -t 1 ]; then
         tty_flag="-it"
-    else
-        tty_flag="-i"
     fi
 
     # Detect host user UID/GID so build container can adjust artifact ownership

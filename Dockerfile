@@ -31,6 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     grub-pc-bin \
     grub-efi-amd64-bin \
     binutils \
+    debian-archive-keyring \
+    python3 \
     ca-certificates \
     curl \
     wget \
