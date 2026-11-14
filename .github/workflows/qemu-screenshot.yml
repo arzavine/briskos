@@ -91,6 +91,15 @@ jobs:
             dims="$(python3 -c 'import sys; from PIL import Image; print("%dx%d" % Image.open(sys.argv[1]).size)' "$img")"
             echo "- \`$(basename "$img")\` (${dims}, ${size})" >> "$GITHUB_STEP_SUMMARY"
           done
+          if [ -f screenshots/serial.log ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "<details><summary>Serial Console Diagnostics (tail 60 lines)</summary>" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 60 screenshots/serial.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Screenshots Artifact
         if: always()

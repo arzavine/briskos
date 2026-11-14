@@ -23,6 +23,44 @@ for svc in "${SYSTEM_SERVICES[@]}"; do
     fi
 done
 
+# Ensure greetd is explicitly wired as display-manager and wanted by graphical.target
+GREETD_UNIT=""
+for unit_dir in /usr/lib/systemd/system /lib/systemd/system /etc/systemd/system; do
+    if [ -f "$unit_dir/greetd.service" ]; then
+        GREETD_UNIT="$unit_dir/greetd.service"
+        break
+    fi
+done
+
+if [ -n "$GREETD_UNIT" ]; then
+    echo "--> Verifying greetd display-manager & graphical.target symlinks ($GREETD_UNIT)..."
+    mkdir -p /etc/systemd/system/graphical.target.wants
+    ln -sf "$GREETD_UNIT" /etc/systemd/system/display-manager.service
+    ln -sf "$GREETD_UNIT" /etc/systemd/system/graphical.target.wants/greetd.service
+fi
+
+# Ensure _greetd system user exists for tuigreet fallback on installed systems
+if ! id -u _greetd >/dev/null 2>&1; then
+    echo "--> Creating fallback system user _greetd..."
+    useradd --system --no-create-home --shell /usr/sbin/nologin --home-dir /var/lib/greetd _greetd 2>/dev/null || true
+fi
+
+# Normalize greetd config & systemd drop-in permissions and validate TOML syntax
+if [ -f "/etc/greetd/config.toml" ]; then
+    chown root:root /etc/greetd/config.toml
+    chmod 644 /etc/greetd/config.toml
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import tomllib; tomllib.load(open("/etc/greetd/config.toml", "rb"))'
+        echo "--> Validated /etc/greetd/config.toml syntax."
+    fi
+fi
+
+if [ -d "/etc/systemd/system/greetd.service.d" ]; then
+    chmod 755 /etc/systemd/system/greetd.service.d
+    chown -R root:root /etc/systemd/system/greetd.service.d
+    find /etc/systemd/system/greetd.service.d -type f -name "*.conf" -exec chmod 644 {} +
+fi
+
 # Avoid radio state conflict between TLP and systemd-rfkill
 systemctl mask systemd-rfkill.service systemd-rfkill.socket 2>/dev/null || true
 

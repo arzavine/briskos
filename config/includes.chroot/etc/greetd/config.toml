@@ -1,14 +1,17 @@
 # BriskOS 1.0 LTS - greetd Display Manager Configuration
-# Auto-logs into Labwc for the live session user ('user'), and falls back
-# cleanly to tuigreet on installed systems where 'user' does not exist.
+# Uses VT 7 to match Debian's greetd.service (Conflicts=getty@tty7.service) and
+# avoid racing with live-config's getty@tty1 autologin during live boot.
+# briskos-autologin.conf strips [initial_session] at runtime when user 'user'
+# does not exist so installed systems fall back cleanly to tuigreet.
 
 [terminal]
-vt = 1
+vt = 7
+switch = true
 
 [default_session]
 command = "tuigreet --time --remember --cmd labwc"
 user = "_greetd"
 
 [initial_session]
-command = "labwc"
+command = "if [ -z \"${DBUS_SESSION_BUS_ADDRESS:-}\" ] && command -v dbus-run-session >/dev/null 2>&1; then exec dbus-run-session -- labwc; fi; exec labwc"
 user = "user"

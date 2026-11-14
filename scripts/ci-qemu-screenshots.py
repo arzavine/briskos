@@ -30,13 +30,31 @@ KEYMAP = {
     ".": "dot",
     ",": "comma",
     "/": "slash",
+    "?": "shift-slash",
     ";": "semicolon",
     ":": "shift-semicolon",
-    "&": "shift-7",
+    "'": "apostrophe",
+    '"': "shift-apostrophe",
+    "[": "bracket_left",
+    "{": "shift-bracket_left",
+    "]": "bracket_right",
+    "}": "shift-bracket_right",
+    "\\": "backslash",
     "|": "shift-backslash",
-    ">": "shift-dot",
-    "<": "shift-comma",
+    "`": "grave_accent",
+    "~": "shift-grave_accent",
+    "!": "shift-1",
     "@": "shift-2",
+    "#": "shift-3",
+    "$": "shift-4",
+    "%": "shift-5",
+    "^": "shift-6",
+    "&": "shift-7",
+    "*": "shift-8",
+    "(": "shift-9",
+    ")": "shift-0",
+    "<": "shift-comma",
+    ">": "shift-dot",
     "\n": "ret",
 }
 
@@ -229,6 +247,14 @@ def wait_for_monitor(port: int, timeout: float = 20.0) -> QemuMonitor:
     raise RuntimeError(f"Timed out waiting for QEMU monitor on port {port}: {last_err}")
 
 
+def is_desktop_framebuffer(stats: dict[str, object]) -> bool:
+    """Detect rendered Wayland desktop for both dark and Morning Breeze light themes."""
+    return (
+        int(stats["unique_colors"]) >= 200
+        and float(stats["non_black_ratio"]) >= 0.45
+    )
+
+
 def wait_for_desktop_or_tty(
     mon: QemuMonitor,
     tmp_ppm: Path,
@@ -261,11 +287,7 @@ def wait_for_desktop_or_tty(
             retried_enter = True
             continue
 
-        if (
-            elapsed >= 16
-            and int(stats["unique_colors"]) >= 250
-            and float(stats["non_black_ratio"]) >= 0.45
-        ):
+        if elapsed >= 16 and is_desktop_framebuffer(stats):
             print("[INFO] Graphical desktop detected; settling 8s...", flush=True)
             time.sleep(8.0)
             mon.screendump(tmp_ppm)
@@ -299,9 +321,11 @@ def collect_tty_diagnostics_and_launch_labwc(
     print("[SHOT] 01a-tty1-boot.png", flush=True)
 
     diag_cmds = [
-        "systemctl status greetd display-manager getty@tty1 --no-pager | sudo tee /dev/ttyS0\n",
-        "journalctl -u greetd -b --no-pager | sudo tee -a /dev/ttyS0\n",
-        "ls -la /etc/greetd /etc/systemd/system/display-manager.service /etc/systemd/system/graphical.target.wants /etc/systemd/system/getty@tty1.service.d | sudo tee -a /dev/ttyS0\n",
+        "id user 2>&1 | sudo tee -a /dev/ttyS0\n",
+        "systemctl status greetd display-manager getty@tty1 getty@tty7 --no-pager 2>&1 | sudo tee -a /dev/ttyS0\n",
+        "journalctl -u greetd -u live-config -b --no-pager 2>&1 | sudo tee -a /dev/ttyS0\n",
+        "ls -la /etc/greetd /run/greetd /etc/systemd/system/greetd.service.d /etc/systemd/system/display-manager.service /etc/systemd/system/graphical.target.wants 2>&1 | sudo tee -a /dev/ttyS0\n",
+        "pgrep -a 'labwc|waybar|swaybg|greetd' 2>&1 | sudo tee -a /dev/ttyS0\n",
     ]
     for cmd in diag_cmds:
         mon.send_text(cmd, delay=0.03)
@@ -320,12 +344,24 @@ def collect_tty_diagnostics_and_launch_labwc(
             f"colors={stats['unique_colors']}",
             flush=True,
         )
-        if int(stats["unique_colors"]) >= 250 and float(stats["non_black_ratio"]) >= 0.45:
+        if is_desktop_framebuffer(stats):
             time.sleep(6.0)
             mon.screendump(tmp_ppm)
             return True, analyze_ppm(tmp_ppm)
 
     return False, analyze_ppm(tmp_ppm)
+
+
+def log_runtime_diagnostics(mon: QemuMonitor) -> None:
+    """Dump greetd, user, compositor, waybar, and local session logs to serial.log."""
+    cmd = (
+        "{ id user; pgrep -a labwc; pgrep -a waybar; "
+        "journalctl -u greetd -b --no-pager -n 40; "
+        "ls -la ~/.local /tmp/waybar.log; cat /tmp/waybar.log; "
+        "} 2>&1 | sudo tee -a /dev/ttyS0 >/dev/null\n"
+    )
+    mon.send_text(cmd, delay=0.025)
+    time.sleep(2.0)
 
 
 def main() -> int:
@@ -391,48 +427,57 @@ def main() -> int:
             print("[WARN] Graphical desktop did not reach threshold.", flush=True)
             return 2
 
-        # 3. Start Menu (Wofi via Super_L / Super+d)
-        mon.sendkey("meta_l", delay=0.15)
-        time.sleep(3.0)
-        mon.screendump(tmp_ppm)
-        menu_stats = analyze_ppm(tmp_ppm)
-        if menu_stats["sha256"] == desktop_stats["sha256"]:
-            mon.sendkey("meta_l-d", delay=0.15)
+        # 3. Start Menu (Wofi via Super_L, Super+d, or Alt+F1)
+        menu_opened = False
+        for trigger_key in ("meta_l", "meta_l-d", "alt-f1"):
+            mon.sendkey(trigger_key, delay=0.15)
             time.sleep(3.0)
             mon.screendump(tmp_ppm)
+            menu_stats = analyze_ppm(tmp_ppm)
+            if menu_stats["sha256"] != desktop_stats["sha256"]:
+                menu_opened = True
+                print(f"[INFO] Wofi launcher opened via {trigger_key}", flush=True)
+                break
+        if not menu_opened:
+            print("[WARN] Start menu did not change framebuffer.", flush=True)
         save_png(tmp_ppm, out_dir / "02-start-menu.png")
         print("[SHOT] 02-start-menu.png", flush=True)
         mon.sendkey("esc", delay=0.2)
         time.sleep(1.5)
 
-        # 4. Open Foot terminal & run fastfetch
+        # 4. Open Foot terminal, log runtime diagnostics to serial, clear & show brisk-cockpit
         mon.sendkey("meta_l-ret", delay=0.2)
         time.sleep(3.5)
-        mon.send_text("fastfetch\n")
-        time.sleep(3.0)
+        log_runtime_diagnostics(mon)
+        mon.send_text("/usr/bin/clear && brisk-cockpit\n")
+        time.sleep(2.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "03-terminal-fastfetch.png")
         print("[SHOT] 03-terminal-fastfetch.png", flush=True)
 
-        # 5. Launch Brisk Control Center
+        # 5. Launch Brisk Control Center (then close cleanly with Alt+F4 so focus returns to Foot)
         mon.send_text("brisk-control &\n")
         time.sleep(5.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "04-brisk-control.png")
         print("[SHOT] 04-brisk-control.png", flush=True)
+        mon.sendkey("alt-f4", delay=0.2)
+        time.sleep(1.5)
+        mon.send_text("pkill -f brisk-control || true\n")
+        time.sleep(0.8)
 
-        # 6. Launch Brisk Store
-        mon.send_text("pkill -f brisk-control\n")
-        time.sleep(1.0)
+        # 6. Launch Brisk Store (then close cleanly with Alt+F4 so focus returns to Foot)
         mon.send_text("brisk-store &\n")
         time.sleep(5.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "05-brisk-store.png")
         print("[SHOT] 05-brisk-store.png", flush=True)
+        mon.sendkey("alt-f4", delay=0.2)
+        time.sleep(1.5)
+        mon.send_text("pkill -f brisk-store || true\n")
+        time.sleep(0.8)
 
         # 7. Launch Calamares Installer wrapper
-        mon.send_text("pkill -f brisk-store\n")
-        time.sleep(1.0)
         mon.send_text("brisk-installer &\n")
         time.sleep(7.0)
         mon.screendump(tmp_ppm)
