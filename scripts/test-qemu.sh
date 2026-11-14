@@ -2,7 +2,7 @@
 # ==============================================================================
 # BriskOS 1.0 LTS (Feather) - QEMU Virtual Machine Test Harness
 # High-performance, lightweight testing environment for Linux, WSL2, and macOS
-# Debian 12 (Bookworm) amd64 | Wayland Labwc Desktop | PipeWire Audio
+# Debian 13 (Trixie) amd64 | Wayland Labwc Desktop | PipeWire Audio
 # ==============================================================================
 set -euo pipefail
 
@@ -72,7 +72,7 @@ print_banner() {
     echo -e "${COLOR_CYAN}${COLOR_BOLD}"
     echo "======================================================================"
     echo "         BriskOS 1.0 (Feather) - QEMU Virtual Machine Test Harness    "
-    echo "       Debian 12 Bookworm amd64 | Stacking Wayland (Labwc Desktop)    "
+    echo "       Debian 13 Trixie amd64 | Stacking Wayland (Labwc Desktop)      "
     echo "======================================================================"
     echo -e "${COLOR_RESET}"
 }
@@ -413,8 +413,45 @@ if [ "${BOOT_MODE}" = "uefi" ]; then
     fi
 
     if [ -n "${OVMF_CODE}" ]; then
-        FIRMWARE_FLAG=("-bios" "${OVMF_CODE}")
-        FIRMWARE_DESC="UEFI x86_64 (${OVMF_CODE})"
+        OVMF_VARS_SRC=""
+        VARS_CANDIDATES=(
+            "${OVMF_CODE/OVMF_CODE_4M.fd/OVMF_VARS_4M.fd}"
+            "${OVMF_CODE/OVMF_CODE.fd/OVMF_VARS.fd}"
+            "${OVMF_CODE/edk2-x86_64-code.fd/edk2-i386-vars.fd}"
+            "/usr/share/OVMF/OVMF_VARS_4M.fd"
+            "/usr/share/OVMF/OVMF_VARS.fd"
+            "/usr/share/edk2-ovmf/x64/OVMF_VARS.fd"
+            "/usr/share/edk2-ovmf/OVMF_VARS.fd"
+            "/usr/share/edk2/ovmf/OVMF_VARS.fd"
+        )
+        # Only pair VARS with split CODE images (skip unified OVMF.fd images)
+        if [[ "${OVMF_CODE}" == *CODE* || "${OVMF_CODE}" == *code* ]]; then
+            for vpath in "${VARS_CANDIDATES[@]}"; do
+                if [ -f "${vpath}" ]; then
+                    OVMF_VARS_SRC="${vpath}"
+                    break
+                fi
+            done
+        fi
+
+        if [ -n "${OVMF_VARS_SRC}" ]; then
+            if [ "${CREATE_DISK}" = true ]; then
+                OVMF_VARS_RW="${DISK_PATH%.qcow2}-ovmf-vars.fd"
+            else
+                OVMF_VARS_RW="${TMPDIR:-/tmp}/briskos-ovmf-vars.fd"
+            fi
+            if [ "${DRY_RUN}" = false ] && [ ! -f "${OVMF_VARS_RW}" ]; then
+                cp "${OVMF_VARS_SRC}" "${OVMF_VARS_RW}"
+            fi
+            FIRMWARE_FLAG=(
+                "-drive" "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}"
+                "-drive" "if=pflash,format=raw,file=${OVMF_VARS_RW}"
+            )
+            FIRMWARE_DESC="UEFI x86_64 pflash (${OVMF_CODE} + writable VARS)"
+        else
+            FIRMWARE_FLAG=("-bios" "${OVMF_CODE}")
+            FIRMWARE_DESC="UEFI x86_64 (${OVMF_CODE})"
+        fi
     else
         log_warn "UEFI mode requested, but no OVMF/EDK2 firmware image was found."
         log_warn "Install OVMF package (e.g., 'sudo apt-get install ovmf' or 'brew install qemu')."

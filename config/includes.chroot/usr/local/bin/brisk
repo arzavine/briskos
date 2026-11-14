@@ -31,7 +31,7 @@ show_help() {
     echo -e "  ${cyan}Control Center & Settings:${rst}"
     echo -e "    ${bold}brisk settings | control${rst}   Launch Brisk Control Center graphical settings hub"
     echo -e "    ${bold}brisk channel [stable|beta]${rst} Show or set OS update release channel"
-    echo -e "    ${bold}brisk osd <vol|bright> <arg>${rst} Trigger hardware floating OSD HUD\n"
+    echo -e "    ${bold}brisk osd <volume|brightness|mic> <arg>${rst} Trigger hardware floating OSD HUD\n"
 
     echo -e "  ${cyan}Power & Battery Sentinel:${rst}"
     echo -e "    ${bold}brisk profile [turbo|eco|balanced]${rst}   Switch active hardware power profile"
@@ -95,15 +95,49 @@ case "$cmd" in
         ;;
     osd|hud)
         if [[ -x /usr/local/bin/brisk-osd ]]; then
+            osd_target="${1:-}"
+            case "$osd_target" in
+                vol)
+                    shift
+                    set -- "volume" "$@"
+                    ;;
+                bright)
+                    shift
+                    set -- "brightness" "$@"
+                    ;;
+                microphone)
+                    shift
+                    set -- "mic" "$@"
+                    ;;
+            esac
             exec /usr/local/bin/brisk-osd "$@"
         else
             echo "brisk-osd executable not found." >&2
             exit 1
         fi
         ;;
-    profile|power)
+    profile)
         if [[ -x /usr/local/bin/brisk-sentinel ]]; then
             exec /usr/local/bin/brisk-sentinel profile "$@"
+        else
+            echo "brisk-sentinel executable not found." >&2
+            exit 1
+        fi
+        ;;
+    power)
+        if [[ -x /usr/local/bin/brisk-sentinel ]]; then
+            case "${1:-status}" in
+                status|threshold|glide|help|--help|-h)
+                    exec /usr/local/bin/brisk-sentinel "$@"
+                    ;;
+                profile)
+                    shift
+                    exec /usr/local/bin/brisk-sentinel profile "$@"
+                    ;;
+                *)
+                    exec /usr/local/bin/brisk-sentinel profile "$@"
+                    ;;
+            esac
         else
             echo "brisk-sentinel executable not found." >&2
             exit 1
@@ -126,14 +160,38 @@ case "$cmd" in
         fi
         ;;
     store)
-        if [[ -x /usr/local/bin/brisk-store ]]; then
-            exec /usr/local/bin/brisk-store "$@"
+        case "${1:-}" in
+            status|install|remove|uninstall|list-installed|installed|search|info|catalog|version|-v|--version|help|-h|--help)
+                if [[ -x /usr/local/bin/brisk-store-backend ]]; then
+                    exec /usr/local/bin/brisk-store-backend "$@"
+                else
+                    echo "brisk-store-backend executable not found." >&2
+                    exit 1
+                fi
+                ;;
+            *)
+                if [[ -x /usr/local/bin/brisk-store ]]; then
+                    exec /usr/local/bin/brisk-store "$@"
+                else
+                    echo "brisk-store executable not found." >&2
+                    exit 1
+                fi
+                ;;
+        esac
+        ;;
+    recovery)
+        if [[ $# -eq 0 ]] && [[ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]] && [[ -x /usr/local/bin/brisk-timetravel-gui ]]; then
+            exec /usr/local/bin/brisk-timetravel-gui
+        elif [[ -x /usr/local/bin/brisk-timetravel ]]; then
+            exec /usr/local/bin/brisk-timetravel "$@"
+        elif [[ -x /usr/local/bin/brisk-timetravel-gui ]]; then
+            exec /usr/local/bin/brisk-timetravel-gui "$@"
         else
-            echo "brisk-store executable not found." >&2
+            echo "brisk-timetravel executable not found." >&2
             exit 1
         fi
         ;;
-    recovery|timetravel|snapshot|snapshots)
+    timetravel|snapshot|snapshots)
         if [[ -x /usr/local/bin/brisk-timetravel ]]; then
             exec /usr/local/bin/brisk-timetravel "$@"
         elif [[ -x /usr/local/bin/brisk-timetravel-gui ]]; then
@@ -144,14 +202,33 @@ case "$cmd" in
         fi
         ;;
     update|updater)
-        if [[ -x /usr/local/bin/brisk-update-checker ]]; then
-            exec /usr/local/bin/brisk-update-checker "$@"
-        elif [[ -x /usr/local/bin/brisk-updater-gui ]]; then
-            exec /usr/local/bin/brisk-updater-gui "$@"
-        else
-            echo "brisk update utilities not found." >&2
-            exit 1
-        fi
+        case "${1:-}" in
+            check|--now|--check-once)
+                if [[ -x /usr/local/bin/brisk-update-checker ]]; then
+                    exec /usr/local/bin/brisk-update-checker --now
+                else
+                    echo "brisk-update-checker executable not found." >&2
+                    exit 1
+                fi
+                ;;
+            help|--help|-h)
+                echo "Usage: brisk update [check|--now] | brisk updater"
+                echo "  brisk update          Launch BriskOS graphical software updater (or check once headless)"
+                echo "  brisk update check    Run immediate one-shot GitHub release check"
+                ;;
+            *)
+                if [[ "$cmd" = "updater" || $# -eq 0 ]] && [[ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]] && [[ -x /usr/local/bin/brisk-updater-gui ]]; then
+                    exec /usr/local/bin/brisk-updater-gui "$@"
+                elif [[ -x /usr/local/bin/brisk-update-checker ]]; then
+                    exec /usr/local/bin/brisk-update-checker "${1:---now}"
+                elif [[ -x /usr/local/bin/brisk-updater-gui ]]; then
+                    exec /usr/local/bin/brisk-updater-gui "$@"
+                else
+                    echo "brisk update utilities not found." >&2
+                    exit 1
+                fi
+                ;;
+        esac
         ;;
     version|--version|-v)
         echo "BriskOS 1.0 LTS (Feather Edition)"

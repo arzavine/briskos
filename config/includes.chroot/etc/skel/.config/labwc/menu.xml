@@ -2,6 +2,9 @@
 <openbox_menu>
   <menu id="root-menu" label="BriskOS Menu">
     <!-- Quick Launch Applications -->
+    <item label="Brisk Control Center" icon="brisk-control">
+      <action name="Execute" command="brisk-control" />
+    </item>
     <item label="Brisk Store" icon="brisk-store">
       <action name="Execute" command="brisk-store" />
     </item>
@@ -22,9 +25,6 @@
 
     <!-- Productivity & Office Applications -->
     <menu id="productivity-menu" label="Productivity" icon="applications-office">
-      <item label="ONLYOFFICE Desktop Editors" icon="onlyoffice-desktopeditors">
-        <action name="Execute" command="onlyoffice-desktopeditors" />
-      </item>
       <item label="Document Editor (LibreOffice Writer)" icon="libreoffice-writer">
         <action name="Execute" command="libreoffice --writer" />
       </item>
@@ -73,6 +73,9 @@
 
     <!-- Preferences & Hardware Settings -->
     <menu id="preferences-menu" label="Preferences" icon="preferences-system">
+      <item label="Brisk Control Center" icon="brisk-control">
+        <action name="Execute" command="brisk-control" />
+      </item>
       <menu id="hardware-menu" label="Hardware" icon="preferences-system-power">
         <item label="Battery Sentinel" icon="battery-good">
           <action name="Execute" command="brisk-sentinel-gui" />

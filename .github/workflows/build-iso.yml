@@ -71,6 +71,8 @@ jobs:
             syslinux-common \
             grub-pc-bin \
             grub-efi-amd64-bin \
+            debian-archive-keyring \
+            python3 \
             binutils \
             ca-certificates \
             curl \
@@ -78,8 +80,12 @@ jobs:
             findutils \
             sed \
             gawk
+          # Ensure debootstrap knows the trixie suite even on older Ubuntu hosts
+          if [ ! -e /usr/share/debootstrap/scripts/trixie ] && [ -e /usr/share/debootstrap/scripts/sid ]; then
+            sudo ln -sf sid /usr/share/debootstrap/scripts/trixie
+          fi
 
-      - name: Verify Permissions & Shell Script Syntax
+      - name: Verify Permissions & Script Syntax
         run: |
           chmod +x scripts/*.sh auto/config
           if [ -d config/hooks/live ]; then
@@ -90,12 +96,24 @@ jobs:
           fi
           bash -n scripts/build-iso.sh
           bash -n scripts/build-docker.sh
-          bash -n auto/config
+          sh -n auto/config
           for hook in config/hooks/live/*.hook.chroot; do
             [ -f "$hook" ] && bash -n "$hook"
           done
           for bin in config/includes.chroot/usr/local/bin/*; do
-            [ -f "$bin" ] && bash -n "$bin"
+            [ -f "$bin" ] || continue
+            shebang="$(head -n 1 "$bin")"
+            case "$shebang" in
+              *python3*|*python*)
+                python3 -B -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1])' "$bin"
+                ;;
+              */bin/sh*)
+                sh -n "$bin"
+                ;;
+              *)
+                bash -n "$bin"
+                ;;
+            esac
           done
 
       - name: Execute ISO Build Harness
@@ -168,7 +186,7 @@ jobs:
           body: |
             ## BriskOS 1.0 LTS (Feather) Official Release
 
-            Featherweight, modern stacking Wayland desktop Linux distribution based on **Debian 12 (Bookworm) amd64**.
+            Featherweight, modern stacking Wayland desktop Linux distribution based on **Debian 13 (Trixie) amd64**.
 
             ### Verification
             Verify image integrity with SHA256:
@@ -177,7 +195,7 @@ jobs:
             ```
 
             ### System Specifications
-            - **Base**: Debian 12 (Bookworm) amd64 with `linux-image-amd64` and complete non-free firmware
+            - **Base**: Debian 13 (Trixie) amd64 with `linux-image-amd64` and complete non-free firmware
             - **Compositor**: Labwc (stacking Wayland compositor with Openbox bindings)
             - **Desktop Shell**: Waybar bottom panel, Wofi floating app launcher, Foot terminal, Mako notifications
             - **Idle Footprint**: < 512 MB idle RAM baseline with zstd zram compression

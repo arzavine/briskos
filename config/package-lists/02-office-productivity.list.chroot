@@ -7,17 +7,18 @@
 # Note: For production builds with ONLYOFFICE, configure upstream repository:
 # deb [signed-by=/usr/share/keyrings/onlyoffice.gpg] https://download.onlyoffice.com/repo/debian squeeze main
 # and uncomment 'onlyoffice-desktopeditors'.
-# Standard Debian 12 (Bookworm) repository fallback:
+# Standard Debian 13 (Trixie) repository fallback:
 # onlyoffice-desktopeditors
 libreoffice-writer
 libreoffice-calc
 
-# Microsoft-Compatible Metric Substitution Fonts
+# Microsoft-Compatible Metric Substitution Fonts (offline-safe)
 fonts-crosextra-carlito
 fonts-crosextra-caladea
 
-# Microsoft TrueType Core Fonts (Arial, Times, Courier, etc. via contrib)
-ttf-mscorefonts-installer
+# Note: ttf-mscorefonts-installer is preseeded and installed best-effort in
+# config/hooks/live/00-setup-multiarch-and-extras.hook.chroot so EULA prompts
+# or SourceForge network outages never block automated ISO builds.
 
 # Document & Image Viewers
 evince

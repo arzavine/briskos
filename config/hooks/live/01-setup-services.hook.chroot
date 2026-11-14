@@ -8,8 +8,10 @@ echo "=========================================================="
 # 1. Enable core system services
 SYSTEM_SERVICES=(
     "NetworkManager.service"
+    "iwd.service"
     "bluetooth.service"
     "systemd-timesyncd.service"
+    "greetd.service"
 )
 
 for svc in "${SYSTEM_SERVICES[@]}"; do
@@ -20,6 +22,12 @@ for svc in "${SYSTEM_SERVICES[@]}"; do
         echo "--> Notice: $svc not present yet, skipping direct enable"
     fi
 done
+
+# Avoid radio state conflict between TLP and systemd-rfkill
+systemctl mask systemd-rfkill.service systemd-rfkill.socket 2>/dev/null || true
+
+# Ensure default target is graphical so greetd starts on boot
+systemctl set-default graphical.target 2>/dev/null || true
 
 # 2. Enable global user services for PipeWire audio server and WirePlumber session manager
 echo "--> Setting up PipeWire and WirePlumber global user service links..."

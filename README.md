@@ -1,7 +1,7 @@
 # BriskOS 1.0 LTS (Feather)
 
 > **Featherweight, Modern Wayland Linux Distribution**  
-> Based on **Debian 12 (Bookworm) amd64** | Sub-512 MB Idle RAM Baseline | Native Wine Integration
+> Based on **Debian 13 (Trixie) amd64** | Sub-512 MB Idle RAM Baseline | Native Wine Integration
 
 ---
 
@@ -9,10 +9,10 @@
 
 **BriskOS** is an ultra-lightweight, modern desktop Linux distribution engineered for maximum responsiveness, minimal memory footprint, and out-of-the-box Windows application compatibility. Built using Debian's upstream `live-build` framework, BriskOS combines a lightweight stacking Wayland environment with system-level optimizations (zstd zram, PipeWire audio, and streamlined service management).
 
-* **Phase 1**: Foundational infrastructure, Debian Bookworm package manifests, system identity branding, live-build chroot hooks, and the ISO build automation harness.
-* **Phase 2**: Complete Desktop Shell & UI Architecture featuring the Labwc Wayland compositor, Waybar bottom taskbar, Wofi Start Menu launcher, Foot terminal, Mako notifications, GTK theming, and aerodynamic vector artwork—strictly governed by antislop-ui design principles.
-* **Phase 3**: Seamless Windows Application Compatibility Layer (1-click runner, prefix management control panel), Microsoft Office metric-compatible font substitutions & subpixel rendering optimizations, and Serverless GitHub OTA Update Infrastructure (background daemon, Zenity GUI updater).
-* **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian Bookworm Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
+* **Phase 1**: Foundational infrastructure, Debian 13 (Trixie) package manifests, system identity branding, live-build chroot hooks, and the ISO build automation harness.
+* **Phase 2**: Complete Desktop Shell & UI Architecture featuring the Labwc Wayland compositor (`Brisk-Dark` theme), Waybar bottom taskbar, Wofi Start Menu launcher, Foot terminal, Mako notifications, GTK theming, and aerodynamic vector artwork—strictly governed by antislop-ui design principles.
+* **Phase 3**: Seamless Windows Application Compatibility Layer (1-click runner, prefix management control panel), Microsoft Office metric-compatible font substitutions & subpixel rendering optimizations, and Serverless GitHub OTA Update Infrastructure (channel selector, background daemon, Zenity GUI updater).
+* **Phase 4**: Production ISO Build Engine & GitHub Actions CI/CD Pipeline featuring containerized Debian 13 (Trixie) Docker build harness (`Dockerfile`, `scripts/build-docker.sh`), hardened host build automation (`scripts/build-iso.sh`) with colorized telemetry, log rotation, pre-flight audit dry-run, and automated cloud release pipeline (`.github/workflows/build-iso.yml`) with cryptographic verification (SHA256 & SHA512).
 * **Phase 5**: QEMU Virtual Machine Test Harness (`scripts/test-qemu.sh`, `scripts/test-qemu.bat`), Safe Interactive USB Flash Tool (`scripts/flash-usb.sh`), and Production Bare-Metal Installation Manual ([`INSTALL.md`](file:///d:/.Vibe%20Coder/OS/INSTALL.md)).
 * **Phase 6**: Out-of-the-box Calamares Graphical Installer featuring bespoke "Night Glass" Qt styling, custom vector artwork, passwordless polkit elevation, multi-entry live session integration (Waybar, Desktop, context menu), and automated live-build cleanup hooks.
 * **Phase 7**: System Resilience, Instant Time-Travel Rollback & Sentinel Laptop Power Engine featuring BTRFS/Rsync snapshot rollback (`brisk-timetravel`, `brisk-timetravel-gui`), zero-friction APT pre-update hooks (`DPkg::Pre-Invoke`), and TLP/ACPI dynamic laptop power optimization (`brisk-sentinel`, `brisk-sentinel-gui`) with 80% charge ceiling preservation mode.
@@ -83,6 +83,9 @@ d:/.Vibe Coder/OS/
 │   │   │   ├── issue                        # TTY pre-login ASCII banner
 │   │   │   ├── issue.net                    # Remote login banner
 │   │   │   ├── motd                         # Post-login welcome & system diagnostics
+│   │   │   ├── NetworkManager/
+│   │   │   │   └── conf.d/
+│   │   │   │       └── 10-wifi-backend.conf     # NetworkManager iwd Wi-Fi backend binding
 │   │   │   ├── os-release                   # freedesktop.org OS identity specification
 │   │   │   ├── polkit-1/
 │   │   │   │   └── rules.d/
@@ -130,8 +133,13 @@ d:/.Vibe Coder/OS/
 │   │   └── usr/
 │   │       ├── local/
 │   │       │   └── bin/
+│   │       │       ├── brisk                # Unified CLI control center & diagnostic hub
+│   │       │       ├── brisk-channel        # Release channel switcher (stable / beta)
+│   │       │       ├── brisk-cockpit        # Foot terminal 24-bit TrueColor live greeting
+│   │       │       ├── brisk-control        # GTK3 Brisk Control Center (9 live system panels)
 │   │       │       ├── brisk-glide-daemon   # Zero-polling low-battery auto-pilot daemon & event engine
 │   │       │       ├── brisk-installer      # Calamares launcher wrapper (Wayland env & logging)
+│   │       │       ├── brisk-osd            # Dynamic Mako/Wayland OSD notifications (volume/brightness/caps)
 │   │       │       ├── brisk-sentinel       # Laptop power optimizer CLI, Glide Mode & profile controller
 │   │       │       ├── brisk-sentinel-gui   # Zenity battery control panel, Glide settings & profile switcher
 │   │       │       ├── brisk-store          # Pure GTK3 native application store GUI (sub-25 MB RAM, Night Glass)
@@ -143,6 +151,10 @@ d:/.Vibe Coder/OS/
 │   │       │       ├── brisk-update-checker # Serverless GitHub OTA update check daemon
 │   │       │       └── brisk-updater-gui    # Zenity graphical software updater frontend
 │   │       └── share/
+│   │           ├── themes/
+│   │           │   └── Brisk-Dark/
+│   │           │       └── openbox-3/
+│   │           │           └── themerc          # Labwc window decoration theme matching rc.xml
 │   │           ├── applications/
 │   │           │   ├── brisk-sentinel.desktop           # Battery Sentinel launcher & Waybar handler
 │   │           │   ├── brisk-store.desktop              # Brisk Store application center launcher
@@ -164,12 +176,12 @@ d:/.Vibe Coder/OS/
 │       ├── 01-desktop-wayland.list.chroot   # Labwc compositor, Waybar, Wofi, Foot, Thunar
 │       ├── 02-office-productivity.list.chroot # LibreOffice/ONLYOFFICE notes, Microsoft fonts, Evince
 │       ├── 03-windows-compat.list.chroot    # Wine, Wine64, Winetricks, Cabextract, Zenity
-│       ├── 04-utilities.list.chroot         # Fastfetch/Neofetch, htop, btop, curl, git, 7zip, pavucontrol
+│       ├── 04-utilities.list.chroot         # Fastfetch, htop, btop, curl, git, 7zip, pavucontrol
 │       ├── 05-installer.list.chroot         # Calamares framework, partitioning tools & bootloader utils
 │       ├── 06-system-resilience.list.chroot # Timeshift, BTRFS tools, rsync, cron, libnotify
 │       ├── 07-power-management.list.chroot  # TLP, TLP-RDW, powertop, upower, brightnessctl, cpupower, acpid
 │       └── 08-software-store.list.chroot    # GTK3, PyGObject, Flatpak, AppStream, Curl & JQ dependencies
-├── Dockerfile                               # Containerized Debian Bookworm build environment
+├── Dockerfile                               # Containerized Debian 13 (Trixie) build environment
 ├── INSTALL.md                               # Comprehensive bare-metal & VM installation guide
 ├── scripts/
 │   ├── build-docker.sh                      # Cross-platform Docker build harness (Linux, Windows, WSL2)
@@ -186,7 +198,7 @@ d:/.Vibe Coder/OS/
 
 ### 1. Package Manifests (`config/package-lists/`)
 
-All packages are strictly validated against **Debian 12 (Bookworm)** repository sections (`main`, `contrib`, `non-free`, `non-free-firmware`):
+All packages are structured against **Debian 13 (Trixie)** repository sections (`main`, `contrib`, `non-free`, `non-free-firmware`):
 
 * **`00-core-system.list.chroot`**:
   * **Kernel**: `linux-image-amd64`
@@ -212,7 +224,7 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
   * **Windows Compatibility**: `wine`, `wine64`, `winetricks`, `cabextract`, `zenity`
 
 * **`04-utilities.list.chroot`**:
-  * **System Diagnostics**: `neofetch`, `htop`, `btop`
+  * **System Diagnostics**: `fastfetch`, `htop`, `btop`
   * **Networking & Tools**: `curl`, `wget`, `git`, `nano`, `p7zip-full`, `unrar-free`, `pavucontrol`
 
 * **`05-installer.list.chroot`**:
@@ -242,7 +254,7 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
 * **`os-release`**: Fully compliant with [freedesktop.org os-release](https://www.freedesktop.org/software/systemd/man/os-release.html) standard (`ID=briskos`, `ID_LIKE=debian`, `VERSION_ID="1.0"`, `PRETTY_NAME="BriskOS 1.0 LTS (Feather)"`).
 * **`issue` & `issue.net`**: Aerodynamic, non-slop ASCII banner for local TTY and remote logins.
 * **`hostname` & `hosts`**: Standardized to hostname `briskos` with loopback bindings (`127.0.0.1`, `127.0.1.1`, IPv6).
-* **`motd`**: Concise, actionable welcome screen displaying system specs, memory target, and core CLI commands (`neofetch`, `btop`, `nmtui`).
+* **`motd`**: Concise, actionable welcome screen displaying system specs, memory target, and core CLI commands (`fastfetch`, `btop`, `nmtui`).
 
 ---
 
@@ -251,7 +263,7 @@ All packages are strictly validated against **Debian 12 (Bookworm)** repository 
 All chroot hooks execute during live image assembly with strict `set -euo pipefail` error handling:
 
 * **`01-setup-services.hook.chroot`**:
-  * Enables system services (`NetworkManager.service`, `bluetooth.service`, `systemd-timesyncd.service`).
+  * Enables system services (`NetworkManager.service`, `iwd.service`, `bluetooth.service`, `systemd-timesyncd.service`) and masks `systemd-rfkill` units to prevent conflicts with TLP.
   * Establishes global user session symlinks in `/etc/systemd/user/` for `pipewire.service`, `pipewire-pulse.service`, and `wireplumber.service`.
 * **`02-setup-zram.hook.chroot`**:
   * Configures `/etc/default/zramswap` with `ALGO=zstd` and `PERCENT=50` to compress RAM transparently, keeping idle memory footprint below 512 MB.
@@ -292,8 +304,8 @@ Phase 2 establishes a high-performance stacking Wayland environment built on top
   * **Mouse Bindings**: Left titlebar drag to move, double-click to maximize, titlebar scroll to shade/unshade, right-click desktop to spawn root menu, Alt+Left/Right drag anywhere on client to move/resize.
 * **`autostart`**: Shell startup script launching `swaybg` (with `/usr/share/backgrounds/briskos/brisk-default.svg`), `waybar`, `mako`, multiarch PolicyKit authentication agent, and `swayidle` (600s auto-lock with `swaylock -f -c 0f172a`).
 * **`environment`**: Session environment exporting `XDG_CURRENT_DESKTOP=labwc:wlroots`, `XDG_SESSION_TYPE=wayland`, `QT_QPA_PLATFORM=wayland;xcb`, `GDK_BACKEND=wayland,x11`, `MOZ_ENABLE_WAYLAND=1`, and headless rendering optimizers.
-* **`menu.xml`**: Clean Openbox-compatible right-click desktop menu featuring quick app launchers (Brisk Store, Calamares installer, Foot terminal, Thunar, Web Browser), nested Productivity suite (ONLYOFFICE, LibreOffice Writer/Calc, Evince, Viewnior), System utilities (Brisk Store, `htop`, `btop`, `pavucontrol`, Time-Travel), and session controls.
-* **`themerc-override`**: Compositor theme overrides specifying deep slate titlebars (`#0f172a`, `#1e293b`), high-contrast text (`#f8fafc`, `#94a3b8`), and Brisk Ice Cyan active borders (`#38bdf8`).
+* **`menu.xml`**: Clean Openbox-compatible right-click desktop menu featuring quick app launchers (Brisk Control Center, Brisk Store, Calamares installer, Foot terminal, Thunar, Web Browser), nested Productivity suite (LibreOffice Writer/Calc, Evince, Viewnior), System utilities (Brisk Control Center, Brisk Store, `htop`, `btop`, `pavucontrol`, Time-Travel), and session controls.
+* **`themerc-override` & `Brisk-Dark` Theme**: Compositor window decoration theme (`/usr/share/themes/Brisk-Dark/openbox-3/themerc`) paired with user overrides specifying deep slate titlebars (`#0f172a`, `#1e293b`), high-contrast text (`#f8fafc`, `#94a3b8`), and Brisk Ice Cyan active borders (`#38bdf8`).
 
 #### B. Waybar Bottom Taskbar & Wofi Start Menu (`.config/waybar/`, `.config/wofi/`)
 * **Taskbar (`waybar/config.jsonc` & `waybar/style.css`)**:
@@ -306,7 +318,7 @@ Phase 2 establishes a high-performance stacking Wayland environment built on top
   * Features clean input search field, Papirus icon integration (size: 28px), and purposeful left-border accent indicators (`#38bdf8`) on focused list entries.
 
 #### C. Foot Terminal, Mako Notifications, GTK Defaults & Wallpaper
-* **Foot Terminal (`foot/foot.ini`)**: Hardware-accelerated terminal with `monospace:size=11`, 8px centered padding, beam cursor, and full 16-color palette based on deep slate and Ice Cyan.
+* **Foot Terminal (`foot/foot.ini`)**: Hardware-accelerated terminal with `JetBrains Mono:size=11,monospace:size=11`, 8px centered padding, beam cursor, and full 16-color palette based on deep slate and Ice Cyan.
 * **Mako Notifications (`mako/config`)**: Modern notification popups anchored to bottom-right (margin: 12px, border-radius: 8px, font: Inter 10, background: `#1e293be6`, border: `#38bdf8`, 5s auto-timeout).
 * **GTK 3 & 4 Settings (`gtk-3.0/settings.ini` & `gtk-4.0/settings.ini`)**: Out-of-the-box configuration applying `Adwaita-dark`, `Papirus-Dark` icon theme, `Inter 10` interface font, and dark theme preference.
 * **BriskOS Wallpaper (`usr/share/backgrounds/briskos/brisk-default.svg`)**: Bespoke 1920x1080 aerodynamic vector illustration featuring supersonic flow facets, subtle coordinate grid telemetry, and Brisk Ice Cyan vector streamlines.
@@ -412,7 +424,7 @@ Phase 4 establishes an industrial-grade, multi-tier build and release architectu
   * **Cryptographic Verification**: Generates `BriskOS-1.0-amd64.iso.sha256` and `BriskOS-1.0-amd64.iso.sha512` automatically upon build completion.
 
 * **Containerized Docker Build System (`Dockerfile` & `scripts/build-docker.sh`)**:
-  * **Hermetic Debian Bookworm Base**: Containerized around `debian:bookworm` to eliminate host contamination and host OS distribution incompatibilities.
+  * **Hermetic Debian 13 (Trixie) Base**: Containerized around `debian:trixie` to eliminate host contamination and host OS distribution incompatibilities.
   * **Cross-Platform Compatibility**: Enables building the BriskOS ISO with a single command on Ubuntu, Fedora, Arch, Alpine, macOS (with Docker Desktop), or Windows 10/11 (with Docker Desktop or WSL2).
   * **Windows Git Bash (MSYS) Safe**: Automatically sets `MSYS_NO_PATHCONV=1` to prevent volume bind-mount path mangling when launching Docker from Windows Git Bash.
   * **Privileged Loopback Execution**: Automatically configures `--privileged` loop device pass-through (`/dev/loop*`), host user UID/GID propagation, and workspace volume mounting (`-v $(pwd):/build`).
@@ -440,7 +452,7 @@ Phase 5 delivers comprehensive virtualization test harnesses, a foolproof USB wr
   * **System Requirements**: Minimal hardware baseline (1.0 GHz x86_64, 1 GB physical RAM, 16 GB storage) vs Recommended specification (2.0+ GHz multi-core, 2+ GB RAM, 32+ GB SSD).
   * **Cross-Platform USB Preparation**: Complete workflows for Windows (Rufus ISO mode vs Ventoy vs BalenaEtcher), Linux (`scripts/flash-usb.sh`, Ventoy, `dd`), and macOS (`diskutil` + `dd`).
   * **Motherboard & OEM Boot Menu Keys**: Quick-reference table for Lenovo (F12/Novo), Dell (F12), HP (F9/Esc), ASUS (F8/Esc), Acer (F12), MSI (F11), Apple Mac (Option/Alt), and Surface (Vol Down + Power).
-  * **Firmware Configuration**: UEFI vs Legacy BIOS setup, Secure Boot guidance (Debian Bookworm signed shim), AHCI disk controller configuration, and Windows Fast Startup & BitLocker notices.
+  * **Firmware Configuration**: UEFI vs Legacy BIOS setup, Secure Boot guidance (Debian signed shim), AHCI disk controller configuration, and Windows Fast Startup & BitLocker notices.
   * **Non-Destructive Live Session**: Verifying Wayland graphics (Labwc), network connectivity (`nmtui` / NetworkManager), and PipeWire sound (`pavucontrol` / WirePlumber) before committing to disk.
   * **Installation Walkthrough**: Step-by-step procedures for Clean Drive Installation and Dual-Boot alongside Windows (partition shrinking, EFI system partition preservation, `os-prober` GRUB detection).
   * **Post-Installation Tuning**: Software updates, 1-click Wine application launcher, Office font substitutions, keyboard shortcut cheat sheet, and RTC local time clock synchronization.
@@ -450,7 +462,7 @@ Phase 5 delivers comprehensive virtualization test harnesses, a foolproof USB wr
     * POSIX bash harness executing under `set -euo pipefail` with ANSI terminal banners and diagnostic logging.
     * **Automatic ISO Discovery**: Resolves `BriskOS-1.0-amd64.iso` in the project root or current working directory, or accepts `-i` / `--iso <path>`.
     * **Hardware Acceleration**: Auto-detects `/dev/kvm` availability and permissions on Linux/WSL2; detects macOS Hypervisor Framework (`-accel hvf`); provides seamless fallback to TCG software emulation (`--tcg`).
-    * **UEFI & Legacy BIOS**: Auto-detects OVMF firmware across Debian/Ubuntu, Arch, Fedora, and macOS (`/usr/share/OVMF/OVMF_CODE.fd`), or boots via default Legacy BIOS.
+    * **UEFI & Legacy BIOS**: Auto-detects OVMF firmware (`OVMF_CODE*.fd` + writable `OVMF_VARS*.fd` via `-drive if=pflash` for UEFI NVRAM persistence) across Debian/Ubuntu, Arch, Fedora, and macOS, or boots via default Legacy BIOS.
     * **Optimized Emulated Hardware**: VirtIO VGA acceleration (`-vga virtio`), absolute tablet pointer (`-device virtio-tablet-pci`), Intel HDA duplex audio (`-device intel-hda -device hda-duplex`), and user-mode networking with SSH forwarding to localhost:2222.
     * **Automated Test Storage**: Optional `--create-disk [size]` creates a sparse 20 GB `qcow2` virtual drive for partition and installation testing.
     * **Example Commands**:
@@ -614,7 +626,7 @@ Phase 9 introduces **Brisk Store** (`brisk-store`), an ultra-lean, native deskto
   * Adheres strictly to **Night Glass** design principles (`#0b1120` Midnight Slate base, `#0f172a` translucent cards, `#1e293b` borders, and `#38bdf8` Ice Cyan accents) and `/antislop-ui` standards.
   * Zero persistent daemons or background pollers: memory footprint completely returns to **0 MB upon window close** (`sys.exit(0)`).
 * **Dual-Engine Package Ecosystem (APT + Flathub)**:
-  * Seamlessly unifies Debian 12 (Bookworm) native APT packaging for high-performance system utilities and desktop tools with Flathub sandboxed applications for cutting-edge upstream releases.
+  * Seamlessly unifies Debian 13 (Trixie) native APT packaging for high-performance system utilities and desktop tools with Flathub sandboxed applications for cutting-edge upstream releases.
   * Source badges clearly differentiate app origins (`Flathub • Versi Baru` in Ice Cyan vs `Debian • Native` in Emerald).
 * **Decoupled Backend Engine (`/usr/local/bin/brisk-store-backend`)**:
   * Headless CLI backend handling `status <id>`, `install <id>`, `remove <id>`, `search <query>`, and `list-installed`.
@@ -635,7 +647,7 @@ Phase 9 introduces **Brisk Store** (`brisk-store`), an ultra-lean, native deskto
 | Check Category | Verification Item | Status |
 | :--- | :--- | :---: |
 | **Phase 1 Directory Structure** | `config/package-lists/`, `config/includes.chroot/etc/`, `config/hooks/live/`, `auto/`, `scripts/` | **PASS** |
-| **Phase 1 Package Repositories** | Debian 12 (Bookworm) package validity across all `.list.chroot` manifests | **PASS** |
+| **Phase 1 Package Repositories** | Debian 13 (Trixie) package manifests across all `.list.chroot` files | **PASS** |
 | **Phase 1 Script Strictness** | POSIX / Bash syntax checks (`bash -n`, `sh -n`) with `set -euo pipefail` | **PASS** |
 | **Phase 6 Calamares Configuration** | Syntax validity of `settings.conf`, `branding.desc`, and all module configs | **PASS** |
 | **Phase 6 Night Glass Styling** | Qt QSS stylesheet structure, token consistency, and vector SVG assets | **PASS** |
@@ -655,7 +667,7 @@ Phase 9 introduces **Brisk Store** (`brisk-store`), an ultra-lean, native deskto
 | **Phase 4 Shell Script Strictness** | Strict `bash -n` static syntax validation across all scripts (`build-iso.sh`, `build-docker.sh`, `auto/config`, hooks, `/usr/local/bin`) | **PASS** |
 | **Phase 4 Pre-Flight Audit** | `build-iso.sh --dry-run` successfully audits configs, 5 manifests, 3 hooks, 4 binaries, and storage | **PASS** |
 | **Phase 4 Mount Cleanup & Signals** | Reverse unmounting (`cleanup_mounts`) and `ERR`/`INT`/`TERM` signal traps verified | **PASS** |
-| **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian Bookworm with non-interactive flags, `MSYS_NO_PATHCONV=1`, and host UID mapping | **PASS** |
+| **Phase 4 Docker Engine Harness** | Clean Dockerfile specification based on Debian 13 (Trixie) with non-interactive flags, `MSYS_NO_PATHCONV=1`, and host UID mapping | **PASS** |
 | **Phase 4 CI/CD Workflow Schema** | Valid GitHub Actions workflow with runner storage optimization, comprehensive script syntax audits, failure log capture, and release automation | **PASS** |
 | **Phase 5 Directory Structure** | `scripts/test-qemu.sh`, `scripts/test-qemu.bat`, `scripts/flash-usb.sh`, `INSTALL.md` present | **PASS** |
 | **Phase 5 QEMU Test Harness (Linux/macOS)** | `scripts/test-qemu.sh` KVM/HVF/TCG acceleration, OVMF UEFI auto-detection, VirtIO VGA, Intel HDA sound, sparse qcow2 disk creation | **PASS** |
@@ -707,7 +719,7 @@ cd briskos
 
 ---
 
-### Method B: Native Host Build (Debian 12 / Ubuntu 22.04+)
+### Method B: Native Host Build (Debian 12/13 or Ubuntu 22.04+)
 
 If building directly on a Debian/Ubuntu system:
 

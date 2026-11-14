@@ -7,6 +7,7 @@
 # ==============================================================================
 
 import os
+import re
 import sys
 import glob
 import json
@@ -14,6 +15,8 @@ import shutil
 import signal
 import subprocess
 import threading
+import datetime
+import xml.etree.ElementTree as ET
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -24,7 +27,7 @@ from gi.repository import Gtk, Gdk, GLib, Pango
 # ------------------------------------------------------------------------------
 # App Metadata
 # ------------------------------------------------------------------------------
-APP_ID = "brisk-control"
+APP_ID = "org.briskos.control"
 APP_NAME = "Brisk Control Center"
 APP_SUBTITLE = "Pusat Pengaturan Terpadu"
 APP_VERSION = "1.0.0"
@@ -174,7 +177,16 @@ switch {
     background-color: #1e293b;
     border-radius: 14px;
     border: 1px solid #334155;
-    outline: none;
+}
+
+button:focus,
+switch:focus,
+combobox button:focus,
+entry:focus,
+scale:focus,
+row:focus {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
 }
 
 switch:checked {
@@ -257,6 +269,26 @@ scale slider {
     font-size: 11px;
     font-weight: 600;
 }
+
+.badge-warn {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-error {
+    background-color: rgba(244, 63, 94, 0.15);
+    color: #fb7185;
+    border: 1px solid rgba(244, 63, 94, 0.35);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
 """
 
 class BriskControlCenter(Gtk.ApplicationWindow):
@@ -265,6 +297,20 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self.set_default_size(960, 640)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_icon_name("brisk-control")
+
+        self._loading_night = False
+        self._loading_audio = False
+        self._loading_input = False
+        self._loading_power = False
+        self._loading_appearance = False
+        self._loading_network = False
+        self._temp_debounce_id = None
+        self._input_debounce_id = None
+        self._vol_debounce_id = None
+        self.display_output = None
+        self._audio_sinks = []
+        self._active_wifi_con = None
+        self._active_wifi_dev = None
 
         # Load Custom Night Glass CSS
         css_provider = Gtk.CssProvider()
@@ -277,7 +323,66 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         self._build_headerbar()
         self._build_ui()
+        self._load_all_states()
         self.show_all()
+
+    # --------------------------------------------------------------------------
+    # Shared Async, Config, & Dialog Helpers
+    # --------------------------------------------------------------------------
+    def _ui(self, fn, *args):
+        def _cb():
+            fn(*args)
+            return False
+        GLib.idle_add(_cb)
+
+    def _run_bg(self, target):
+        threading.Thread(target=target, daemon=True).start()
+
+    def _run_cmd(self, cmd, timeout=10):
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return proc.returncode == 0, proc.stdout.strip(), proc.stderr.strip()
+        except FileNotFoundError:
+            return False, "", f"Perintah tidak ditemukan: {cmd[0]}"
+        except subprocess.TimeoutExpired:
+            return False, "", f"Timeout menjalankan {' '.join(cmd)}"
+        except Exception as exc:
+            return False, "", str(exc)
+
+    def _show_dialog(self, msg_type, title, body):
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=msg_type,
+            buttons=Gtk.ButtonsType.OK,
+            text=title
+        )
+        dialog.format_secondary_text(body)
+        dialog.run()
+        dialog.destroy()
+
+    def _seed_user_config(self, rel_path):
+        user_path = os.path.expanduser(f"~/.config/{rel_path}")
+        os.makedirs(os.path.dirname(user_path), exist_ok=True)
+        if not os.path.exists(user_path):
+            skel_path = f"/etc/skel/.config/{rel_path}"
+            if os.path.exists(skel_path):
+                shutil.copy2(skel_path, user_path)
+        return user_path
+
+    def _clear_box(self, box):
+        for child in box.get_children():
+            box.remove(child)
+
+    def _load_all_states(self):
+        self._load_display_state()
+        self._load_nightlight_state()
+        self._refresh_network(rescan=False)
+        self._load_audio_state()
+        self._load_input_state()
+        self._load_power_state()
+        self._load_appearance_state()
+        self._load_timetravel_state()
 
     def _build_headerbar(self):
         header = Gtk.HeaderBar()
@@ -392,14 +497,14 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         vbox1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_m = Gtk.Label(label="Layar Aktif", xalign=0)
         lbl_m.get_style_context().add_class("card-title")
-        lbl_md = Gtk.Label(label="Layar Laptop Utama (eDP-1) • Wayland DRM", xalign=0)
-        lbl_md.get_style_context().add_class("card-desc")
+        self.lbl_display_desc = Gtk.Label(label="Memeriksa output layar Wayland...", xalign=0)
+        self.lbl_display_desc.get_style_context().add_class("card-desc")
         vbox1.pack_start(lbl_m, False, False, 0)
-        vbox1.pack_start(lbl_md, False, False, 0)
-        badge_live = Gtk.Label(label="Aktif")
-        badge_live.get_style_context().add_class("badge-active")
+        vbox1.pack_start(self.lbl_display_desc, False, False, 0)
+        self.badge_display = Gtk.Label(label="Memuat")
+        self.badge_display.get_style_context().add_class("badge-info")
         row1.pack_start(vbox1, True, True, 0)
-        row1.pack_end(badge_live, False, False, 0)
+        row1.pack_end(self.badge_display, False, False, 0)
         card1.pack_start(row1, False, False, 0)
 
         sep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -416,7 +521,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         vbox_res.pack_start(lbl_resd, False, False, 0)
 
         self.combo_res = Gtk.ComboBoxText()
-        for r in ["1920 x 1080 (16:9 Full HD)", "1600 x 900 (16:9 HD+)", "1366 x 768 (16:9 Standar)", "1280 x 720 (16:9 HD)"]:
+        for r in ["1920x1080", "1600x900", "1366x768", "1280x720"]:
             self.combo_res.append_text(r)
         self.combo_res.set_active(0)
 
@@ -435,9 +540,9 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         vbox_hz.pack_start(lbl_hzd, False, False, 0)
 
         self.combo_hz = Gtk.ComboBoxText()
-        for hz in ["60 Hz (Hemat Baterai)", "120 Hz (Sangat Mulus)", "144 Hz (Performa Gaming)"]:
+        for hz in ["60 Hz", "120 Hz", "144 Hz"]:
             self.combo_hz.append_text(hz)
-        self.combo_hz.set_active(1)
+        self.combo_hz.set_active(0)
 
         row_hz.pack_start(vbox_hz, True, True, 0)
         row_hz.pack_end(self.combo_hz, False, False, 0)
@@ -468,10 +573,10 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card2.pack_start(scale_box, False, False, 0)
 
         # Apply Button
-        btn_apply = Gtk.Button(label="Terapkan Pengaturan Layar")
-        btn_apply.get_style_context().add_class("btn-primary")
-        btn_apply.connect("clicked", self._on_apply_display)
-        card2.pack_start(btn_apply, False, False, 6)
+        self.btn_apply_display = Gtk.Button(label="Terapkan Pengaturan Layar")
+        self.btn_apply_display.get_style_context().add_class("btn-primary")
+        self.btn_apply_display.connect("clicked", self._on_apply_display)
+        card2.pack_start(self.btn_apply_display, False, False, 6)
 
         box.pack_start(card2, False, False, 0)
         return box
@@ -527,9 +632,9 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         # Temperature Hints
         hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        lbl_warm = Gtk.Label(label="🟠 3500K (Sangat Hangat / Tidur)")
+        lbl_warm = Gtk.Label(label="3500K (Sangat Hangat / Tidur)")
         lbl_warm.get_style_context().add_class("card-desc")
-        lbl_cool = Gtk.Label(label="🔵 6500K (Standar Siang)")
+        lbl_cool = Gtk.Label(label="6500K (Standar Siang)")
         lbl_cool.get_style_context().add_class("card-desc")
         hints.pack_start(lbl_warm, False, False, 0)
         hints.pack_end(lbl_cool, False, False, 0)
@@ -541,24 +646,25 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         # Automatic Schedule
         row_sch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_sch = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        lbl_sch = Gtk.Label(label="Jadwal Otomatis (Matahari Terbenam ke Terbit)", xalign=0)
+        lbl_sch = Gtk.Label(label="Jadwal Otomatis (18:00 - 06:00)", xalign=0)
         lbl_sch.get_style_context().add_class("card-title")
-        lbl_schd = Gtk.Label(label="Otomatis menyala pada pukul 18:00 dan kembali normal pada 06:00", xalign=0)
+        lbl_schd = Gtk.Label(label="Aktifkan Night Light otomatis saat malam hari (pukul 18:00 hingga 06:00)", xalign=0)
         lbl_schd.get_style_context().add_class("card-desc")
         v_sch.pack_start(lbl_sch, False, False, 0)
         v_sch.pack_start(lbl_schd, False, False, 0)
 
-        sw_sch = Gtk.Switch()
-        sw_sch.set_active(True)
+        self.sw_sch = Gtk.Switch()
+        self.sw_sch.set_active(False)
+        self.sw_sch.connect("state-set", self._on_schedule_toggle)
         row_sch.pack_start(v_sch, True, True, 0)
-        row_sch.pack_end(sw_sch, False, False, 0)
+        row_sch.pack_end(self.sw_sch, False, False, 0)
         card.pack_start(row_sch, False, False, 0)
 
         box.pack_start(card, False, False, 0)
         return box
 
     # --------------------------------------------------------------------------
-    # Panel 3: Wi-Fi & Jaringan (Network)
+    # Panel 3: Wi-Fi & Jaringan (NetworkManager / nmcli)
     # --------------------------------------------------------------------------
     def _create_network_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -584,28 +690,31 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_wf.pack_start(lbl_wf, False, False, 0)
         v_wf.pack_start(lbl_wfd, False, False, 0)
 
-        sw_wifi = Gtk.Switch()
-        sw_wifi.set_active(True)
+        self.sw_wifi = Gtk.Switch()
+        self.sw_wifi.set_active(False)
+        self.sw_wifi.connect("state-set", self._on_wifi_switch)
         row_wf.pack_start(v_wf, True, True, 0)
-        row_wf.pack_end(sw_wifi, False, False, 0)
+        row_wf.pack_end(self.sw_wifi, False, False, 0)
         card1.pack_start(row_wf, False, False, 0)
 
         card1.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Current Connection Badge
+        # Current Connection Status
         row_cur = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_cur = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        lbl_cur = Gtk.Label(label="Jaringan Terhubung", xalign=0)
-        lbl_cur.get_style_context().add_class("card-title")
-        lbl_curd = Gtk.Label(label="Brisk-Secure-5G • Sinyal Sangat Kuat (92%) • IP: 192.168.1.108", xalign=0)
-        lbl_curd.get_style_context().add_class("card-desc")
-        v_cur.pack_start(lbl_cur, False, False, 0)
-        v_cur.pack_start(lbl_curd, False, False, 0)
+        self.lbl_cur_net = Gtk.Label(label="Memeriksa Jaringan...", xalign=0)
+        self.lbl_cur_net.get_style_context().add_class("card-title")
+        self.lbl_cur_net_desc = Gtk.Label(label="Membaca status NetworkManager...", xalign=0)
+        self.lbl_cur_net_desc.get_style_context().add_class("card-desc")
+        v_cur.pack_start(self.lbl_cur_net, False, False, 0)
+        v_cur.pack_start(self.lbl_cur_net_desc, False, False, 0)
 
-        btn_disc = Gtk.Button(label="Putuskan")
-        btn_disc.get_style_context().add_class("btn-secondary")
+        self.btn_disc = Gtk.Button(label="Putuskan")
+        self.btn_disc.get_style_context().add_class("btn-secondary")
+        self.btn_disc.set_sensitive(False)
+        self.btn_disc.connect("clicked", self._on_disconnect_wifi)
         row_cur.pack_start(v_cur, True, True, 0)
-        row_cur.pack_end(btn_disc, False, False, 0)
+        row_cur.pack_end(self.btn_disc, False, False, 0)
         card1.pack_start(row_cur, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
@@ -616,42 +725,24 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         row_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         lbl_av = Gtk.Label(label="Jaringan Wi-Fi Sekitar", xalign=0)
         lbl_av.get_style_context().add_class("card-title")
-        btn_scan = Gtk.Button(label="🔄 Pindai Ulang")
-        btn_scan.get_style_context().add_class("btn-secondary")
+        self.btn_scan = Gtk.Button(label="Pindai Ulang")
+        self.btn_scan.get_style_context().add_class("btn-secondary")
+        self.btn_scan.connect("clicked", self._on_scan_wifi)
         row_hdr.pack_start(lbl_av, True, True, 0)
-        row_hdr.pack_end(btn_scan, False, False, 0)
+        row_hdr.pack_end(self.btn_scan, False, False, 0)
         card2.pack_start(row_hdr, False, False, 0)
 
-        # Sample Available Networks
-        sample_nets = [
-            ("CoffeeShop_Free_WiFi", "Sinyal 84% • Terbuka", "Sambungkan"),
-            ("PCCW_Global_Guest", "Sinyal 72% • 🔒 WPA2 Enterprise", "Sambungkan"),
-            ("Home_Fiber_Speed", "Sinyal 65% • 🔒 WPA3 Personal", "Sambungkan"),
-        ]
-
-        for ssid, info, action in sample_nets:
-            item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-            v_i = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            s_name = Gtk.Label(label=f"📶  {ssid}", xalign=0)
-            s_name.get_style_context().add_class("card-title")
-            s_info = Gtk.Label(label=info, xalign=0)
-            s_info.get_style_context().add_class("card-desc")
-            v_i.pack_start(s_name, False, False, 0)
-            v_i.pack_start(s_info, False, False, 0)
-
-            btn_c = Gtk.Button(label=action)
-            btn_c.get_style_context().add_class("btn-secondary")
-            btn_c.connect("clicked", self._on_connect_wifi_dialog, ssid)
-
-            item.pack_start(v_i, True, True, 0)
-            item.pack_end(btn_c, False, False, 0)
-            card2.pack_start(item, False, False, 4)
+        self.wifi_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        lbl_loading_wf = Gtk.Label(label="Memuat daftar jaringan Wi-Fi...", xalign=0)
+        lbl_loading_wf.get_style_context().add_class("card-desc")
+        self.wifi_list_box.pack_start(lbl_loading_wf, False, False, 0)
+        card2.pack_start(self.wifi_list_box, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
         return box
 
     # --------------------------------------------------------------------------
-    # Panel 4: Suara & Audio (Sound)
+    # Panel 4: Suara & Audio (PipeWire / WirePlumber / PulseAudio)
     # --------------------------------------------------------------------------
     def _create_sound_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -696,14 +787,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_dev.pack_start(lbl_dev, False, False, 0)
         v_dev.pack_start(lbl_devd, False, False, 0)
 
-        combo_out = Gtk.ComboBoxText()
-        combo_out.append_text("Speaker Internal Laptop (Realtek ALC)")
-        combo_out.append_text("Jack Audio Headphone 3.5mm")
-        combo_out.append_text("HDMI / DisplayPort Digital Audio")
-        combo_out.set_active(0)
+        self.combo_out = Gtk.ComboBoxText()
+        self.combo_out.append_text("Memuat perangkat audio...")
+        self.combo_out.set_active(0)
+        self.combo_out.connect("changed", self._on_output_changed)
 
         row_dev.pack_start(v_dev, True, True, 0)
-        row_dev.pack_end(combo_out, False, False, 0)
+        row_dev.pack_end(self.combo_out, False, False, 0)
         card.pack_start(row_dev, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
@@ -718,7 +808,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_tst.pack_start(lbl_tst, False, False, 0)
         v_tst.pack_start(lbl_tstd, False, False, 0)
 
-        btn_snd_test = Gtk.Button(label="▶️  Tes Stereo")
+        btn_snd_test = Gtk.Button(label="Tes Stereo")
         btn_snd_test.get_style_context().add_class("btn-secondary")
         btn_snd_test.connect("clicked", self._on_test_stereo)
         row_tst.pack_start(v_tst, True, True, 0)
@@ -729,7 +819,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         return box
 
     # --------------------------------------------------------------------------
-    # Panel 5: Mouse & Touchpad (Input)
+    # Panel 5: Mouse & Touchpad (Input / Labwc libinput)
     # --------------------------------------------------------------------------
     def _create_input_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -751,9 +841,10 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_spd.get_style_context().add_class("card-title")
         v_spd.pack_start(lbl_spd, False, False, 0)
 
-        scale_spd = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 10, 1)
-        scale_spd.set_value(6)
-        v_spd.pack_start(scale_spd, False, False, 0)
+        self.scale_spd = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 10, 1)
+        self.scale_spd.set_value(6)
+        self.scale_spd.connect("value-changed", self._on_input_slider_changed)
+        v_spd.pack_start(self.scale_spd, False, False, 0)
         card.pack_start(v_spd, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
@@ -768,10 +859,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_nat.pack_start(lbl_nat, False, False, 0)
         v_nat.pack_start(lbl_natd, False, False, 0)
 
-        sw_nat = Gtk.Switch()
-        sw_nat.set_active(True)
+        self.sw_nat = Gtk.Switch()
+        self.sw_nat.set_active(True)
+        self.sw_nat.connect("state-set", self._on_input_switch_changed)
         row_nat.pack_start(v_nat, True, True, 0)
-        row_nat.pack_end(sw_nat, False, False, 0)
+        row_nat.pack_end(self.sw_nat, False, False, 0)
         card.pack_start(row_nat, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
@@ -786,17 +878,18 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_tap.pack_start(lbl_tap, False, False, 0)
         v_tap.pack_start(lbl_tapd, False, False, 0)
 
-        sw_tap = Gtk.Switch()
-        sw_tap.set_active(True)
+        self.sw_tap = Gtk.Switch()
+        self.sw_tap.set_active(True)
+        self.sw_tap.connect("state-set", self._on_input_switch_changed)
         row_tap.pack_start(v_tap, True, True, 0)
-        row_tap.pack_end(sw_tap, False, False, 0)
+        row_tap.pack_end(self.sw_tap, False, False, 0)
         card.pack_start(row_tap, False, False, 0)
 
         box.pack_start(card, False, False, 0)
         return box
 
     # --------------------------------------------------------------------------
-    # Panel 6: Daya & Baterai (Power & Glide)
+    # Panel 6: Daya & Baterai (Brisk Battery Sentinel & Glide)
     # --------------------------------------------------------------------------
     def _create_power_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -804,10 +897,10 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         h = Gtk.Label(label="Daya & Baterai (Brisk Glide Engine)", xalign=0)
         h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Manajemen daya cerdas TLP, auto-pilot Glide Mode, dan konservasi kesehatan baterai.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
+        self.lbl_power_hw = Gtk.Label(label="Membaca telemetri baterai dan profil daya...", xalign=0)
+        self.lbl_power_hw.get_style_context().add_class("section-subtitle")
         box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        box.pack_start(self.lbl_power_hw, False, False, 0)
 
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card1.get_style_context().add_class("setting-card")
@@ -818,10 +911,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card1.pack_start(lbl_prof, False, False, 0)
 
         prof_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        self.prof_eco = Gtk.RadioButton.new_with_label(None, "🍃 Hemat Daya (Eco)")
-        self.prof_bal = Gtk.RadioButton.new_with_label_from_widget(self.prof_eco, "⚖️ Seimbang (Balanced)")
-        self.prof_turb = Gtk.RadioButton.new_with_label_from_widget(self.prof_eco, "⚡ Performa Turbo")
+        self.prof_eco = Gtk.RadioButton.new_with_label(None, "Hemat Daya (Eco)")
+        self.prof_bal = Gtk.RadioButton.new_with_label_from_widget(self.prof_eco, "Seimbang (Balanced)")
+        self.prof_turb = Gtk.RadioButton.new_with_label_from_widget(self.prof_eco, "Performa Turbo")
         self.prof_bal.set_active(True)
+        self.prof_eco.connect("toggled", self._on_power_profile_toggled, "eco")
+        self.prof_bal.connect("toggled", self._on_power_profile_toggled, "balanced")
+        self.prof_turb.connect("toggled", self._on_power_profile_toggled, "turbo")
 
         prof_box.pack_start(self.prof_eco, False, False, 0)
         prof_box.pack_start(self.prof_bal, False, False, 0)
@@ -842,10 +938,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_gm.pack_start(lbl_gm, False, False, 0)
         v_gm.pack_start(lbl_gmd, False, False, 0)
 
-        sw_gm = Gtk.Switch()
-        sw_gm.set_active(True)
+        self.sw_gm = Gtk.Switch()
+        self.sw_gm.set_active(True)
+        self.sw_gm.connect("state-set", self._on_glide_toggle)
         row_gm.pack_start(v_gm, True, True, 0)
-        row_gm.pack_end(sw_gm, False, False, 0)
+        row_gm.pack_end(self.sw_gm, False, False, 0)
         card2.pack_start(row_gm, False, False, 0)
 
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
@@ -860,10 +957,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_dim.pack_start(lbl_dim, False, False, 0)
         v_dim.pack_start(lbl_dimd, False, False, 0)
 
-        sw_dim = Gtk.Switch()
-        sw_dim.set_active(True)
+        self.sw_dim = Gtk.Switch()
+        self.sw_dim.set_active(True)
+        self.sw_dim.connect("state-set", self._on_glide_dim_toggle)
         row_dim.pack_start(v_dim, True, True, 0)
-        row_dim.pack_end(sw_dim, False, False, 0)
+        row_dim.pack_end(self.sw_dim, False, False, 0)
         card2.pack_start(row_dim, False, False, 0)
 
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
@@ -878,17 +976,18 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_80.pack_start(lbl_80, False, False, 0)
         v_80.pack_start(lbl_80d, False, False, 0)
 
-        sw_80 = Gtk.Switch()
-        sw_80.set_active(True)
+        self.sw_80 = Gtk.Switch()
+        self.sw_80.set_active(True)
+        self.sw_80.connect("state-set", self._on_battery_ceiling_toggle)
         row_80.pack_start(v_80, True, True, 0)
-        row_80.pack_end(sw_80, False, False, 0)
+        row_80.pack_end(self.sw_80, False, False, 0)
         card2.pack_start(row_80, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
         return box
 
     # --------------------------------------------------------------------------
-    # Panel 7: Personalisasi (Appearance)
+    # Panel 7: Personalisasi (Appearance / swaybg & Waybar)
     # --------------------------------------------------------------------------
     def _create_appearance_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -896,7 +995,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         h = Gtk.Label(label="Personalisasi & Tema", xalign=0)
         h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Pilih wallpaper desktop, aksen warna Supersonic Frost, dan gaya panel taskbar.", xalign=0)
+        sub = Gtk.Label(label="Pilih latar desktop, mode warna solid, dan gaya panel taskbar Waybar.", xalign=0)
         sub.get_style_context().add_class("section-subtitle")
         box.pack_start(h, False, False, 0)
         box.pack_start(sub, False, False, 0)
@@ -910,10 +1009,15 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card.pack_start(lbl_w, False, False, 0)
 
         wp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        for wp_name, wp_desc in [("Night Glass Default", "Latar Gelap Elegan"), ("Supersonic Cyan", "Aksen Frost Terang")]:
+        wp_presets = [
+            ("default", "Night Glass Default", "Wallpaper SVG Bawaan"),
+            ("midnight", "Midnight Slate Matte", "Warna Solid Hemat GPU (#0f172a)"),
+        ]
+        self.wp_buttons = {}
+        for wp_key, wp_name, wp_desc in wp_presets:
             b = Gtk.Button()
             v_b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            l_t = Gtk.Label(label=f"🖼️  {wp_name}")
+            l_t = Gtk.Label(label=wp_name)
             l_t.get_style_context().add_class("card-title")
             l_d = Gtk.Label(label=wp_desc)
             l_d.get_style_context().add_class("card-desc")
@@ -921,6 +1025,8 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             v_b.pack_start(l_d, False, False, 0)
             b.add(v_b)
             b.get_style_context().add_class("btn-secondary")
+            b.connect("clicked", self._on_select_wallpaper, wp_key)
+            self.wp_buttons[wp_key] = b
             wp_box.pack_start(b, False, False, 0)
         card.pack_start(wp_box, False, False, 0)
 
@@ -936,13 +1042,14 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_tb.pack_start(lbl_tb, False, False, 0)
         v_tb.pack_start(lbl_tbd, False, False, 0)
 
-        combo_tb = Gtk.ComboBoxText()
-        combo_tb.append_text("Pulau Mengambang (Floating Islands - Bawaan)")
-        combo_tb.append_text("Gaya Dermaga Penuh (Full Edge Dock)")
-        combo_tb.set_active(0)
+        self.combo_tb = Gtk.ComboBoxText()
+        self.combo_tb.append_text("Pulau Mengambang (Floating Islands - Bawaan)")
+        self.combo_tb.append_text("Gaya Dermaga Penuh (Full Edge Dock)")
+        self.combo_tb.set_active(0)
+        self.combo_tb.connect("changed", self._on_taskbar_style_changed)
 
         row_tb.pack_start(v_tb, True, True, 0)
-        row_tb.pack_end(combo_tb, False, False, 0)
+        row_tb.pack_end(self.combo_tb, False, False, 0)
         card.pack_start(row_tb, False, False, 0)
 
         box.pack_start(card, False, False, 0)
@@ -957,7 +1064,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         h = Gtk.Label(label="Cadangan & Pemulihan (Brisk Time-Travel)", xalign=0)
         h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Titik pemulihan instan (<1 detik). Putar balik sistem ke kondisi sehat jika terjadi kendala.", xalign=0)
+        sub = Gtk.Label(label="Titik pemulihan sistem instan. Putar balik sistem ke kondisi sehat jika terjadi kendala.", xalign=0)
         sub.get_style_context().add_class("section-subtitle")
         box.pack_start(h, False, False, 0)
         box.pack_start(sub, False, False, 0)
@@ -970,26 +1077,26 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_st = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_st = Gtk.Label(label="Status Perlindungan Sistem", xalign=0)
         lbl_st.get_style_context().add_class("card-title")
-        lbl_std = Gtk.Label(label="Auto-Checkpoint aktif • Terakhir dibuat sebelum instalasi paket terbaru", xalign=0)
-        lbl_std.get_style_context().add_class("card-desc")
+        self.lbl_tt_desc = Gtk.Label(label="Memeriksa daftar titik pemulihan sistem...", xalign=0)
+        self.lbl_tt_desc.get_style_context().add_class("card-desc")
         v_st.pack_start(lbl_st, False, False, 0)
-        v_st.pack_start(lbl_std, False, False, 0)
+        v_st.pack_start(self.lbl_tt_desc, False, False, 0)
 
-        badge_tt = Gtk.Label(label="Terlindungi")
-        badge_tt.get_style_context().add_class("badge-active")
+        self.badge_tt = Gtk.Label(label="Memeriksa")
+        self.badge_tt.get_style_context().add_class("badge-info")
         row_st.pack_start(v_st, True, True, 0)
-        row_st.pack_end(badge_tt, False, False, 0)
+        row_st.pack_end(self.badge_tt, False, False, 0)
         card.pack_start(row_st, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
         # Snapshot Action Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        btn_create = Gtk.Button(label="➕  Buat Snapshot Baru Sekarang")
+        btn_create = Gtk.Button(label="Buat Snapshot Baru Sekarang")
         btn_create.get_style_context().add_class("btn-primary")
         btn_create.connect("clicked", self._on_quick_snapshot)
 
-        btn_gui = Gtk.Button(label="🕒  Buka Wizard Pemulihan Time-Travel")
+        btn_gui = Gtk.Button(label="Buka Wizard Pemulihan Time-Travel")
         btn_gui.get_style_context().add_class("btn-secondary")
         btn_gui.connect("clicked", self._on_open_timetravel_gui)
 
@@ -1014,18 +1121,17 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box.pack_start(h, False, False, 0)
         box.pack_start(sub, False, False, 0)
 
-        # Card 1: OS Branding & Badge
+        # Card 1: OS Branding & Specs
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card1.get_style_context().add_class("setting-card")
 
         row_b = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        lbl_logo = Gtk.Label(label="🪽")
-        lbl_logo.override_font(Pango.FontDescription("32"))
-        
+        lbl_logo = Gtk.Image.new_from_icon_name("brisk-logo", Gtk.IconSize.DIALOG)
+
         v_b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_os = Gtk.Label(label="BriskOS 1.0 LTS (Feather)", xalign=0)
         lbl_os.get_style_context().add_class("section-header")
-        lbl_osd = Gtk.Label(label="Sistem Operasi Desktop Ringan Modern • Berbasis Debian 12 (Bookworm) amd64", xalign=0)
+        lbl_osd = Gtk.Label(label=self._get_os_info(), xalign=0)
         lbl_osd.get_style_context().add_class("card-desc")
         v_b.pack_start(lbl_os, False, False, 0)
         v_b.pack_start(lbl_osd, False, False, 0)
@@ -1036,13 +1142,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card1.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Specs Grid
+        # Real Hardware Telemetry Grid
         specs = [
             ("Prosesor (CPU)", self._get_cpu_info()),
             ("Memori (RAM)", self._get_ram_info()),
-            ("Grafis (GPU)", "Intel / AMD Wayland Hardware Accelerated Driver"),
+            ("Grafis (GPU)", self._get_gpu_info()),
             ("Versi Kernel", self._get_kernel_info()),
-            ("Penyimpanan", "SSD Btrfs Instant CoW Subvolumes"),
+            ("Penyimpanan", self._get_storage_info()),
         ]
 
         grid = Gtk.Grid()
@@ -1060,21 +1166,27 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card1.pack_start(grid, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
-        # Card 2: Update Stream & Verification (Strictly Stable on GUI)
+        # Card 2: Update Stream & Check
         card2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card2.get_style_context().add_class("setting-card")
 
+        active_ch = self._get_channel_info()
         row_up = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_up = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_up = Gtk.Label(label="Saluran Pembaruan Sistem", xalign=0)
         lbl_up.get_style_context().add_class("card-title")
-        lbl_upd = Gtk.Label(label="Saluran Resmi & Stabil (LTS) • Bebas risiko crash dan dilindungi Auto-Checkpoint", xalign=0)
+        lbl_upd = Gtk.Label(
+            label="Saluran Resmi Stabil (LTS) • Dilindungi Auto-Checkpoint"
+            if active_ch == "stable"
+            else "Saluran Preview (Beta) • Rilis fitur terbaru untuk pengujian",
+            xalign=0,
+        )
         lbl_upd.get_style_context().add_class("card-desc")
         v_up.pack_start(lbl_up, False, False, 0)
         v_up.pack_start(lbl_upd, False, False, 0)
 
-        badge_ch = Gtk.Label(label="Saluran Resmi")
-        badge_ch.get_style_context().add_class("badge-active")
+        badge_ch = Gtk.Label(label=active_ch.upper())
+        badge_ch.get_style_context().add_class("badge-active" if active_ch == "stable" else "badge-warn")
         row_up.pack_start(v_up, True, True, 0)
         row_up.pack_end(badge_ch, False, False, 0)
         card2.pack_start(row_up, False, False, 0)
@@ -1082,15 +1194,20 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
         row_btn = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        btn_chk = Gtk.Button(label="🔄  Periksa Pembaruan Sistem")
-        btn_chk.get_style_context().add_class("btn-primary")
-        btn_chk.connect("clicked", self._on_check_updates)
+        self.btn_chk_updates = Gtk.Button(label="Periksa Pembaruan Sistem")
+        self.btn_chk_updates.get_style_context().add_class("btn-primary")
+        self.btn_chk_updates.connect("clicked", self._on_check_updates)
 
-        self.lbl_up_status = Gtk.Label(label="Sistem Anda sudah menggunakan versi resmi terbaru.")
+        self.btn_open_updater = Gtk.Button(label="Buka Software Updater")
+        self.btn_open_updater.get_style_context().add_class("btn-secondary")
+        self.btn_open_updater.connect("clicked", self._on_open_updater_gui)
+
+        self.lbl_up_status = Gtk.Label(label="Klik periksa untuk mengecek rilis terbaru.", xalign=0)
         self.lbl_up_status.get_style_context().add_class("card-desc")
 
-        row_btn.pack_start(btn_chk, False, False, 0)
-        row_btn.pack_start(self.lbl_up_status, False, False, 12)
+        row_btn.pack_start(self.btn_chk_updates, False, False, 0)
+        row_btn.pack_start(self.btn_open_updater, False, False, 0)
+        row_btn.pack_start(self.lbl_up_status, True, True, 8)
         card2.pack_start(row_btn, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
@@ -1099,6 +1216,23 @@ class BriskControlCenter(Gtk.ApplicationWindow):
     # --------------------------------------------------------------------------
     # Hardware Telemetry Helpers
     # --------------------------------------------------------------------------
+    def _get_os_info(self):
+        pretty = "BriskOS 1.0 LTS (Feather)"
+        try:
+            with open("/etc/os-release", "r") as f:
+                data = {}
+                for line in f:
+                    if "=" in line:
+                        k, v = line.strip().split("=", 1)
+                        data[k] = v.strip('"\'')
+                if data.get("PRETTY_NAME"):
+                    pretty = data["PRETTY_NAME"]
+                codename = data.get("VERSION_CODENAME", "trixie")
+                return f"{pretty} • Base Debian ({codename}) amd64"
+        except Exception:
+            pass
+        return "Sistem Operasi Desktop Ringan • Berbasis Debian 13 (Trixie) amd64"
+
     def _get_cpu_info(self):
         try:
             with open("/proc/cpuinfo", "r") as f:
@@ -1107,7 +1241,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                         return line.split(":", 1)[1].strip()
         except Exception:
             pass
-        return "Prosesor Laptop x86_64 Modern"
+        return "Prosesor x86_64"
 
     def _get_ram_info(self):
         try:
@@ -1116,17 +1250,583 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                     if "MemTotal" in line:
                         kb = int(line.split()[1])
                         gb = round(kb / (1024 * 1024), 1)
-                        return f"{gb} GB RAM (Penggunaan Idle: <200 MB)"
+                        return f"{gb} GB RAM"
         except Exception:
             pass
-        return "16.0 GB RAM (Penggunaan Idle: <200 MB)"
+        return "Tidak terdeteksi"
+
+    def _get_gpu_info(self):
+        ok, out, _ = self._run_cmd(["lspci"], timeout=3)
+        if ok and out:
+            for line in out.splitlines():
+                if any(tag in line for tag in ("VGA compatible controller:", "3D controller:", "Display controller:")):
+                    desc = line.split(":", 2)[-1].strip()
+                    return desc
+        return "Wayland DRM Graphics"
+
+    def _get_storage_info(self):
+        ok, out, _ = self._run_cmd(["findmnt", "-n", "-o", "FSTYPE,SOURCE", "/"], timeout=3)
+        if ok and out:
+            parts = out.split(None, 1)
+            if len(parts) == 2:
+                fstype, src = parts
+                note = " (Instant CoW)" if fstype == "btrfs" else ""
+                return f"{fstype}{note} • {src}"
+            return out
+        return "Root Filesystem"
 
     def _get_kernel_info(self):
+        ok, out, _ = self._run_cmd(["uname", "-r"], timeout=3)
+        if ok and out:
+            return f"Linux {out}"
+        return "Linux Kernel"
+
+    def _get_channel_info(self):
+        ok, out, _ = self._run_cmd(["/usr/local/bin/brisk-channel", "get", "--raw"], timeout=3)
+        if ok and out in ("stable", "beta"):
+            return out
+        return "stable"
+
+    # --------------------------------------------------------------------------
+    # Live System State Loaders
+    # --------------------------------------------------------------------------
+    def _parse_wlr_randr(self):
+        ok, out, err = self._run_cmd(["wlr-randr", "--json"], timeout=4)
+        if ok and out:
+            try:
+                outputs = json.loads(out)
+                chosen = next((o for o in outputs if o.get("enabled")), outputs[0] if outputs else None)
+                if chosen:
+                    modes = []
+                    for m in chosen.get("modes", []):
+                        modes.append({
+                            "w": int(m.get("width", 1920)),
+                            "h": int(m.get("height", 1080)),
+                            "hz": int(round(float(m.get("refresh", 60.0)))),
+                            "current": bool(m.get("current", False)),
+                        })
+                    return {
+                        "name": chosen.get("name", "eDP-1"),
+                        "desc": chosen.get("description") or chosen.get("model") or chosen.get("name", "Wayland Output"),
+                        "scale": float(chosen.get("scale", 1.0) or 1.0),
+                        "modes": modes,
+                    }
+            except Exception:
+                pass
+
+        # Plain-text wlr-randr fallback
+        ok, out, _ = self._run_cmd(["wlr-randr"], timeout=4)
+        if not ok or not out:
+            return None
+        name = None
+        desc = "Wayland Output"
+        scale = 1.0
+        modes = []
+        for line in out.splitlines():
+            if line and not line[0].isspace():
+                if name is not None:
+                    break
+                m_hdr = re.match(r'^(\S+)\s*(?:"([^"]*)")?', line)
+                if m_hdr:
+                    name = m_hdr.group(1)
+                    desc = m_hdr.group(2) or name
+            elif name is not None:
+                m_mode = re.search(r'(\d+)x(\d+)\s+px,\s+([\d.]+)\s+Hz', line)
+                if m_mode:
+                    modes.append({
+                        "w": int(m_mode.group(1)),
+                        "h": int(m_mode.group(2)),
+                        "hz": int(round(float(m_mode.group(3)))),
+                        "current": bool(re.search(r'\([^)]*\bcurrent\b[^)]*\)', line)),
+                    })
+                m_scale = re.search(r'Scale:\s+([\d.]+)', line)
+                if m_scale:
+                    scale = float(m_scale.group(1))
+        if not name:
+            return None
+        return {"name": name, "desc": desc, "scale": scale, "modes": modes}
+
+    def _load_display_state(self):
+        def worker():
+            info = self._parse_wlr_randr()
+            def apply_ui():
+                if not info:
+                    self.display_output = None
+                    self.lbl_display_desc.set_text("Output Wayland belum aktif atau dijalankan di luar sesi compositor")
+                    self.badge_display.set_text("Offline")
+                    ctx = self.badge_display.get_style_context()
+                    ctx.remove_class("badge-info")
+                    ctx.remove_class("badge-active")
+                    ctx.add_class("badge-warn")
+                    self.btn_apply_display.set_sensitive(False)
+                    return
+
+                self.display_output = info["name"]
+                self.lbl_display_desc.set_text(f"{info['desc']} ({info['name']}) • Wayland DRM")
+                self.badge_display.set_text("Aktif")
+                ctx = self.badge_display.get_style_context()
+                ctx.remove_class("badge-info")
+                ctx.remove_class("badge-warn")
+                ctx.add_class("badge-active")
+                self.btn_apply_display.set_sensitive(True)
+
+                res_list = []
+                hz_list = []
+                cur_res = None
+                cur_hz = None
+                for m in sorted(info["modes"], key=lambda x: (x["w"] * x["h"], x["hz"]), reverse=True):
+                    r_str = f"{m['w']}x{m['h']}"
+                    if r_str not in res_list:
+                        res_list.append(r_str)
+                    h_str = f"{m['hz']} Hz"
+                    if h_str not in hz_list:
+                        hz_list.append(h_str)
+                    if m["current"]:
+                        cur_res = r_str
+                        cur_hz = h_str
+
+                if res_list:
+                    self.combo_res.remove_all()
+                    for idx, r_str in enumerate(res_list):
+                        self.combo_res.append_text(r_str)
+                        if r_str == cur_res:
+                            self.combo_res.set_active(idx)
+                    if self.combo_res.get_active() < 0:
+                        self.combo_res.set_active(0)
+
+                if hz_list:
+                    hz_sorted = sorted(hz_list, key=lambda s: int(s.split()[0]))
+                    self.combo_hz.remove_all()
+                    for idx, h_str in enumerate(hz_sorted):
+                        self.combo_hz.append_text(h_str)
+                        if h_str == cur_hz:
+                            self.combo_hz.set_active(idx)
+                    if self.combo_hz.get_active() < 0:
+                        self.combo_hz.set_active(0)
+
+                sc = round(info["scale"], 2)
+                if abs(sc - 1.25) < 0.1:
+                    self.scale_125.set_active(True)
+                elif sc >= 1.4:
+                    self.scale_150.set_active(True)
+                else:
+                    self.scale_100.set_active(True)
+
+            self._ui(apply_ui)
+        self._run_bg(worker)
+
+    def _load_nightlight_state(self):
+        cfg_path = os.path.expanduser("~/.config/brisk/nightlight.conf")
+        cfg = {"enabled": False, "temp": 4500, "schedule": False}
         try:
-            res = subprocess.check_output(["uname", "-r"], text=True).strip()
-            return f"Linux {res} (LTS Bookworm)"
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r") as f:
+                    cfg.update(json.load(f))
         except Exception:
-            return "Linux 6.1.0-28-amd64 (LTS Bookworm)"
+            pass
+
+        running, _, _ = self._run_cmd(["pgrep", "-x", "gammastep"], timeout=2)
+        hour = datetime.datetime.now().hour
+        sched_due = bool(cfg.get("schedule")) and (hour >= 18 or hour < 6)
+        active = running or bool(cfg.get("enabled")) or sched_due
+
+        self._loading_night = True
+        self.scale_temp.set_value(max(3500, min(6500, int(cfg.get("temp", 4500)))))
+        self.sw_sch.set_active(bool(cfg.get("schedule", False)))
+        self.sw_night.set_active(active)
+        self._loading_night = False
+
+        if sched_due and not running:
+            self._apply_gammastep(True, int(self.scale_temp.get_value()), save=False)
+
+    def _save_nightlight_cfg(self, enabled, temp, schedule):
+        cfg_path = os.path.expanduser("~/.config/brisk/nightlight.conf")
+        os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+        try:
+            with open(cfg_path, "w") as f:
+                json.dump({"enabled": bool(enabled), "temp": int(temp), "schedule": bool(schedule)}, f, indent=2)
+        except Exception:
+            pass
+
+    def _apply_gammastep(self, enabled, temp, save=True):
+        if save:
+            self._save_nightlight_cfg(enabled, temp, self.sw_sch.get_active())
+
+        def worker():
+            self._run_cmd(["pkill", "-x", "gammastep"], timeout=2)
+            if enabled:
+                try:
+                    subprocess.Popen(
+                        ["gammastep", "-O", str(int(temp))],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                except FileNotFoundError:
+                    def reset_ui():
+                        self._loading_night = True
+                        self.sw_night.set_active(False)
+                        self._loading_night = False
+                        self._show_dialog(Gtk.MessageType.WARNING, "Gammastep Tidak Tersedia", "Paket 'gammastep' tidak ditemukan untuk mengatur Night Light Wayland.")
+                    self._ui(reset_ui)
+                except Exception as exc:
+                    self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Menjalankan Night Light", str(exc))
+        self._run_bg(worker)
+
+    def _split_nmcli_row(self, line):
+        return [p.replace("\\:", ":") for p in re.split(r"(?<!\\):", line)]
+
+    def _refresh_network(self, rescan=False):
+        if rescan:
+            self.btn_scan.set_sensitive(False)
+            self._clear_box(self.wifi_list_box)
+            lbl_s = Gtk.Label(label="Memindai jaringan Wi-Fi sekitar...", xalign=0)
+            lbl_s.get_style_context().add_class("card-desc")
+            self.wifi_list_box.pack_start(lbl_s, False, False, 0)
+            self.wifi_list_box.show_all()
+
+        def worker():
+            ok_radio, radio_out, err_radio = self._run_cmd(["nmcli", "radio", "wifi"], timeout=4)
+            ok_dev, dev_out, _ = self._run_cmd(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"], timeout=4)
+            ok_act, act_out, _ = self._run_cmd(["nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], timeout=4)
+
+            has_nm = ok_radio or ok_dev
+            wifi_on = radio_out.strip().lower() == "enabled"
+            has_wifi_hw = False
+            if ok_dev:
+                for line in dev_out.splitlines():
+                    parts = self._split_nmcli_row(line)
+                    if len(parts) >= 2 and parts[1] == "wifi":
+                        has_wifi_hw = True
+                        break
+
+            active_name = None
+            active_dev = None
+            active_type = None
+            if ok_act and act_out:
+                for line in act_out.splitlines():
+                    parts = self._split_nmcli_row(line)
+                    if len(parts) >= 3 and parts[1] in ("802-11-wireless", "802-3-ethernet"):
+                        active_name, active_type, active_dev = parts[0], parts[1], parts[2]
+                        if active_type == "802-11-wireless":
+                            break
+
+            ip_addr = ""
+            if active_dev:
+                ok_ip, ip_out, _ = self._run_cmd(["nmcli", "-g", "IP4.ADDRESS", "device", "show", active_dev], timeout=3)
+                if ok_ip and ip_out:
+                    ip_addr = ip_out.splitlines()[0].split("/")[0].strip()
+
+            nets = []
+            scan_err = ""
+            if has_wifi_hw and wifi_on:
+                cmd = ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"]
+                if rescan:
+                    cmd.extend(["--rescan", "yes"])
+                ok_list, list_out, err_list = self._run_cmd(cmd, timeout=15 if rescan else 5)
+                if not ok_list and err_list:
+                    scan_err = err_list
+                seen = {}
+                for line in list_out.splitlines():
+                    parts = self._split_nmcli_row(line)
+                    if len(parts) < 4:
+                        continue
+                    in_use = parts[0].strip() == "*"
+                    ssid = parts[1].strip()
+                    if not ssid:
+                        continue
+                    try:
+                        sig = int(parts[2].strip() or "0")
+                    except ValueError:
+                        sig = 0
+                    sec = parts[3].strip() or "Terbuka"
+                    prev = seen.get(ssid)
+                    if not prev or in_use or sig > prev["signal"]:
+                        seen[ssid] = {"ssid": ssid, "signal": sig, "security": sec, "in_use": in_use}
+                nets = sorted(seen.values(), key=lambda x: (not x["in_use"], -x["signal"], x["ssid"].lower()))
+
+            def apply_ui():
+                self.btn_scan.set_sensitive(has_nm and has_wifi_hw and wifi_on)
+                self._loading_network = True
+                self.sw_wifi.set_sensitive(has_nm and has_wifi_hw)
+                self.sw_wifi.set_active(wifi_on and has_wifi_hw)
+                self._loading_network = False
+
+                self._active_wifi_con = active_name
+                self._active_wifi_dev = active_dev
+
+                if not has_nm:
+                    self.lbl_cur_net.set_text("NetworkManager Tidak Aktif")
+                    self.lbl_cur_net_desc.set_text(err_radio or "Layanan nmcli tidak tersedia di lingkungan ini.")
+                    self.btn_disc.set_sensitive(False)
+                elif active_name:
+                    kind = "Wi-Fi" if active_type == "802-11-wireless" else "Kabel Ethernet"
+                    ip_part = f" • IP: {ip_addr}" if ip_addr else ""
+                    self.lbl_cur_net.set_text(f"Terhubung: {active_name}")
+                    self.lbl_cur_net_desc.set_text(f"{kind} ({active_dev}){ip_part}")
+                    self.btn_disc.set_sensitive(True)
+                else:
+                    self.lbl_cur_net.set_text("Tidak Terhubung (Offline)")
+                    self.lbl_cur_net_desc.set_text("Pilih jaringan Wi-Fi di bawah atau sambungkan kabel Ethernet.")
+                    self.btn_disc.set_sensitive(False)
+
+                self._clear_box(self.wifi_list_box)
+                if not has_nm:
+                    lbl = Gtk.Label(label="Layanan jaringan NetworkManager tidak berjalan.", xalign=0)
+                    lbl.get_style_context().add_class("card-desc")
+                    self.wifi_list_box.pack_start(lbl, False, False, 0)
+                elif not has_wifi_hw:
+                    lbl = Gtk.Label(label="Tidak ada adaptor Wi-Fi terdeteksi pada perangkat ini.", xalign=0)
+                    lbl.get_style_context().add_class("card-desc")
+                    self.wifi_list_box.pack_start(lbl, False, False, 0)
+                elif not wifi_on:
+                    lbl = Gtk.Label(label="Adaptor Wi-Fi dimatikan. Aktifkan sakelar di atas untuk memindai.", xalign=0)
+                    lbl.get_style_context().add_class("card-desc")
+                    self.wifi_list_box.pack_start(lbl, False, False, 0)
+                elif scan_err and not nets:
+                    lbl = Gtk.Label(label=f"Gagal memindai Wi-Fi: {scan_err}", xalign=0)
+                    lbl.get_style_context().add_class("card-desc")
+                    self.wifi_list_box.pack_start(lbl, False, False, 0)
+                elif not nets:
+                    lbl = Gtk.Label(label="Belum ada jaringan Wi-Fi ditemukan di sekitar. Klik Pindai Ulang.", xalign=0)
+                    lbl.get_style_context().add_class("card-desc")
+                    self.wifi_list_box.pack_start(lbl, False, False, 0)
+                else:
+                    for net in nets:
+                        item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                        v_i = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                        status_tag = " (Aktif)" if net["in_use"] else ""
+                        s_name = Gtk.Label(label=f"{net['ssid']}{status_tag}", xalign=0)
+                        s_name.get_style_context().add_class("card-title")
+                        sec_txt = "Terbuka" if net["security"] in ("", "--", "Terbuka") else net["security"]
+                        s_info = Gtk.Label(label=f"Sinyal {net['signal']}% • {sec_txt}", xalign=0)
+                        s_info.get_style_context().add_class("card-desc")
+                        v_i.pack_start(s_name, False, False, 0)
+                        v_i.pack_start(s_info, False, False, 0)
+
+                        if net["in_use"]:
+                            badge = Gtk.Label(label="Terhubung")
+                            badge.get_style_context().add_class("badge-active")
+                            item.pack_start(v_i, True, True, 0)
+                            item.pack_end(badge, False, False, 0)
+                        else:
+                            btn_c = Gtk.Button(label="Sambungkan")
+                            btn_c.get_style_context().add_class("btn-secondary")
+                            btn_c.connect("clicked", self._on_connect_wifi_dialog, net["ssid"], net["security"])
+                            item.pack_start(v_i, True, True, 0)
+                            item.pack_end(btn_c, False, False, 0)
+                        self.wifi_list_box.pack_start(item, False, False, 4)
+
+                self.wifi_list_box.show_all()
+
+            self._ui(apply_ui)
+        self._run_bg(worker)
+
+    def _load_audio_state(self):
+        def worker():
+            vol_pct = 65
+            ok_w, out_w, _ = self._run_cmd(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], timeout=3)
+            if ok_w and out_w:
+                m = re.search(r'([\d.]+)', out_w)
+                if m:
+                    vol_pct = max(0, min(100, int(round(float(m.group(1)) * 100))))
+            else:
+                ok_p, out_p, _ = self._run_cmd(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], timeout=3)
+                if ok_p and out_p:
+                    m = re.search(r'(\d+)%', out_p)
+                    if m:
+                        vol_pct = max(0, min(100, int(m.group(1))))
+
+            ok_def, def_sink, _ = self._run_cmd(["pactl", "get-default-sink"], timeout=3)
+            def_sink = def_sink.strip() if ok_def else ""
+
+            sinks = []
+            ok_sinks, sinks_out, _ = self._run_cmd(["pactl", "list", "sinks"], timeout=4)
+            if ok_sinks and sinks_out:
+                cur_name = None
+                cur_desc = None
+                for line in sinks_out.splitlines():
+                    s_line = line.strip()
+                    if s_line.startswith("Name:"):
+                        if cur_name:
+                            sinks.append((cur_name, cur_desc or cur_name))
+                        cur_name = s_line.split(":", 1)[1].strip()
+                        cur_desc = None
+                    elif s_line.startswith("Description:") and cur_name:
+                        cur_desc = s_line.split(":", 1)[1].strip()
+                if cur_name:
+                    sinks.append((cur_name, cur_desc or cur_name))
+
+            def apply_ui():
+                self._loading_audio = True
+                self.scale_vol.set_value(vol_pct)
+                self.lbl_vval.set_text(f"{vol_pct}%")
+                self.combo_out.remove_all()
+                self._audio_sinks = sinks
+                if not sinks:
+                    self.combo_out.append_text("Tidak ada perangkat output terdeteksi")
+                    self.combo_out.set_active(0)
+                    self.combo_out.set_sensitive(False)
+                else:
+                    self.combo_out.set_sensitive(True)
+                    active_idx = 0
+                    for idx, (sname, sdesc) in enumerate(sinks):
+                        self.combo_out.append_text(sdesc)
+                        if sname == def_sink:
+                            active_idx = idx
+                    self.combo_out.set_active(active_idx)
+                self._loading_audio = False
+
+            self._ui(apply_ui)
+        self._run_bg(worker)
+
+    def _get_labwc_rc_path(self, writable=False):
+        user_rc = os.path.expanduser("~/.config/labwc/rc.xml")
+        if writable:
+            return self._seed_user_config("labwc/rc.xml")
+        if os.path.exists(user_rc):
+            return user_rc
+        skel_rc = "/etc/skel/.config/labwc/rc.xml"
+        return skel_rc if os.path.exists(skel_rc) else user_rc
+
+    def _load_input_state(self):
+        rc_path = self._get_labwc_rc_path(writable=False)
+        spd_val = 6
+        nat_scroll = True
+        tap_click = True
+        try:
+            if os.path.exists(rc_path):
+                root = ET.parse(rc_path).getroot()
+                dev = root.find("./libinput/device[@category='default']")
+                if dev is None:
+                    dev = root.find("./libinput/device")
+                if dev is not None:
+                    ps = dev.findtext("pointerSpeed")
+                    if ps is not None:
+                        spd_float = max(-0.8, min(0.8, float(ps.strip())))
+                        spd_val = max(1, min(10, int(round((spd_float + 0.8) / 1.6 * 9 + 1))))
+                    ns = dev.findtext("naturalScroll")
+                    if ns is not None:
+                        nat_scroll = ns.strip().lower() in ("yes", "true", "on", "1")
+                    tp = dev.findtext("tap")
+                    if tp is not None:
+                        tap_click = tp.strip().lower() in ("yes", "true", "on", "1")
+        except Exception:
+            pass
+
+        self._loading_input = True
+        self.scale_spd.set_value(spd_val)
+        self.sw_nat.set_active(nat_scroll)
+        self.sw_tap.set_active(tap_click)
+        self._loading_input = False
+
+    def _load_power_state(self):
+        def worker():
+            ok_s, raw_s, _ = self._run_cmd(["/usr/local/bin/brisk-sentinel", "status", "--raw"], timeout=4)
+            ok_g, raw_g, _ = self._run_cmd(["/usr/local/bin/brisk-sentinel", "glide", "status", "--raw"], timeout=4)
+            kv = {}
+            for block in (raw_s if ok_s else "", raw_g if ok_g else ""):
+                for line in block.splitlines():
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        kv[k.strip()] = v.strip().strip('"\'')
+
+            def apply_ui():
+                self._loading_power = True
+                prof = kv.get("PROFILE", "balanced").lower()
+                if prof == "eco":
+                    self.prof_eco.set_active(True)
+                elif prof == "turbo":
+                    self.prof_turb.set_active(True)
+                else:
+                    self.prof_bal.set_active(True)
+
+                self.sw_gm.set_active(kv.get("GLIDE_AUTO_ENABLED", "true").lower() == "true")
+                self.sw_dim.set_active(kv.get("GLIDE_AUTO_DIM", "true").lower() == "true")
+                try:
+                    thresh = int(kv.get("THRESHOLD", "80"))
+                except ValueError:
+                    thresh = 80
+                self.sw_80.set_active(thresh < 98)
+
+                cap = kv.get("CAPACITY", "--")
+                st = kv.get("STATUS", "Unknown")
+                health = kv.get("HEALTH", "--")
+                if kv:
+                    self.lbl_power_hw.set_text(f"Baterai: {cap} ({st}) • Kesehatan: {health} • Profil aktif: {prof.capitalize()}")
+                else:
+                    self.lbl_power_hw.set_text("Telemetri Brisk Sentinel siap • Kelola profil TLP, Glide Mode, dan batas pengisian.")
+                self._loading_power = False
+
+            self._ui(apply_ui)
+        self._run_bg(worker)
+
+    def _load_appearance_state(self):
+        cfg_path = os.path.expanduser("~/.config/brisk/appearance.conf")
+        cfg = {"wallpaper": "default", "taskbar": "islands"}
+        try:
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r") as f:
+                    cfg.update(json.load(f))
+            else:
+                wb_css = os.path.expanduser("~/.config/waybar/style.css")
+                if os.path.exists(wb_css):
+                    with open(wb_css, "r") as f:
+                        if "BRISK-DOCK-MODE-START" in f.read():
+                            cfg["taskbar"] = "dock"
+        except Exception:
+            pass
+
+        self._loading_appearance = True
+        self.combo_tb.set_active(1 if cfg.get("taskbar") == "dock" else 0)
+        self._update_wp_button_styles(cfg.get("wallpaper", "default"))
+        self._loading_appearance = False
+
+    def _update_wp_button_styles(self, active_key):
+        for key, btn in self.wp_buttons.items():
+            ctx = btn.get_style_context()
+            if key == active_key:
+                ctx.remove_class("btn-secondary")
+                ctx.add_class("btn-primary")
+            else:
+                ctx.remove_class("btn-primary")
+                ctx.add_class("btn-secondary")
+
+    def _load_timetravel_state(self):
+        def worker():
+            auto_on = True
+            if os.path.exists("/etc/brisk/timetravel.conf"):
+                try:
+                    with open("/etc/brisk/timetravel.conf", "r") as f:
+                        txt = f.read()
+                    if re.search(r'^AUTO_BACKUP_ENABLED=false\b', txt, re.M):
+                        auto_on = False
+                except Exception:
+                    pass
+
+            ok, out, _ = self._run_cmd(["sudo", "-n", "/usr/local/bin/brisk-timetravel", "list", "--raw"], timeout=5)
+            lines = [ln for ln in out.splitlines() if ln.strip()] if ok and out else []
+
+            def apply_ui():
+                ctx = self.badge_tt.get_style_context()
+                ctx.remove_class("badge-info")
+                ctx.remove_class("badge-active")
+                ctx.remove_class("badge-warn")
+                if lines:
+                    latest = lines[0].split("|")
+                    latest_date = latest[1] if len(latest) > 1 else latest[0]
+                    auto_txt = "Auto-Checkpoint aktif" if auto_on else "Auto-Checkpoint nonaktif"
+                    self.lbl_tt_desc.set_text(f"{len(lines)} titik pemulihan tersedia • Terbaru: {latest_date} • {auto_txt}")
+                    self.badge_tt.set_text("Terlindungi")
+                    ctx.add_class("badge-active")
+                else:
+                    auto_txt = "Auto-Checkpoint aktif" if auto_on else "Auto-Checkpoint nonaktif"
+                    self.lbl_tt_desc.set_text(f"Belum ada snapshot tersimpan • {auto_txt}")
+                    self.badge_tt.set_text("Belum Ada Snapshot")
+                    ctx.add_class("badge-warn")
+
+            self._ui(apply_ui)
+        self._run_bg(worker)
 
     # --------------------------------------------------------------------------
     # Event Handlers & Signals
@@ -1149,102 +1849,551 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                     row.hide()
 
     def _on_apply_display(self, btn):
-        res = self.combo_res.get_active_text()
-        hz = self.combo_hz.get_active_text()
+        if not self.display_output:
+            self._show_dialog(Gtk.MessageType.WARNING, "Tidak Ada Output Wayland", "Tidak ada monitor Wayland aktif yang terdeteksi dari wlr-randr.")
+            return
+
+        res_text = self.combo_res.get_active_text() or "1920x1080"
+        hz_text = self.combo_hz.get_active_text() or "60 Hz"
+        res_mode = res_text.split()[0]
+        hz_num = hz_text.split()[0]
         scale = "1.0"
         if self.scale_125.get_active():
             scale = "1.25"
         elif self.scale_150.get_active():
             scale = "1.5"
 
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            flags=0,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.OK,
-            text="Pengaturan Layar Berhasil Diterapkan!"
-        )
-        dialog.format_secondary_text(f"Resolusi: {res}\nRefresh Rate: {hz}\nSkala Tampilan: {scale}x HiDPI\n\nPerubahan telah disimpan ke sesi Wayland.")
-        dialog.run()
-        dialog.destroy()
+        out_name = self.display_output
+        self.btn_apply_display.set_sensitive(False)
+
+        def worker():
+            ok, _, err = self._run_cmd(["wlr-randr", "--output", out_name, "--mode", f"{res_mode}@{hz_num}Hz", "--scale", scale], timeout=6)
+            if not ok:
+                ok, _, err2 = self._run_cmd(["wlr-randr", "--output", out_name, "--mode", res_mode, "--scale", scale], timeout=6)
+                if not ok and err2:
+                    err = err2
+
+            def done():
+                self.btn_apply_display.set_sensitive(True)
+                if ok:
+                    self._show_dialog(
+                        Gtk.MessageType.INFO,
+                        "Pengaturan Layar Diterapkan",
+                        f"Output: {out_name}\nResolusi: {res_mode}\nRefresh Rate: {hz_num} Hz\nSkala: {scale}x",
+                    )
+                    self._load_display_state()
+                else:
+                    self._show_dialog(
+                        Gtk.MessageType.ERROR,
+                        "Gagal Menerapkan Pengaturan Layar",
+                        err or "Compositor menolak mode layar yang dipilih.",
+                    )
+            self._ui(done)
+        self._run_bg(worker)
 
     def _on_nightlight_toggle(self, switch, state):
-        cmd = ["gammastep", "-O", "4500"] if state else ["pkill", "-f", "gammastep"]
-        try:
-            subprocess.Popen(cmd)
-        except Exception:
-            pass
+        if self._loading_night:
+            return False
+        self._apply_gammastep(bool(state), int(self.scale_temp.get_value()), save=True)
+        return False
 
     def _on_temp_changed(self, scale):
+        if self._loading_night or not self.sw_night.get_active():
+            return
+        if self._temp_debounce_id:
+            GLib.source_remove(self._temp_debounce_id)
         val = int(scale.get_value())
-        try:
-            subprocess.Popen(["gammastep", "-O", str(val)])
-        except Exception:
-            pass
 
-    def _on_volume_changed(self, scale):
-        val = int(scale.get_value())
-        self.lbl_vval.set_text(f"{val}%")
-        try:
-            subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"])
-        except Exception:
-            pass
+        def fire():
+            self._temp_debounce_id = None
+            if self.sw_night.get_active():
+                self._apply_gammastep(True, val, save=True)
+            return False
 
-    def _on_test_stereo(self, btn):
-        try:
-            subprocess.Popen(["speaker-test", "-t", "sine", "-f", "440", "-c", "2", "-l", "1"])
-        except Exception:
-            pass
+        self._temp_debounce_id = GLib.timeout_add(180, fire)
 
-    def _on_connect_wifi_dialog(self, btn, ssid):
+    def _on_schedule_toggle(self, switch, state):
+        if self._loading_night:
+            return False
+        temp = int(self.scale_temp.get_value())
+        self._save_nightlight_cfg(self.sw_night.get_active(), temp, bool(state))
+        if state:
+            hour = datetime.datetime.now().hour
+            should_on = (hour >= 18 or hour < 6)
+            if should_on != self.sw_night.get_active():
+                self.sw_night.set_active(should_on)
+        return False
+
+    def _on_wifi_switch(self, switch, state):
+        if self._loading_network:
+            return False
+        self.sw_wifi.set_sensitive(False)
+        action = "on" if state else "off"
+
+        def worker():
+            ok, _, err = self._run_cmd(["nmcli", "radio", "wifi", action], timeout=8)
+            def done():
+                self.sw_wifi.set_sensitive(True)
+                if not ok:
+                    self._show_dialog(Gtk.MessageType.ERROR, "Gagal Mengubah Status Wi-Fi", err or "Perintah nmcli gagal dijalankan.")
+                self._refresh_network(rescan=bool(state))
+            self._ui(done)
+        self._run_bg(worker)
+        return False
+
+    def _on_disconnect_wifi(self, btn):
+        if not self._active_wifi_con:
+            return
+        con_name = self._active_wifi_con
+        self.btn_disc.set_sensitive(False)
+
+        def worker():
+            ok, _, err = self._run_cmd(["nmcli", "connection", "down", "id", con_name], timeout=8)
+            def done():
+                if not ok:
+                    self._show_dialog(Gtk.MessageType.ERROR, "Gagal Memutuskan Koneksi", err or f"Tidak dapat memutus {con_name}.")
+                self._refresh_network(rescan=False)
+            self._ui(done)
+        self._run_bg(worker)
+
+    def _on_scan_wifi(self, btn):
+        self._refresh_network(rescan=True)
+
+    def _connect_wifi_async(self, ssid, password=None):
+        self.btn_scan.set_sensitive(False)
+        self.lbl_cur_net.set_text(f"Menyambungkan ke {ssid}...")
+        self.lbl_cur_net_desc.set_text("Menunggu autentikasi dari NetworkManager...")
+
+        def worker():
+            cmd = ["nmcli", "dev", "wifi", "connect", ssid]
+            if password:
+                cmd.extend(["password", password])
+            ok, out, err = self._run_cmd(cmd, timeout=25)
+            def done():
+                if ok:
+                    self._show_dialog(Gtk.MessageType.INFO, "Wi-Fi Terhubung", f"Berhasil tersambung ke {ssid}.")
+                else:
+                    self._show_dialog(Gtk.MessageType.ERROR, f"Gagal Terhubung ke {ssid}", err or out or "Periksa kata sandi atau sinyal Wi-Fi.")
+                self._refresh_network(rescan=False)
+            self._ui(done)
+        self._run_bg(worker)
+
+    def _on_connect_wifi_dialog(self, btn, ssid, security=""):
+        sec_upper = (security or "").upper()
+        if not sec_upper or sec_upper in ("--", "TERBUKA", "NONE"):
+            self._connect_wifi_async(ssid, None)
+            return
+
         dialog = Gtk.Dialog(
             title=f"Sambungkan ke {ssid}",
             parent=self,
             flags=Gtk.DialogFlags.MODAL
         )
-        dialog.set_default_size(360, 180)
+        dialog.set_default_size(380, 170)
         dialog.add_button("Batal", Gtk.ResponseType.CANCEL)
         dialog.add_button("Sambungkan", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
 
         content = dialog.get_content_area()
         content.set_spacing(10)
         content.set_border_width(16)
 
-        lbl = Gtk.Label(label=f"Masukkan sandi Wi-Fi untuk {ssid}:", xalign=0)
+        lbl = Gtk.Label(label=f"Masukkan sandi Wi-Fi ({security}) untuk {ssid}:", xalign=0)
         pwd = Gtk.Entry()
         pwd.set_visibility(False)
+        pwd.set_activates_default(True)
         content.pack_start(lbl, False, False, 0)
         content.pack_start(pwd, False, False, 0)
         dialog.show_all()
 
         resp = dialog.run()
+        password = pwd.get_text()
         dialog.destroy()
 
-    def _on_quick_snapshot(self, btn):
+        if resp == Gtk.ResponseType.OK:
+            if not password:
+                self._show_dialog(Gtk.MessageType.WARNING, "Sandi Kosong", "Masukkan kata sandi jaringan Wi-Fi terlebih dahulu.")
+                return
+            self._connect_wifi_async(ssid, password)
+
+    def _on_volume_changed(self, scale):
+        val = int(scale.get_value())
+        self.lbl_vval.set_text(f"{val}%")
+        if self._loading_audio:
+            return
+        if self._vol_debounce_id:
+            GLib.source_remove(self._vol_debounce_id)
+
+        def apply_vol():
+            self._vol_debounce_id = None
+            def worker():
+                ok, _, _ = self._run_cmd(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], timeout=2)
+                if not ok:
+                    self._run_cmd(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{val}%"], timeout=2)
+            self._run_bg(worker)
+            return False
+
+        self._vol_debounce_id = GLib.timeout_add(60, apply_vol)
+
+    def _on_output_changed(self, combo):
+        if self._loading_audio:
+            return
+        idx = combo.get_active()
+        if idx < 0 or idx >= len(self._audio_sinks):
+            return
+        sink_name = self._audio_sinks[idx][0]
+        def worker():
+            ok, _, err = self._run_cmd(["pactl", "set-default-sink", sink_name], timeout=4)
+            if not ok:
+                self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Mengganti Output Audio", err or sink_name)
+        self._run_bg(worker)
+
+    def _on_test_stereo(self, btn):
+        btn.set_sensitive(False)
+        def worker():
+            ok, _, err = self._run_cmd(["speaker-test", "-t", "sine", "-f", "440", "-c", "2", "-l", "1"], timeout=10)
+            def done():
+                btn.set_sensitive(True)
+                if not ok:
+                    self._show_dialog(Gtk.MessageType.WARNING, "Tes Audio Gagal", err or "Pastikan utilitas 'speaker-test' (alsa-utils) dan PipeWire aktif.")
+            self._ui(done)
+        self._run_bg(worker)
+
+    def _write_input_settings(self):
+        spd_slider = self.scale_spd.get_value()
+        ptr_speed = round(((spd_slider - 1.0) / 9.0) * 1.6 - 0.8, 2)
+        nat_val = "yes" if self.sw_nat.get_active() else "no"
+        tap_val = "yes" if self.sw_tap.get_active() else "no"
+
+        def worker():
+            try:
+                rc_path = self._get_labwc_rc_path(writable=True)
+                if os.path.exists(rc_path):
+                    tree = ET.parse(rc_path)
+                    root = tree.getroot()
+                else:
+                    root = ET.Element("labwc_config")
+                    tree = ET.ElementTree(root)
+
+                libinput = root.find("libinput")
+                if libinput is None:
+                    libinput = ET.SubElement(root, "libinput")
+                dev = libinput.find("./device[@category='default']")
+                if dev is None:
+                    dev = ET.SubElement(libinput, "device", {"category": "default"})
+
+                for tag, text_val in [("pointerSpeed", str(ptr_speed)), ("naturalScroll", nat_val), ("tap", tap_val)]:
+                    el = dev.find(tag)
+                    if el is None:
+                        el = ET.SubElement(dev, tag)
+                    el.text = text_val
+
+                ET.indent(tree, space="  ")
+                tmp_path = f"{rc_path}.tmp"
+                tree.write(tmp_path, encoding="utf-8", xml_declaration=True)
+                os.replace(tmp_path, rc_path)
+                self._run_cmd(["labwc", "--reconfigure"], timeout=3)
+            except Exception as exc:
+                self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Menyimpan Pengaturan Input", str(exc))
+        self._run_bg(worker)
+
+    def _on_input_slider_changed(self, scale):
+        if self._loading_input:
+            return
+        if self._input_debounce_id:
+            GLib.source_remove(self._input_debounce_id)
+        def fire():
+            self._input_debounce_id = None
+            self._write_input_settings()
+            return False
+        self._input_debounce_id = GLib.timeout_add(180, fire)
+
+    def _on_input_switch_changed(self, switch, state):
+        if self._loading_input:
+            return False
+        GLib.idle_add(lambda: (self._write_input_settings(), False)[1])
+        return False
+
+    def _run_sentinel(self, args, reload_after=True):
+        cli_bin = "/usr/local/bin/brisk-sentinel"
+        cmd = [cli_bin] + args if os.geteuid() == 0 else ["sudo", "-n", cli_bin] + args
+
+        def worker():
+            ok, out, err = self._run_cmd(cmd, timeout=10)
+            if not ok and os.geteuid() != 0 and shutil.which("pkexec"):
+                ok, out, err = self._run_cmd(["pkexec", cli_bin] + args, timeout=15)
+
+            def done():
+                if not ok:
+                    self._show_dialog(Gtk.MessageType.ERROR, "Gagal Mengubah Pengaturan Daya", err or out or "Periksa izin brisk-sentinel.")
+                if reload_after:
+                    self._load_power_state()
+            self._ui(done)
+        self._run_bg(worker)
+
+    def _on_power_profile_toggled(self, btn, mode):
+        if self._loading_power or not btn.get_active():
+            return
+        self._run_sentinel(["profile", mode])
+
+    def _on_glide_toggle(self, switch, state):
+        if self._loading_power:
+            return False
+        self._run_sentinel(["glide", "on" if state else "off"])
+        return False
+
+    def _on_glide_dim_toggle(self, switch, state):
+        if self._loading_power:
+            return False
+        desired = "true" if state else "false"
+
+        def worker():
+            ok_g, raw_g, _ = self._run_cmd(["/usr/local/bin/brisk-sentinel", "glide", "status", "--raw"], timeout=4)
+            cur = "true"
+            if ok_g:
+                for line in raw_g.splitlines():
+                    if line.startswith("GLIDE_AUTO_DIM="):
+                        cur = line.split("=", 1)[1].strip().strip('"\'').lower()
+                        break
+            if cur != desired:
+                self._run_sentinel(["glide", "toggle-dim"])
+        self._run_bg(worker)
+        return False
+
+    def _on_battery_ceiling_toggle(self, switch, state):
+        if self._loading_power:
+            return False
+        self._run_sentinel(["threshold", "80" if state else "100"])
+        return False
+
+    def _save_appearance_cfg(self, **updates):
+        cfg_path = os.path.expanduser("~/.config/brisk/appearance.conf")
+        os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+        cfg = {"wallpaper": "default", "taskbar": "islands"}
         try:
-            subprocess.Popen(["/usr/local/bin/brisk-timetravel-snapshot", "Manual Quick Checkpoint from Control Center"])
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r") as f:
+                    cfg.update(json.load(f))
         except Exception:
             pass
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            flags=0,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.OK,
-            text="Snapshot Pemulihan Berhasil Dibuat!"
-        )
-        dialog.format_secondary_text("Titik pemulihan sistem telah disimpan. Anda dapat memutar balik ke titik ini kapan saja.")
-        dialog.run()
-        dialog.destroy()
+        cfg.update(updates)
+        try:
+            with open(cfg_path, "w") as f:
+                json.dump(cfg, f, indent=2)
+        except Exception:
+            pass
+
+    def _on_select_wallpaper(self, btn, wp_key):
+        if self._loading_appearance:
+            return
+        self._update_wp_button_styles(wp_key)
+        self._save_appearance_cfg(wallpaper=wp_key)
+
+        def worker():
+            self._run_cmd(["pkill", "-x", "swaybg"], timeout=3)
+            wp_svg = "/usr/share/backgrounds/briskos/brisk-default.svg"
+            if wp_key == "default" and os.path.exists(wp_svg):
+                sway_args = ["-i", wp_svg, "-m", "fill"]
+                autostart_block = f'swaybg -i "{wp_svg}" -m fill &'
+            else:
+                sway_args = ["-c", "#0f172a"]
+                autostart_block = "swaybg -c '#0f172a' &"
+
+            try:
+                subprocess.Popen(
+                    ["swaybg"] + sway_args,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception:
+                pass
+
+            try:
+                autostart_path = self._seed_user_config("labwc/autostart")
+                if os.path.exists(autostart_path):
+                    with open(autostart_path, "r") as f:
+                        txt = f.read()
+                    new_txt = re.sub(
+                        r'# 1\. Desktop Wallpaper Daemon.*?# 2\. Status Bar',
+                        f'# 1. Desktop Wallpaper Daemon\n{autostart_block}\n\n# 2. Status Bar',
+                        txt,
+                        flags=re.S,
+                    )
+                    if new_txt != txt:
+                        with open(autostart_path, "w") as f:
+                            f.write(new_txt)
+            except Exception:
+                pass
+        self._run_bg(worker)
+
+    def _on_taskbar_style_changed(self, combo):
+        if self._loading_appearance:
+            return
+        mode = "dock" if combo.get_active() == 1 else "islands"
+        self._save_appearance_cfg(taskbar=mode)
+
+        def worker():
+            try:
+                cfg_path = self._seed_user_config("waybar/config.jsonc")
+                css_path = self._seed_user_config("waybar/style.css")
+
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, "r") as f:
+                        raw_cfg = f.read()
+                    margin_val = "0" if mode == "dock" else "8"
+                    for mkey in ("margin-bottom", "margin-left", "margin-right"):
+                        raw_cfg = re.sub(
+                            rf'("{mkey}"\s*:\s*)\d+',
+                            rf'\g<1>{margin_val}',
+                            raw_cfg,
+                        )
+                    with open(cfg_path, "w") as f:
+                        f.write(raw_cfg)
+
+                if os.path.exists(css_path):
+                    with open(css_path, "r") as f:
+                        raw_css = f.read()
+                    raw_css = re.sub(
+                        r'\n*/\* BRISK-DOCK-MODE-START \*/.*?/\* BRISK-DOCK-MODE-END \*/\s*',
+                        '\n',
+                        raw_css,
+                        flags=re.S,
+                    ).rstrip() + "\n"
+                    if mode == "dock":
+                        raw_css += (
+                            "\n/* BRISK-DOCK-MODE-START */\n"
+                            "window#waybar {\n"
+                            "    background-color: rgba(15, 23, 42, 0.94);\n"
+                            "    border-top: 1px solid rgba(56, 189, 248, 0.25);\n"
+                            "}\n"
+                            ".modules-left,\n"
+                            ".modules-center,\n"
+                            ".modules-right {\n"
+                            "    background-color: transparent;\n"
+                            "    border: none;\n"
+                            "    border-radius: 0;\n"
+                            "    box-shadow: none;\n"
+                            "}\n"
+                            "/* BRISK-DOCK-MODE-END */\n"
+                        )
+                    with open(css_path, "w") as f:
+                        f.write(raw_css)
+
+                self._run_cmd(["pkill", "-x", "waybar"], timeout=3)
+                subprocess.Popen(
+                    ["waybar"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception as exc:
+                self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Mengubah Gaya Taskbar", str(exc))
+        self._run_bg(worker)
+
+    def _on_quick_snapshot(self, btn):
+        btn.set_sensitive(False)
+        orig_label = btn.get_label()
+        btn.set_label("Membuat Snapshot...")
+
+        def run_snapshot():
+            comment = "Manual Quick Checkpoint from Control Center"
+            cli_bin = "/usr/local/bin/brisk-timetravel"
+            if os.geteuid() == 0:
+                cmd = [cli_bin, "create", comment]
+            elif shutil.which("sudo"):
+                cmd = ["sudo", "-n", cli_bin, "create", comment]
+            elif shutil.which("pkexec"):
+                cmd = ["pkexec", cli_bin, "create", comment]
+            else:
+                self._ui(self._finish_quick_snapshot, btn, orig_label, False, "Utility sudo/pkexec tidak tersedia.")
+                return
+
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                if proc.returncode == 0:
+                    snap_id = (proc.stdout.strip().splitlines() or [""])[-1]
+                    self._ui(self._finish_quick_snapshot, btn, orig_label, True, snap_id)
+                else:
+                    err = (proc.stderr or proc.stdout or "Gagal membuat snapshot pemulihan.").strip()
+                    self._ui(self._finish_quick_snapshot, btn, orig_label, False, err)
+            except Exception as exc:
+                self._ui(self._finish_quick_snapshot, btn, orig_label, False, str(exc))
+
+        self._run_bg(run_snapshot)
+
+    def _finish_quick_snapshot(self, btn, orig_label, success, detail):
+        btn.set_label(orig_label)
+        btn.set_sensitive(True)
+        if success:
+            self._load_timetravel_state()
+            suffix = f" ({detail})" if detail else ""
+            self._show_dialog(
+                Gtk.MessageType.INFO,
+                "Snapshot Pemulihan Berhasil Dibuat!",
+                f"Titik pemulihan sistem{suffix} telah disimpan. Anda dapat memutar balik ke titik ini kapan saja.",
+            )
+        else:
+            self._show_dialog(
+                Gtk.MessageType.ERROR,
+                "Gagal Membuat Snapshot Pemulihan",
+                detail or "Terjadi kesalahan saat menjalankan brisk-timetravel.",
+            )
 
     def _on_open_timetravel_gui(self, btn):
         try:
-            subprocess.Popen(["/usr/local/bin/brisk-timetravel-gui"])
-        except Exception:
-            pass
+            subprocess.Popen(["/usr/local/bin/brisk-timetravel-gui"], start_new_session=True)
+        except Exception as exc:
+            self._show_dialog(Gtk.MessageType.ERROR, "Gagal Membuka Time-Travel", str(exc))
+
+    def _on_open_updater_gui(self, btn):
+        try:
+            subprocess.Popen(["/usr/local/bin/brisk-updater-gui"], start_new_session=True)
+        except Exception as exc:
+            self._show_dialog(Gtk.MessageType.ERROR, "Gagal Membuka Software Updater", str(exc))
 
     def _on_check_updates(self, btn):
-        self.lbl_up_status.set_text("Memeriksa repositori resmi BriskOS...")
-        GLib.timeout_add(1200, lambda: self.lbl_up_status.set_text("Sistem Anda sudah yang terbaru (BriskOS 1.0 LTS - Build Resmi)."))
+        self.btn_chk_updates.set_sensitive(False)
+        self.lbl_up_status.set_text("Memeriksa rilis resmi BriskOS...")
+
+        def worker():
+            local_ver = "1.0"
+            try:
+                with open("/etc/os-release", "r") as f:
+                    for line in f:
+                        if line.startswith("VERSION_ID="):
+                            local_ver = line.split("=", 1)[1].strip().strip('"\'')
+                            break
+            except Exception:
+                pass
+
+            cache_file = "/tmp/brisk-latest-release.json"
+            ok, out, _ = self._run_cmd(["/usr/local/bin/brisk-update-checker", "--now"], timeout=15)
+            status_msg = "Tidak dapat memeriksa rilis daring (offline atau API tidak terjangkau)."
+
+            if ok and os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r") as f:
+                        data = json.load(f)
+                    if isinstance(data, list) and data:
+                        data = data[0]
+                    tag = str(data.get("tag_name", "")).lstrip("vV")
+                    if tag:
+                        cmp_ok, _, _ = self._run_cmd(["dpkg", "--compare-versions", tag, "gt", local_ver], timeout=3)
+                        if cmp_ok:
+                            status_msg = f"Pembaruan tersedia: v{tag} (terpasang v{local_ver}). Klik Buka Software Updater."
+                        else:
+                            status_msg = f"Sistem Anda sudah mutakhir (v{local_ver}, rilis terbaru v{tag})."
+                except Exception:
+                    status_msg = "Gagal membaca metadata rilis."
+            elif out and "up to date" in out.lower():
+                status_msg = f"Sistem Anda sudah mutakhir (v{local_ver})."
+
+            def done():
+                self.btn_chk_updates.set_sensitive(True)
+                self.lbl_up_status.set_text(status_msg)
+            self._ui(done)
+        self._run_bg(worker)
 
 # ------------------------------------------------------------------------------
 # Main Entry Point

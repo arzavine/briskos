@@ -1,6 +1,6 @@
 # ==============================================================================
 # BriskOS Calamares Installer & Partitioning Stack
-# Target Distribution: Debian 12 (Bookworm) amd64
+# Target Distribution: Debian 13 (Trixie) amd64
 # ==============================================================================
 
 # Calamares Graphical Installer Framework
@@ -17,8 +17,6 @@ kpmcore
 
 # Bootloader & EFI Deployment Binaries
 efibootmgr
-grub-efi-amd64-bin
-grub-pc-bin
 
 # Filesystem Extraction & Archival Tools
 squashfs-tools

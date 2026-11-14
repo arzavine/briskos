@@ -143,17 +143,17 @@
       <text x="10" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
             font-size="11" font-weight="600" fill="#cbd5e1">⚡ Wayland</text>
 
-      <!-- Pill 2: 178MB RAM Idle -->
-      <rect x="110" y="0" width="118" height="24" rx="6" 
+      <!-- Pill 2: Sub-512MB RAM Target -->
+      <rect x="110" y="0" width="124" height="24" rx="6" 
             fill="#0f172a" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
       <text x="120" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
-            font-size="11" font-weight="600" fill="#cbd5e1">🍃 178MB Idle</text>
+            font-size="11" font-weight="600" fill="#cbd5e1">🍃 Sub-512MB RAM</text>
 
       <!-- Pill 3: Wine Ready -->
-      <rect x="236" y="0" width="100" height="24" rx="6" 
+      <rect x="242" y="0" width="102" height="24" rx="6" 
             fill="#0f172a" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-      <text x="246" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
-            font-size="11" font-weight="600" fill="#cbd5e1">🍷 Wine 9.0</text>
+      <text x="252" y="16" font-family="'Inter', 'Noto Sans', sans-serif" 
+            font-size="11" font-weight="600" fill="#cbd5e1">🍷 Wine Ready</text>
     </g>
   </g>
 </svg>

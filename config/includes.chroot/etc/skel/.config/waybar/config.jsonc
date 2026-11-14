@@ -80,7 +80,7 @@
     "custom/office": {
         "format": "📝",
         "tooltip-format": "Productivity Suite (Office)",
-        "on-click": "onlyoffice-desktopeditors || libreoffice",
+        "on-click": "sh -c 'command -v onlyoffice-desktopeditors >/dev/null 2>&1 && exec onlyoffice-desktopeditors || exec libreoffice --writer'",
         "escape": true
     },
 

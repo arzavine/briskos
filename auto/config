@@ -3,11 +3,12 @@ set -eu
 
 lb config noauto \
     --mode debian \
-    --distribution bookworm \
+    --distribution trixie \
     --architectures amd64 \
     --archive-areas "main contrib non-free non-free-firmware" \
     --bootloaders syslinux,grub-efi \
     --binary-images iso-hybrid \
+    --bootappend-live "boot=live components quiet splash" \
     --image-name "BriskOS-1.0-amd64" \
     --iso-volume "BriskOS_1.0" \
     --iso-application "BriskOS 1.0 Live" \

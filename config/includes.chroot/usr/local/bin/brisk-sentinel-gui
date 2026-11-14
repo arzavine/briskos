@@ -27,6 +27,31 @@ notify() {
     fi
 }
 
+# Safely parse KEY=VALUE output from brisk-sentinel --raw without eval
+load_kv_output() {
+    local raw_text="$1"
+    local line key val
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        case "$line" in
+            *=*)
+                key="${line%%=*}"
+                val="${line#*=}"
+                if [[ "$val" == \"*\" ]] && [[ "$val" == *\" ]] && [ "${#val}" -ge 2 ]; then
+                    val="${val:1:${#val}-2}"
+                elif [[ "$val" == \'*\' ]] && [[ "$val" == *\' ]] && [ "${#val}" -ge 2 ]; then
+                    val="${val:1:${#val}-2}"
+                fi
+                case "$key" in
+                    PROFILE|CAPACITY|STATUS|HEALTH|DISCHARGE_RATE|TEMPERATURE|REMAINING|THRESHOLD|GLIDE_AUTO_ENABLED|GLIDE_THRESHOLD|GLIDE_AUTO_DIM|GLIDE_DIM_LEVEL|GLIDE_DEBOUNCE_SECONDS|GLIDE_NOTIFY|GLIDE_ACTIVE|GLIDE_DAEMON_RUNNING)
+                        printf -v "$key" '%s' "$val"
+                        ;;
+                esac
+                ;;
+        esac
+    done <<< "$raw_text"
+}
+
 show_glide_settings_dialog() {
     while true; do
         # Fetch current Glide settings from CLI
@@ -44,7 +69,7 @@ show_glide_settings_dialog() {
         local GLIDE_DAEMON_RUNNING="false"
 
         if [ -n "$RAW_GLIDE" ]; then
-            eval "$RAW_GLIDE"
+            load_kv_output "$RAW_GLIDE"
         fi
 
         # UI Badge Indicators adhering to Antislop UI aesthetics
@@ -214,7 +239,7 @@ while true; do
     if [ -x "$SENTINEL_CLI" ]; then
         RAW_DATA="$("$SENTINEL_CLI" status --raw 2>/dev/null || true)"
         if [ -n "$RAW_DATA" ]; then
-            eval "$RAW_DATA"
+            load_kv_output "$RAW_DATA"
         fi
     fi
 

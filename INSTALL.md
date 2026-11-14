@@ -202,7 +202,7 @@ Insert your prepared USB drive into a direct motherboard port (avoid unpowered U
 
 ### 3.3 Secure Boot Guidance
 
-BriskOS 1.0 is built on Debian Bookworm and includes upstream Microsoft-signed shim bootloaders (`grub-efi-amd64-signed`).
+BriskOS 1.0 is built on Debian 13 (Trixie) and includes upstream Microsoft-signed shim bootloaders (`grub-efi-amd64-signed`).
 
 - **Standard Scenario**: BriskOS boots successfully with Secure Boot **Enabled**.
 - **Alternative / Custom Firmware**: If your UEFI firmware blocks boot with a `Security Violation` or `Invalid Signature` message:
@@ -261,7 +261,7 @@ BriskOS uses the **Labwc** Wayland stacking compositor with server-side decorati
 
 ### 4.3 Wi-Fi & Network Configuration
 
-Debian Bookworm non-free firmware (`firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`) is pre-installed.
+Debian 13 (Trixie) non-free firmware (`firmware-iwlwifi`, `firmware-realtek`, `firmware-atheros`) is pre-installed.
 
 1. **Graphical Connection**:
    - Click the Network icon in the Waybar taskbar tray (bottom right).
@@ -815,7 +815,7 @@ Brisk Store bridges the stability of Debian's native repository with the moderni
   - Automatically configured during live installation via `06-setup-store.hook.chroot` (`https://dl.flathub.org/repo/flathub.flatpakrepo`).
   - Delivers up-to-date proprietary and open-source applications (Google Chrome, Spotify, Visual Studio Code, Discord, Obsidian, Steam) running safely in isolated application sandboxes.
 - **Native APT Engine (`apt-get`)**:
-  - Leverages Debian 12 (Bookworm) stable repositories for core desktop utilities, system tools, and lightweight editors (GIMP, LibreOffice, Timeshift, GParted, VLC).
+  - Leverages Debian 13 (Trixie) stable repositories for core desktop utilities, system tools, and lightweight editors (GIMP, LibreOffice, Timeshift, GParted, VLC).
 - **Decoupled Backend Engine (`/usr/local/bin/brisk-store-backend`)**:
   - High-performance, headless CLI backend handling package inspection, installation, removal, and database updates.
   - Sudo elevation configured through `/etc/sudoers.d/brisk-store` (`NOPASSWD` execution for users in group `%sudo` and live session accounts), enabling zero-prompt installations from the graphical user interface.

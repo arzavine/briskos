@@ -1,6 +1,6 @@
 # BriskOS Design Direction: "Night Glass"
 
-Status: proposal, not implemented. This file is data for the design phase. Nothing here has been applied to `config/` yet.
+Status: implemented across `config/includes.chroot/` on Debian 13 (Trixie); hardware runtime validation and live ISO screenshots remain pending Phase 6/live QEMU boot.
 
 ## 1. Why upgrade
 
@@ -119,33 +119,33 @@ These are hand estimates. Re-check final values with the antislop contrast tool 
 
 ## 5. Technical constraints (read before promising anything)
 
-1. **No real background blur.** Waybar (GTK) has no `backdrop-filter`, and Labwc has no blur. "Glass" here means translucency plus a lit edge, over a dark wallpaper. True frosted blur needs a different compositor (for example Wayfire's blur plugin, or Hyprland/swayfx off Bookworm). That is a larger decision, see section 8.
-2. **Debian 12 package versions are old.** Labwc, Waybar and Wofi on Bookworm may lack features this doc assumes: Labwc corner radius and window shadows, `themerc-override` support, and some Waybar taskbar options. **Verify before writing any CSS** (Phase 0). The existing `themerc-override` file may not even be read by the Bookworm Labwc.
+1. **No real background blur.** Waybar (GTK) has no `backdrop-filter`, and Labwc has no blur. "Glass" here means translucency plus a lit edge, over a dark wallpaper. True frosted blur needs a different compositor (for example Wayfire's blur plugin or swayfx).
+2. **Base distribution upgraded to Debian 13 (Trixie).** BriskOS now targets `trixie` (`auto/config`, `Dockerfile`), bringing newer Labwc, Waybar, Wofi, `fastfetch`, and Python/GTK3 stacks while keeping compositor property support (corner radius, shadows, `Brisk-Dark` theme, `themerc-override`) subject to live ISO boot verification.
 3. **GTK CSS limits.** Waybar supports `rgba`, gradients, `box-shadow` (including `inset`) and `transition`. It does not support `backdrop-filter` or `filter`.
-4. **Starship, Nerd Font symbols and some CLI tools may not be in Bookworm.** Check each; the fallback is a documented download step in a build hook, with license review.
+4. **CLI utilities and fonts.** BriskOS uses `fastfetch`, `btop`, `htop`, custom `~/.bashrc` prompt (`brisk-cockpit` + Aeroline prompt), `fonts-jetbrains-mono`, and `fonts-inter` packaged in Debian 13 (Trixie) without external Starship/Nerd-Font downloads.
 
 ## 6. Roadmap
 
 | Phase | Work | Done when |
 | :-- | :-- | :-- |
-| 0 | Capability audit: install the exact Bookworm versions in a container or VM, list which properties (radius, shadow, `themerc-override`, taskbar options) actually work | A checked table of supported/unsupported items replaces section 5 guesses |
-| 1 | Tokens: one shared color/radius/shadow file referenced by Waybar, Wofi, Mako, Foot and Labwc configs | Changing `accent` in one place re-themes everything |
+| 0 | Capability audit: verify exact Debian 13 (Trixie) package availability & Labwc/Waybar/Wofi behavior inside container/VM | A checked table of supported/unsupported items from a live run |
+| 1 | Tokens: unified Night Glass palette (`#0b1120`, `#0f172a`, `#1e293b`, `#38bdf8`) applied across Waybar, Wofi, Mako, Foot, Labwc `Brisk-Dark`, and GTK | Changing `accent` in one place re-themes everything cleanly |
 | 2 | Waybar islands, start button, task indicator, divider layout | Real render matches 4.1 |
-| 3 | Foot font, palette retune, prompt, CLI defaults | Every ANSI pair passes contrast; prompt verified over real git repos |
-| 4 | Labwc window radius/shadow/buttons, Wofi glass, Mako glass | Same glass dose rules hold (2 glass, 1 glow) |
+| 3 | Foot font (`JetBrains Mono`), palette, `brisk-cockpit` & Aeroline prompt, `fastfetch` | Every ANSI pair passes contrast; prompt verified over real git repos |
+| 4 | Labwc window radius/shadow/buttons (`Brisk-Dark`), Wofi glass, Mako glass | Same glass dose rules hold (2 glass, 1 glow) |
 | 5 | Wallpaper redraw, motion pass, optional light variant | Wallpaper supports the glass at all four screen corners |
-| 6 | Validation: boot the built ISO in QEMU, take **real** screenshots, run the antislop AFTER audit and the contrast checker | Audit findings fixed; screenshots replace the old mockups |
+| 6 | Validation: boot the built ISO in QEMU, take **real** screenshots, run live visual/contrast checks | Live ISO boot verified; real VM screenshots replace concept mockups |
 
 ## 7. Status and known gaps in the existing showcase
 
-The four screenshots in `docs/previews/` were rendered from hand-written HTML/CSS mockups, not from a running BriskOS session. Treat them as concept art. In the showcase document, these are illustrative, not measured: the 178 MiB idle RAM, the boot time under 3.8s, the OS comparison table, the 11.4 MiB Waybar figure, and the Wi-Fi/battery/clock values. The ISO has also never been built end to end (see `README.md` and the Phase 4 notes). Real numbers come from Phase 6 and a real build.
+The HTML/PNG previews in `docs/previews/` (`preview-*.html` and `screenshot-01..10.png`) were rendered from hand-written HTML/CSS mockups, not from a booted BriskOS session. Treat them as concept UI references rather than runtime telemetry: illustrative figures (boot times, idle RAM targets, Wi-Fi/battery/clock values) await real measurements once the ISO is built and booted in QEMU or bare metal.
 
-## 8. Decisions needed from the owner
+## 8. Decisions resolved / remaining
 
-1. **Glass level:** accept "translucent plus lit edge" on the current Labwc stack (cheap, safe), or switch compositor for true blur (better look, more work, more risk).
-2. **Base distribution:** stay on Debian 12 and accept old shell versions, or move to a newer Debian base once stable, which makes sections 4.1 to 4.4 much easier.
-3. **Light theme:** launch dark-only, or ship a light variant.
-4. **Wallpaper direction:** the single-light-source field described in 4.5, or something else.
+1. **Glass level:** Translucent plus lit edge (`Night Glass` on Labwc/Waybar/Wofi) implemented.
+2. **Base distribution:** Migrated from Debian 12 (Bookworm) to **Debian 13 (Trixie)** (`auto/config`, `Dockerfile`).
+3. **Light theme:** Dark-only Night Glass shipped at launch; desktop Appearance panel in `brisk-control` offers wallpaper (`Night Glass Default` vs `Midnight Slate Matte`) and taskbar layout (`Floating Islands` vs `Full Edge Dock`) switching.
+4. **Wallpaper direction:** Single-light-source Supersonic Frost Night Glass field (`brisk-default.svg`) shipped as default.
 
 ## 9. Out of scope for this pass
 

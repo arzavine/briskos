@@ -4,5 +4,5 @@
 // ==============================================================================
 
 DPkg::Pre-Invoke {
-    "if [ -x /usr/local/bin/brisk-timetravel ]; then /usr/local/bin/brisk-timetravel auto-hook || true; fi";
+    "if [ -x /usr/local/bin/brisk-timetravel ] && ! ischroot 2>/dev/null; then /usr/local/bin/brisk-timetravel auto-hook || true; fi";
 };

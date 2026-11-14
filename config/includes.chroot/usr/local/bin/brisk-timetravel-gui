@@ -46,7 +46,7 @@ action_create() {
         --window-icon="$APP_ICON" \
         --text="Enter a descriptive label or tag for this checkpoint:" \
         --entry-text="$default_comment" \
-        --width=480)
+        --width=480) || true
 
     if [ -z "$comment" ]; then
         return 0
@@ -131,7 +131,7 @@ action_restore() {
         --column="Description" \
         "${zenity_args[@]}" \
         --width=720 \
-        --height=400)
+        --height=400) || true
 
     if [ -z "$selected_id" ]; then
         return 0
@@ -249,7 +249,7 @@ action_delete() {
         --column="Comment" \
         "${zenity_args[@]}" \
         --width=640 \
-        --height=360)
+        --height=360) || true
 
     if [ -n "$to_delete" ]; then
         if zenity --question \
@@ -295,7 +295,7 @@ action_settings() {
         "$opt_enabled" "Enabled" "Create zero-friction checkpoint before APT upgrades" \
         "$opt_disabled" "Disabled" "Skip automated pre-update snapshots" \
         --width=560 \
-        --height=300)
+        --height=300) || true
 
     if [ -z "$choice" ]; then
         return 0

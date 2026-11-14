@@ -1,6 +1,6 @@
 # ==============================================================================
 # BriskOS Core System & Hardware Layer
-# Target Distribution: Debian 12 (Bookworm) amd64
+# Target Distribution: Debian 13 (Trixie) amd64
 # ==============================================================================
 
 # Linux Kernel
@@ -15,11 +15,14 @@ firmware-iwlwifi
 firmware-atheros
 firmware-sof-signed
 
-# Init System & Device Management
+# Init System, User Session & Device Management
 systemd
 systemd-sysv
+libpam-systemd
 udev
 dbus
+dbus-user-session
+zram-tools
 
 # Audio Stack (PipeWire modern audio engine)
 pipewire

@@ -1,0 +1,39 @@
+#!/bin/bash
+# ==============================================================================
+# BriskOS Live Hook: 00-setup-multiarch-and-extras
+# Enables i386 multiarch for 32-bit Wine compatibility, preseeds and installs
+# optional Microsoft core fonts non-interactively, and normalizes /usr/local/bin
+# executable permissions.
+# ==============================================================================
+
+set -euo pipefail
+
+echo "=========================================================="
+echo " [BriskOS Hook] 00-setup-multiarch-and-extras"
+echo "=========================================================="
+
+# 1. Ensure all custom BriskOS scripts in /usr/local/bin are executable
+if [ -d "/usr/local/bin" ]; then
+    echo "--> Ensuring executable permissions on /usr/local/bin/*..."
+    find /usr/local/bin -maxdepth 1 -type f -exec chmod 755 {} +
+    find /usr/local/bin -maxdepth 1 -type f -exec chown root:root {} +
+fi
+
+# 2. Enable i386 multiarch and install 32-bit Wine runtime
+export DEBIAN_FRONTEND=noninteractive
+export DEBCONF_NONINTERACTIVE_SEEN=true
+
+echo "--> Enabling i386 multiarch architecture for wine32..."
+dpkg --add-architecture i386
+apt-get update -qq
+apt-get install -y --no-install-recommends wine32 libwine:i386
+
+# 3. Preseed EULA and install ttf-mscorefonts-installer best-effort
+if command -v debconf-set-selections >/dev/null 2>&1; then
+    echo "--> Preseeding ttf-mscorefonts-installer EULA..."
+    echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections
+    apt-get install -y --no-install-recommends ttf-mscorefonts-installer || \
+        echo "--> Warning: ttf-mscorefonts-installer failed (offline/mirror issue); continuing with Carlito/Caladea/Liberation."
+fi
+
+echo "--> [BriskOS Hook] 00-setup-multiarch-and-extras complete."

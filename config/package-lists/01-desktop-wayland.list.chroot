@@ -3,11 +3,20 @@
 # Minimal, performant stacking Wayland compositor stack
 # ==============================================================================
 
+# Display / Login Manager (Wayland auto-login for live + tuigreet fallback)
+greetd
+tuigreet
+
 # Compositor & Shell Components
 labwc
 waybar
 wofi
 foot
+swaybg
+dex
+
+# Web Browser (provides x-www-browser)
+firefox-esr
 
 # File Manager & Utilities
 thunar
@@ -35,4 +44,6 @@ polkit-kde-agent-1
 # Appearance, Icons & Typography
 papirus-icon-theme
 fonts-inter
+fonts-jetbrains-mono
+fonts-liberation
 fonts-noto-color-emoji

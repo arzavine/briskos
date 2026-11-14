@@ -4,14 +4,14 @@ setlocal EnableExtensions EnableDelayedExpansion
 rem ==============================================================================
 rem  BriskOS 1.0 LTS (Feather) - QEMU Virtual Machine Test Harness (Windows)
 rem  Lightweight desktop test environment for Windows CMD and PowerShell
-rem  Debian 12 (Bookworm) amd64 | VirtIO VGA | Intel HDA Audio Emulation
+rem  Debian 13 (Trixie) amd64 | VirtIO VGA | Intel HDA Audio Emulation
 rem ==============================================================================
 
 title BriskOS 1.0 (Feather) - QEMU Virtual Machine Test Harness
 
 echo ======================================================================
 echo          BriskOS 1.0 (Feather) - QEMU Virtual Machine Test Harness    
-echo        Debian 12 Bookworm amd64 ^| Stacking Wayland (Labwc Desktop)    
+echo         Debian 13 Trixie amd64 ^| Stacking Wayland (Labwc Desktop)     
 echo ======================================================================
 echo.
 

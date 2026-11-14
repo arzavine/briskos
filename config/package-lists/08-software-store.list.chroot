@@ -1,6 +1,6 @@
 # ==============================================================================
 # BriskOS Software Store & Modern Application Subsystem Manifest
-# Target Distribution: Debian 12 (Bookworm) amd64
+# Target Distribution: Debian 13 (Trixie) amd64
 # Includes Flatpak engine, AppStream metadata tools, and PyGObject GTK3 stack.
 # ==============================================================================
 
@@ -15,5 +15,4 @@ flatpak
 appstream
 
 # Network & JSON Stream Utilities
-curl
 jq

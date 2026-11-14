@@ -1,0 +1,14 @@
+# BriskOS 1.0 LTS - greetd Display Manager Configuration
+# Auto-logs into Labwc for the live session user ('user'), and falls back
+# cleanly to tuigreet on installed systems where 'user' does not exist.
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --cmd labwc"
+user = "_greetd"
+
+[initial_session]
+command = "labwc"
+user = "user"

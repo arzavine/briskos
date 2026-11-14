@@ -4,6 +4,7 @@ ID=briskos
 ID_LIKE=debian
 PRETTY_NAME="BriskOS 1.0 LTS (Feather)"
 VERSION_ID="1.0"
+VERSION_CODENAME=trixie
 HOME_URL="https://github.com/briskos/briskos"
 SUPPORT_URL="https://github.com/briskos/briskos/issues"
 BUG_REPORT_URL="https://github.com/briskos/briskos/issues"

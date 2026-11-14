@@ -33,9 +33,14 @@ get_local_version() {
 }
 
 LOCAL_VERSION="$(get_local_version)"
+ACTIVE_CHANNEL="$(/usr/local/bin/brisk-channel get --raw 2>/dev/null || echo "stable")"
 REMOTE_VERSION=""
 RELEASE_NAME=""
 RELEASE_NOTES=""
+
+if [ "$ACTIVE_CHANNEL" = "beta" ]; then
+    API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1"
+fi
 
 # Try reading from recent cache first or query GitHub API
 if [ -s "$CACHE_FILE" ]; then
@@ -51,9 +56,9 @@ fi
 # Parse release info if available
 if [ -n "$RELEASE_JSON" ]; then
     if command -v jq >/dev/null 2>&1; then
-        REMOTE_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty' 2>/dev/null || true)
-        RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r '.name // empty' 2>/dev/null || true)
-        RELEASE_NOTES=$(echo "$RELEASE_JSON" | jq -r '.body // empty' 2>/dev/null || true)
+        REMOTE_TAG=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].tag_name // empty) else (.tag_name // empty) end' 2>/dev/null || true)
+        RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].name // empty) else (.name // empty) end' 2>/dev/null || true)
+        RELEASE_NOTES=$(echo "$RELEASE_JSON" | jq -r 'if type=="array" then (.[0].body // empty) else (.body // empty) end' 2>/dev/null || true)
     else
         REMOTE_TAG=$(echo "$RELEASE_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
         RELEASE_NAME=$(echo "$RELEASE_JSON" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
@@ -74,10 +79,11 @@ trap 'rm -f "$CHANGELOG_TMP"' EXIT
     echo "================================================================================"
     echo ""
     echo "  Installed OS Version : ${LOCAL_VERSION}"
+    echo "  Active Channel       : ${ACTIVE_CHANNEL}"
     if [ -n "$REMOTE_VERSION" ]; then
         echo "  Latest Remote Release: ${REMOTE_VERSION} (${RELEASE_NAME:-BriskOS Update})"
     else
-        echo "  Target Release       : Debian Bookworm / BriskOS Rolling Updates"
+        echo "  Target Release       : Debian 13 (Trixie) / BriskOS Rolling Updates"
     fi
     echo ""
     echo "================================================================================"
@@ -126,32 +132,51 @@ elif [ -n "${BRISK_UPDATE_TERMINAL:-}" ]; then
 fi
 
 perform_update_gui() {
-    # Run pkexec apt update && pkexec apt upgrade with zenity progress bar
+    # Single pkexec escalation so user only authenticates once, propagating errors cleanly
+    local status_file
+    status_file="$(mktemp /tmp/brisk-update-status-XXXXXX 2>/dev/null || echo "/tmp/brisk-update-status-$$")"
+    rm -f "$status_file"
+
     (
-        echo "10"; echo "# Synchronizing package repositories (apt update)..."
-        pkexec apt-get update -y
-        
-        echo "40"; echo "# Calculating upgrade dependencies..."
-        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y --download-only dist-upgrade
-        
-        echo "70"; echo "# Installing and configuring system packages..."
-        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y \
-            -o Dpkg::Options::="--force-confdef" \
-            -o Dpkg::Options::="--force-confold" \
-            dist-upgrade
-            
-        echo "90"; echo "# Cleaning temporary package archives..."
-        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y autoremove
-        DEBIAN_FRONTEND=noninteractive pkexec apt-get -y clean
-        
-        echo "100"; echo "# Update complete!"
+        echo "5"; echo "# Requesting administrator permission..."
+        if pkexec bash -e -c '
+            export DEBIAN_FRONTEND=noninteractive
+            echo "15"; echo "# Synchronizing package repositories (apt update)..."
+            apt-get update -y >/dev/null
+            echo "40"; echo "# Downloading package upgrades..."
+            apt-get -y --download-only dist-upgrade >/dev/null
+            echo "70"; echo "# Installing and configuring system packages..."
+            apt-get -y \
+                -o Dpkg::Options::="--force-confdef" \
+                -o Dpkg::Options::="--force-confold" \
+                dist-upgrade >/dev/null
+            echo "90"; echo "# Cleaning temporary package archives..."
+            apt-get -y autoremove >/dev/null
+            apt-get -y clean >/dev/null
+            echo "100"; echo "# Update complete!"
+        '; then
+            echo "0" > "$status_file"
+        else
+            echo "1" > "$status_file"
+            echo "100"; echo "# Update failed or cancelled."
+        fi
     ) | zenity --progress \
         --title="$APP_TITLE" \
         --window-icon="$APP_ICON" \
         --text="Preparing to check and apply updates..." \
         --percentage=0 \
         --auto-close \
-        --width=500
+        --width=500 || {
+            rm -f "$status_file"
+            return 1
+        }
+
+    local rc=1
+    if [ -f "$status_file" ]; then
+        rc=$(cat "$status_file" 2>/dev/null || echo "1")
+        rm -f "$status_file"
+    fi
+    return "$rc"
 }
 
 perform_update_terminal() {

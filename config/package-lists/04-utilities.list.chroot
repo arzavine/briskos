@@ -4,8 +4,7 @@
 # ==============================================================================
 
 # System Information & Monitoring
-# fastfetch is available from Debian 13 (Trixie) or upstream deb; neofetch is default in Bookworm
-neofetch
+fastfetch
 htop
 btop
 
@@ -21,5 +20,7 @@ nano
 p7zip-full
 unrar-free
 
-# Audio Mixer & Routing Control (PulseAudio / PipeWire control GUI)
+# Audio & Hardware Utilities
 pavucontrol
+alsa-utils
+bluez

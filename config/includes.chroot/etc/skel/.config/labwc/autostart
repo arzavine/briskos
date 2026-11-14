@@ -45,3 +45,8 @@ if command -v swayidle >/dev/null 2>&1; then
         timeout 600 'swaylock -f -c 0f172a' \
         before-sleep 'swaylock -f -c 0f172a' &
 fi
+
+# 6. XDG Autostart Applications (e.g., brisk-update-checker)
+if command -v dex >/dev/null 2>&1; then
+    dex -a -s /etc/xdg/autostart &
+fi

@@ -8,11 +8,25 @@ set -euo pipefail
 
 # Configuration
 GITHUB_REPO="briskos/briskos"
+CHANNEL_FILE="/etc/brisk/channel"
 API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+RELEASES_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1"
 LOG_FILE="/tmp/brisk-update-checker.log"
 CACHE_FILE="/tmp/brisk-latest-release.json"
 CHECK_INTERVAL="${BRISK_UPDATE_INTERVAL:-21600}" # 6 hours default
 STARTUP_DELAY=45
+
+get_active_channel() {
+    local ch="stable"
+    if [ -f "$CHANNEL_FILE" ]; then
+        local raw
+        raw=$(head -n1 "$CHANNEL_FILE" 2>/dev/null | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' || true)
+        if [ "$raw" = "beta" ] || [ "$raw" = "stable" ]; then
+            ch="$raw"
+        fi
+    fi
+    echo "$ch"
+}
 
 # Logging helper
 log() {
@@ -61,9 +75,14 @@ is_newer_version() {
 
 # Perform single update check
 check_for_updates() {
-    local local_ver
+    local local_ver active_ch target_url
     local_ver="$(get_local_version)"
-    log "Checking for updates (Local Version: ${local_ver})..."
+    active_ch="$(get_active_channel)"
+    target_url="$API_URL"
+    if [ "$active_ch" = "beta" ]; then
+        target_url="$RELEASES_URL"
+    fi
+    log "Checking for updates (Local Version: ${local_ver}, Channel: ${active_ch})..."
 
     local tmp_response
     tmp_response="$(mktemp /tmp/brisk-release-XXXXXX.json 2>/dev/null || echo "/tmp/brisk-release-$$.json")"
@@ -75,7 +94,7 @@ check_for_updates() {
         --max-time 10 \
         -H "Accept: application/vnd.github.v3+json" \
         -H "User-Agent: BriskOS-Update-Checker" \
-        "$API_URL" 2>/dev/null || echo "000")
+        "$target_url" 2>/dev/null || echo "000")
 
     if [ "$http_status" != "200" ]; then
         log "Update check skipped: GitHub API returned HTTP status ${http_status} (offline or rate limited)."
@@ -90,10 +109,25 @@ check_for_updates() {
         return 0
     fi
 
+    # Normalize beta array payload (.[0]) to single release object
+    if [ "$active_ch" = "beta" ] && command -v python3 >/dev/null 2>&1; then
+        python3 -c '
+import json, sys
+p = sys.argv[1]
+with open(p, encoding="utf-8") as f:
+    data = json.load(f)
+if isinstance(data, list):
+    if not data:
+        sys.exit(1)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(data[0], f)
+' "$tmp_response" 2>/dev/null || true
+    fi
+
     # Extract tag_name from release JSON
     local remote_tag=""
     if command -v jq >/dev/null 2>&1; then
-        remote_tag=$(jq -r '.tag_name // empty' "$tmp_response" 2>/dev/null || true)
+        remote_tag=$(jq -r 'if type=="array" then (.[0].tag_name // empty) else (.tag_name // empty) end' "$tmp_response" 2>/dev/null || true)
     fi
 
     if [ -z "$remote_tag" ]; then

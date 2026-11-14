@@ -80,14 +80,64 @@ def read_volume():
     return 65, False
 
 def adjust_mic(arg):
-    try:
-        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
+    # Supports "toggle"/"mute", "+5", "-5"
+    action = (arg or "toggle").strip().lower()
+    if action.startswith(("+", "-")):
+        sign = "+" if action.startswith("+") else "-"
+        val = action.strip("+-")
+        step = f"{val}%{sign}"
         try:
-            subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", step, "-l", "1.0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
-            pass
-    return 100, True
+            try:
+                pactl_step = f"{sign}{val}%"
+                subprocess.run(["pactl", "set-source-volume", "@DEFAULT_SOURCE@", pactl_step], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    else:
+        try:
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            try:
+                subprocess.run(["pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    return read_mic()
+
+def read_mic():
+    # Returns (percent: int, muted: bool)
+    try:
+        res = subprocess.check_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], text=True, stderr=subprocess.DEVNULL).strip()
+        # format: "Volume: 1.00" or "Volume: 0.75 [MUTED]"
+        muted = "[MUTED]" in res
+        vol = 100
+        for part in res.split():
+            try:
+                val = float(part)
+                vol = int(round(val * 100))
+                break
+            except ValueError:
+                continue
+        return max(0, min(100, vol)), muted
+    except Exception:
+        pass
+
+    try:
+        res = subprocess.check_output(["pactl", "get-source-volume", "@DEFAULT_SOURCE@"], text=True, stderr=subprocess.DEVNULL)
+        for token in res.split():
+            if token.endswith("%"):
+                val = max(0, min(100, int(token.rstrip("%"))))
+                muted = False
+                try:
+                    mute_res = subprocess.check_output(["pactl", "get-source-mute", "@DEFAULT_SOURCE@"], text=True, stderr=subprocess.DEVNULL)
+                    muted = "yes" in mute_res.lower()
+                except Exception:
+                    pass
+                return val, muted
+    except Exception:
+        pass
+
+    return 100, False
 
 def adjust_brightness(arg):
     # arg: "+5", "-5"
@@ -313,8 +363,18 @@ def run_gui(initial_payload):
                 self.progress.get_style_context().remove_class("muted-bar")
             elif htype == "mic":
                 self.lbl_title.set_text("MIKROFON")
-                self.lbl_icon.set_text("🎙️" if not muted else "🚫")
-                self.lbl_val.set_text("MUTE" if muted else "AKTIF")
+                if muted:
+                    self.lbl_icon.set_text("🚫")
+                    self.lbl_icon.get_style_context().remove_class("osd-icon")
+                    self.lbl_icon.get_style_context().add_class("osd-icon-muted")
+                    self.lbl_val.set_text("MUTE")
+                    self.progress.get_style_context().add_class("muted-bar")
+                else:
+                    self.lbl_icon.set_text("🎙️")
+                    self.lbl_icon.get_style_context().remove_class("osd-icon-muted")
+                    self.lbl_icon.get_style_context().add_class("osd-icon")
+                    self.lbl_val.set_text(f"{val}%")
+                    self.progress.get_style_context().remove_class("muted-bar")
 
             self.progress.set_fraction(fraction)
 
@@ -359,7 +419,7 @@ def main():
         sys.exit(0)
 
     target = sys.argv[1].lower()
-    arg = sys.argv[2] if len(sys.argv) > 2 else "+5"
+    arg = sys.argv[2] if len(sys.argv) > 2 else ("toggle" if target == "mic" else "+5")
 
     payload = {"type": "volume", "value": 65, "muted": False}
 

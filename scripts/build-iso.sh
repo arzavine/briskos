@@ -2,7 +2,7 @@
 # ==============================================================================
 # BriskOS 1.0 LTS (Feather) - Production ISO Build Harness
 # High-performance, lightweight Linux distribution build system
-# Based on Debian 12 (Bookworm) amd64 | live-build framework
+# Based on Debian 13 (Trixie) amd64 | live-build framework
 # ==============================================================================
 set -euo pipefail
 
@@ -80,7 +80,7 @@ print_banner() {
     echo -e "${COLOR_CYAN}${COLOR_BOLD}"
     echo "======================================================================"
     echo "            BriskOS 1.0 (Feather) - ISO Build System                  "
-    echo "          Debian 12 (Bookworm) amd64 | Stacking Wayland               "
+    echo "           Debian 13 (Trixie) amd64 | Stacking Wayland                "
     echo "======================================================================"
     echo -e "${COLOR_RESET}"
     log_info "Project root:    ${PROJECT_ROOT}"
@@ -168,7 +168,7 @@ check_prerequisites() {
     done
 
     # Additional utility tools check
-    local recommended_tools=("dosfstools" "mtools" "grub-mkimage")
+    local recommended_tools=("mkfs.fat" "mtools" "grub-mkimage")
     for tool in "${recommended_tools[@]}"; do
         if ! command -v "${tool}" &>/dev/null; then
             log_warn "Recommended EFI/ISO tool not found in PATH: ${tool}"
@@ -200,7 +200,7 @@ check_prerequisites() {
         local free_gb
         free_gb="$((free_kb / 1024 / 1024))"
         if [ "${free_gb}" -lt "${MIN_FREE_DISK_GB}" ]; then
-            log_warn "Available disk space is ${free_gb} GB (Recommended: >= ${MIN_FREE_DISK_GB} GB for Bookworm live image assembly)."
+            log_warn "Available disk space is ${free_gb} GB (Recommended: >= ${MIN_FREE_DISK_GB} GB for Trixie live image assembly)."
             if [ "${DRY_RUN}" = false ]; then
                 log_warn "Proceeding, but low disk space may cause mksquashfs or debootstrap to fail."
             fi
@@ -350,7 +350,19 @@ verify_artifact() {
 
     # Standardize final target filename as BriskOS-1.0-amd64.iso without duplicating disk space
     local canonical_iso="BriskOS-1.0-amd64.iso"
-    if [ "${found_iso}" != "${canonical_iso}" ]; then
+    local final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
+    if [ "${OUTPUT_DIR}" = "${PROJECT_ROOT}" ]; then
+        final_iso_path="${canonical_iso}"
+    fi
+
+    if [ "${OUTPUT_DIR}" != "${PROJECT_ROOT}" ]; then
+        log_info "Moving artifact '${found_iso}' -> '${final_iso_path}'..."
+        if cp -l "${found_iso}" "${final_iso_path}" 2>/dev/null; then
+            rm -f "${found_iso}"
+        else
+            mv "${found_iso}" "${final_iso_path}"
+        fi
+    elif [ "${found_iso}" != "${canonical_iso}" ]; then
         log_info "Standardizing artifact '${found_iso}' -> '${canonical_iso}'..."
         if cp -l "${found_iso}" "${canonical_iso}" 2>/dev/null; then
             # Retain original filename as lightweight symlink for backwards compatibility
@@ -358,18 +370,6 @@ verify_artifact() {
             ln -sf "${canonical_iso}" "${found_iso}" 2>/dev/null || true
         else
             mv "${found_iso}" "${canonical_iso}"
-        fi
-    fi
-
-    # Move/link to custom output directory if different from project root
-    local final_iso_path="${canonical_iso}"
-    if [ "${OUTPUT_DIR}" != "${PROJECT_ROOT}" ]; then
-        log_info "Moving artifact to designated output directory: ${OUTPUT_DIR}..."
-        if cp -l "${canonical_iso}" "${OUTPUT_DIR}/${canonical_iso}" 2>/dev/null; then
-            final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
-        else
-            mv "${canonical_iso}" "${OUTPUT_DIR}/${canonical_iso}"
-            final_iso_path="${OUTPUT_DIR}/${canonical_iso}"
         fi
     fi
 

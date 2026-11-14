@@ -6,6 +6,8 @@
 
 set -euo pipefail
 
+ORIG_ARGS=("$@")
+
 CONF_DIR="/etc/brisk"
 CHANNEL_FILE="${CONF_DIR}/channel"
 DEFAULT_CHANNEL="stable"
@@ -94,11 +96,17 @@ set_channel() {
         exit 1
     fi
 
-    # Check root privileges
+    # Escalate to root privileges if needed
     if [ "$(id -u)" -ne 0 ]; then
-        echo -e "${red}${bold}Error: Changing the system update channel requires administrator privileges.${rst}" >&2
-        echo -e "Please execute with sudo: ${cyan}sudo brisk-channel set ${target}${rst}" >&2
-        exit 1
+        if command -v sudo >/dev/null 2>&1; then
+            exec sudo "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+        elif command -v pkexec >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            exec pkexec "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+        else
+            echo -e "${red}${bold}Error: Changing the system update channel requires administrator privileges.${rst}" >&2
+            echo -e "Please execute with sudo: ${cyan}sudo brisk-channel set ${target}${rst}" >&2
+            exit 1
+        fi
     fi
 
     # Ensure config directory exists

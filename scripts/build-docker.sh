@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # BriskOS 1.0 LTS (Feather) - Containerized Docker Build Harness
-# Builds the BriskOS ISO inside an isolated Debian Bookworm container
+# Builds the BriskOS ISO inside an isolated Debian Trixie container
 # Compatible with Linux, macOS, Windows Docker Desktop, and WSL2
 # ==============================================================================
 set -euo pipefail
@@ -50,7 +50,7 @@ print_banner() {
     echo -e "${COLOR_CYAN}${COLOR_BOLD}"
     echo "======================================================================"
     echo "       BriskOS 1.0 (Feather) - Containerized Docker Builder           "
-    echo "         Isolated Debian 12 (Bookworm) Live-Build Environment         "
+    echo "         Isolated Debian 13 (Trixie) Live-Build Environment           "
     echo "======================================================================"
     echo -e "${COLOR_RESET}"
     log_info "Project Root: ${PROJECT_ROOT}"

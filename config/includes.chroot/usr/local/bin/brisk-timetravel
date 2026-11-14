@@ -83,25 +83,34 @@ check_disk_space() {
 
 # Prune older automated snapshots when exceeding retention count
 prune_old_snapshots() {
+    local skip_id="${1:-}"
     local retention="${MAX_SNAPSHOTS:-10}"
     [ -d "$BACKUP_DIR" ] || return 0
 
     local auto_snaps
     auto_snaps=$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort || true)
-    local count
-    count=$(echo "$auto_snaps" | grep -c . || echo "0")
+    local count=0
+    if [ -n "$auto_snaps" ]; then
+        count=$(printf '%s\n' "$auto_snaps" | wc -l | tr -d ' ')
+    fi
 
     if [ "$count" -gt "$retention" ]; then
         local remove_count=$((count - retention))
         echo "Notice: Pruning $remove_count oldest snapshots to satisfy retention policy ($retention max)..." >&2
-        echo "$auto_snaps" | head -n "$remove_count" | while read -r old_dir; do
+        local removed=0
+        while IFS= read -r old_dir; do
+            [ "$removed" -ge "$remove_count" ] && break
             if [ -n "$old_dir" ] && [ -d "$old_dir" ]; then
                 local old_id
                 old_id=$(basename "$old_dir")
+                if [ -n "$skip_id" ] && [ "$old_id" = "$skip_id" ]; then
+                    continue
+                fi
                 echo "  -> Removing expired snapshot: $old_id" >&2
                 cmd_delete "$old_id" --quiet || rm -rf "$old_dir"
+                removed=$((removed + 1))
             fi
-        done
+        done <<< "$auto_snaps"
     fi
 }
 
@@ -109,6 +118,7 @@ prune_old_snapshots() {
 cmd_create() {
     local comment="${1:-Manual system checkpoint}"
     local trigger="${2:-manual}"
+    local skip_prune="${3:-false}"
 
     acquire_lock
     mkdir -p "$BACKUP_DIR"
@@ -149,7 +159,7 @@ cmd_create() {
 
         # Rsync core root system excluding transient files, swap, and backup storages
         rsync -aAXH --delete \
-            "${link_dest_arg[@]}" \
+            ${link_dest_arg[@]+"${link_dest_arg[@]}"} \
             --exclude={"/proc/*","/sys/*","/dev/*","/run/*","/tmp/*","/var/tmp/*"} \
             --exclude={"/mnt/*","/media/*","/lost+found","/swapfile"} \
             --exclude={"/var/backups/brisk-timetravel/*","/timeshift/*"} \
@@ -175,8 +185,10 @@ EOF
     echo " [SUCCESS] System checkpoint ${snap_id} created successfully (${snap_size})." >&2
     echo "================================================================================" >&2
 
-    # Run background prune
-    prune_old_snapshots
+    # Run background prune unless deferred (e.g., pre-restore safety snapshot)
+    if [ "$skip_prune" != "true" ] && [ "$trigger" != "pre-restore-safety" ]; then
+        prune_old_snapshots
+    fi
 
     echo "$snap_id"
 }
@@ -283,21 +295,25 @@ cmd_restore() {
     echo "--------------------------------------------------------------------------------"
     echo "--> [Step 1/2] Generating automatic pre-restore safety checkpoint..."
     local safety_id
-    safety_id=$(cmd_create "Safety checkpoint before restoring ${target_id}" "pre-restore-safety")
+    safety_id=$(cmd_create "Safety checkpoint before restoring ${target_id}" "pre-restore-safety" "true")
 
     echo "--> [Step 2/2] Restoring system files from ${target_id}..."
 
     # Sync snapshot files back to root filesystem
-    # Protect dynamic virtual mount points, kernel interfaces, and fstab UUIDs
+    # Protect dynamic virtual mount points, kernel interfaces, user data (/home), and fstab UUIDs
     rsync -aAXH --delete \
         --exclude={"/proc/*","/sys/*","/dev/*","/run/*","/tmp/*","/var/tmp/*"} \
         --exclude={"/mnt/*","/media/*","/lost+found","/swapfile"} \
+        --exclude={"/home/*","/var/cache/apt/archives/*"} \
         --exclude={"/var/backups/brisk-timetravel/*","/timeshift/*"} \
         --exclude={"/etc/fstab","/boot/efi/*"} \
         "${snap_path}/rootfs/" /
 
     echo "--> Flushing filesystem cache to physical storage (sync)..."
     sync
+
+    # Prune old snapshots only after restore completes, protecting the new safety snapshot
+    prune_old_snapshots "$safety_id" || true
 
     echo "================================================================================"
     echo " [SUCCESS] System restored successfully to checkpoint ${target_id}!"
@@ -347,13 +363,16 @@ cmd_auto_hook() {
     fi
 
     # Detect live ISO read-only squashfs environment without persistence
-    if [ -f "/run/live/medium" ] && [ ! -d "/live/persistence" ]; then
+    if [ -d "/run/live/medium" ] && [ ! -d "/live/persistence" ]; then
         exit 0
     fi
 
     # Verify minimum disk space before attempting pre-update snapshot
+    mkdir -p "$BACKUP_DIR" 2>/dev/null || true
+    local df_target="$BACKUP_DIR"
+    [ -d "$df_target" ] || df_target="/"
     local free_kb
-    free_kb=$(df -k --output=avail "$BACKUP_DIR" 2>/dev/null | tail -n1 | tr -d ' ' || echo "0")
+    free_kb=$(df -k --output=avail "$df_target" 2>/dev/null | tail -n1 | tr -d ' ' || echo "0")
     if [ "$free_kb" -lt 1048576 ]; then
         # Less than 1GB free: log notice and skip to avoid aborting package upgrade
         echo "[Brisk Time-Travel] Notice: Low disk space (<1GB). Skipping automated pre-update checkpoint." >&2

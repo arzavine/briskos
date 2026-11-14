@@ -2,7 +2,7 @@
 # ==============================================================================
 # BriskOS 1.0 LTS (Feather) - USB Flash Utility
 # Safe, interactive bootable USB installer creation utility
-# Based on Debian 12 (Bookworm) amd64 live-build hybrid ISO specification
+# Based on Debian 13 (Trixie) amd64 live-build hybrid ISO specification
 # ==============================================================================
 set -euo pipefail
 

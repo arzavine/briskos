@@ -53,7 +53,9 @@ EOF
 ensure_root() {
     if [ "$(id -u)" -ne 0 ]; then
         if command -v sudo >/dev/null 2>&1; then
-            exec sudo "$0" "$@"
+            exec sudo "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+        elif command -v pkexec >/dev/null 2>&1 && [ -n "${DISPLAY:-${WAYLAND_DISPLAY:-}}" ]; then
+            exec pkexec "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
         else
             echo "Error: Root privileges required for package installation/removal." >&2
             exit 1
@@ -281,8 +283,12 @@ cmd_status() {
                     --arg source "$source" \
                     --arg package "$package" \
                     '{id: $id, name: $name, status: $status, source: $source, package: $package}'
+            elif command -v python3 >/dev/null 2>&1; then
+                python3 -c 'import json,sys; print(json.dumps({"id":sys.argv[1],"name":sys.argv[2],"status":sys.argv[3],"source":sys.argv[4],"package":sys.argv[5]}))' \
+                    "$app_id" "$name" "installed" "$source" "$package"
             else
-                printf '{"id":"%s","name":"%s","status":"installed","source":"%s","package":"%s"}\n' "$app_id" "$name" "$source" "$package"
+                printf '{"id":"%s","name":"%s","status":"installed","source":"%s","package":"%s"}\n' \
+                    "${app_id//\"/\\\"}" "${name//\"/\\\"}" "${source//\"/\\\"}" "${package//\"/\\\"}"
             fi
         else
             echo "installed"
@@ -298,8 +304,12 @@ cmd_status() {
                     --arg source "$source" \
                     --arg package "$package" \
                     '{id: $id, name: $name, status: $status, source: $source, package: $package}'
+            elif command -v python3 >/dev/null 2>&1; then
+                python3 -c 'import json,sys; print(json.dumps({"id":sys.argv[1],"name":sys.argv[2],"status":sys.argv[3],"source":sys.argv[4],"package":sys.argv[5]}))' \
+                    "$app_id" "$name" "not-installed" "$source" "$package"
             else
-                printf '{"id":"%s","name":"%s","status":"not-installed","source":"%s","package":"%s"}\n' "$app_id" "$name" "$source" "$package"
+                printf '{"id":"%s","name":"%s","status":"not-installed","source":"%s","package":"%s"}\n' \
+                    "${app_id//\"/\\\"}" "${name//\"/\\\"}" "${source//\"/\\\"}" "${package//\"/\\\"}"
             fi
         else
             echo "not-installed"
@@ -771,6 +781,7 @@ except Exception:
 # Main Dispatcher
 # ------------------------------------------------------------------------------
 main() {
+    ORIG_ARGS=("$@")
     if [ "$#" -eq 0 ]; then
         show_help
         exit 0

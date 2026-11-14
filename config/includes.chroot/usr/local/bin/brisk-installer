@@ -10,6 +10,18 @@ set -eo pipefail
 
 LOG_FILE="/var/log/calamares-installer.log"
 
+# Handle internal elevated re-entry (preserves Wayland/X11 session variables across pkexec)
+IS_ELEVATED=false
+if [ "${1:-}" = "--elevated" ] && [ "$(id -u)" -eq 0 ]; then
+    IS_ELEVATED=true
+    shift
+    [ -n "${1:-}" ] && export WAYLAND_DISPLAY="$1"
+    [ -n "${2:-}" ] && export DISPLAY="$2"
+    [ -n "${3:-}" ] && export XAUTHORITY="$3"
+    export XDG_RUNTIME_DIR="/run/user/0"
+    mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+fi
+
 # Function to ensure log file exists and is writable
 ensure_logfile() {
     if [ ! -f "$LOG_FILE" ]; then
@@ -47,8 +59,8 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export GDK_BACKEND="wayland,x11"
 log_msg "Configured QT_QPA_PLATFORM=${QT_QPA_PLATFORM}, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-none}, DISPLAY=${DISPLAY:-none}"
 
-# Visual desktop notification if available
-if command -v notify-send >/dev/null 2>&1; then
+# Visual desktop notification if available (skip on elevated re-entry)
+if [ "$IS_ELEVATED" = false ] && command -v notify-send >/dev/null 2>&1; then
     notify-send -i calamares "BriskOS Installer" "Launching system installer..." 2>/dev/null || true
 fi
 
@@ -59,9 +71,12 @@ if [ "$(id -u)" -eq 0 ]; then
     calamares -d 2>&1 | tee -a "$LOG_FILE"
     EXIT_CODE=${PIPESTATUS[0]}
 else
-    log_msg "Executing: pkexec calamares -d with polkit privilege escalation"
-    pkexec calamares -d 2>&1 | tee -a "$LOG_FILE"
-    EXIT_CODE=${PIPESTATUS[0]}
+    WL_SOCK="${WAYLAND_DISPLAY:-}"
+    if [ -n "$WL_SOCK" ] && [[ "$WL_SOCK" != /* ]] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        WL_SOCK="${XDG_RUNTIME_DIR}/${WL_SOCK}"
+    fi
+    log_msg "Executing: pkexec /usr/local/bin/brisk-installer --elevated with polkit privilege escalation"
+    exec pkexec /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}"
 fi
 
 log_msg "Calamares installer terminated with exit code: ${EXIT_CODE}"

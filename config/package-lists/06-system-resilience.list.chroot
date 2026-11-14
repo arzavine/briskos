@@ -1,11 +1,10 @@
 # ==============================================================================
 # BriskOS System Resilience & Time-Travel Snapshot Stack
-# Target Distribution: Debian 12 (Bookworm) amd64
+# Target Distribution: Debian 13 (Trixie) amd64
 # ==============================================================================
 
 # Time-Travel Snapshot & Rollback Engine Backends
 timeshift
-btrfs-progs
 rsync
 
 # Scheduling & Notification Daemons

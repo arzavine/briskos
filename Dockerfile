@@ -1,9 +1,9 @@
 # ==============================================================================
 # BriskOS 1.0 LTS (Feather) - Containerized ISO Builder
-# Reproducible live-build environment based on Debian 12 (Bookworm) amd64
+# Reproducible live-build environment based on Debian 13 (Trixie) amd64
 # ==============================================================================
 
-FROM debian:bookworm
+FROM debian:trixie
 
 LABEL org.opencontainers.image.title="BriskOS 1.0 ISO Builder" \
       org.opencontainers.image.description="Containerized live-build environment for BriskOS 1.0 LTS (Feather)" \
