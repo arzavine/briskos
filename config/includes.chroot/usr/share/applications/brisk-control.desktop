@@ -8,5 +8,6 @@ Exec=/usr/local/bin/brisk-control
 Icon=brisk-control
 Terminal=false
 StartupNotify=true
+StartupWMClass=org.briskos.control
 Categories=Settings;HardwareSettings;DesktopSettings;
 Keywords=settings;control;center;panel;display;screen;resolution;night light;gammastep;wifi;network;sound;audio;pipewire;volume;power;battery;tlp;glide;wallpaper;theme;pengaturan;

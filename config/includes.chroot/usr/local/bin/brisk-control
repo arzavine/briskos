@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # ==============================================================================
 # Brisk Control Center (brisk-control / brisk-settings)
-# Unified, Family-Friendly Settings Hub for BriskOS 1.0 LTS (Feather)
-# Pure PyGObject / GTK3 native desktop app adhering to Antislop UI rules.
-# Sub-25 MB RSS RAM, <0.25s instantaneous startup, Night Glass aesthetics.
+# Unified, Human-Crafted Settings Hub for BriskOS 1.0 LTS (Feather)
+# Pure PyGObject / GTK3 native desktop app with Morning Breeze UI & SVG icons.
 # ==============================================================================
 
 import os
 import re
 import sys
-import glob
 import json
+import time
 import shutil
 import signal
 import subprocess
@@ -21,239 +20,811 @@ import xml.etree.ElementTree as ET
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Pango", "1.0")
-from gi.repository import Gtk, Gdk, GLib, Pango
+from gi.repository import Gtk, Gdk, GdkPixbuf, Gio, GLib, Pango
 
 # ------------------------------------------------------------------------------
-# App Metadata
+# App Metadata & Morning Breeze Design Tokens
 # ------------------------------------------------------------------------------
 APP_ID = "org.briskos.control"
 APP_NAME = "Brisk Control Center"
 APP_SUBTITLE = "Pusat Pengaturan Terpadu"
 APP_VERSION = "1.0.0"
 
+COLOR_SHELL = "#E9F1F4"
+COLOR_CANVAS = "#F5F7F7"
+COLOR_CARD = "#FFFFFF"
+COLOR_BORDER_SUBTLE = "#CBD5E1"
+COLOR_BORDER_DIV = "#D5E2E7"
+COLOR_BORDER_INPUT = "#64748B"
+COLOR_TEXT_PRIMARY = "#0F172A"
+COLOR_TEXT_SECONDARY = "#475569"
+COLOR_ACCENT = "#0E7490"
+COLOR_ACCENT_HOVER = "#0C627A"
+COLOR_ACCENT_TEXT = "#0C5B73"
+COLOR_PILL_BG = "#D6E9EE"
+COLOR_WHITE = "#FFFFFF"
+
 # ------------------------------------------------------------------------------
-# Night Glass CSS Theme (WCAG AAA Contrast, Matte Dark Slate, Ice Cyan Accents)
+# Reusable Uniform-Stroke (1.75px) Inline SVG Icon System (Zero Emojis)
 # ------------------------------------------------------------------------------
-NIGHT_GLASS_CSS = b"""
-/* Base Application Window */
-window {
-    background-color: #0b0f19;
-    color: #f8fafc;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Cantarell, "Inter", "Helvetica Neue", sans-serif;
+SVG_ICONS = {
+    "display": (
+        '<rect x="2" y="3" width="20" height="14" rx="2"/>'
+        '<path d="M8 21h8M12 17v4"/>'
+    ),
+    "nightlight": (
+        '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+    ),
+    "network": (
+        '<path d="M5 12.55a11 11 0 0 1 14.08 0"/>'
+        '<path d="M1.42 9a16 16 0 0 1 21.16 0"/>'
+        '<path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>'
+        '<circle cx="12" cy="19.5" r="1.2" fill="CURRENT" stroke="none"/>'
+    ),
+    "sound": (
+        '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+        '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+        '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>'
+    ),
+    "input": (
+        '<rect x="6" y="3" width="12" height="18" rx="6"/>'
+        '<path d="M12 7v4"/>'
+    ),
+    "power": (
+        '<rect x="2" y="7" width="17" height="10" rx="2"/>'
+        '<path d="M21 10v4"/>'
+        '<path d="M6 10.5v3M10 10.5v3M14 10.5v3"/>'
+    ),
+    "appearance": (
+        '<path d="M12 2L2 7l10 5 10-5-10-5z"/>'
+        '<path d="M2 17l10 5 10-5"/>'
+        '<path d="M2 12l10 5 10-5"/>'
+    ),
+    "timetravel": (
+        '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+        '<path d="M12 8v4l2.5 2"/>'
+    ),
+    "about": (
+        '<circle cx="12" cy="12" r="9.5"/>'
+        '<path d="M12 16v-4"/>'
+        '<circle cx="12" cy="8.25" r="1" fill="CURRENT" stroke="none"/>'
+    ),
+    "snapshot": (
+        '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+        '<path d="M9 12l2 2 4-4"/>'
+    ),
+    "wifi_lock": (
+        '<rect x="5" y="11" width="14" height="10" rx="2"/>'
+        '<path d="M8 11V7a4 4 0 0 1 8 0v4"/>'
+    ),
+    "wifi_open": (
+        '<path d="M5 12.55a11 11 0 0 1 14.08 0"/>'
+        '<path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>'
+        '<circle cx="12" cy="19.5" r="1.2" fill="CURRENT" stroke="none"/>'
+    ),
+    "refresh": (
+        '<path d="M21 12a9 9 0 1 1-2.64-6.36"/>'
+        '<polyline points="21 3 21 9 15 9"/>'
+    ),
+    "check": (
+        '<polyline points="20 6 9 17 4 12"/>'
+    ),
+    "brisk_mark": (
+        '<path d="M4 19C9 15 14 9.5 20 4c-1.2 4.8-3.8 9.2-8.2 12.2C9.2 18 6.4 19 4 19z" '
+        'fill="CURRENT" fill-opacity="0.16" stroke="CURRENT"/>'
+        '<path d="M4 19C9.5 14.5 14.5 9.5 20 4"/>'
+    ),
 }
 
-/* HeaderBar */
-headerbar {
-    background-color: #070a12;
-    border-bottom: 1px solid #1e293b;
-    padding: 8px 16px;
+
+def svg_pixbuf(name, color=COLOR_TEXT_SECONDARY, size=18):
+    """Render an inline uniform-stroke 1.75px SVG icon into a GdkPixbuf."""
+    body = SVG_ICONS.get(name, SVG_ICONS["about"]).replace("CURRENT", color)
+    svg_xml = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.75" '
+        f'stroke-linecap="round" stroke-linejoin="round">{body}</svg>'
+    ).encode("utf-8")
+    try:
+        loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+        loader.set_size(size, size)
+        loader.write(svg_xml)
+        loader.close()
+        return loader.get_pixbuf()
+    except Exception:
+        return None
+
+
+def svg_icon(name, color=COLOR_TEXT_SECONDARY, size=18):
+    """Build a crisp Gtk.Image from an inline SVG vector icon."""
+    pixbuf = svg_pixbuf(name, color=color, size=size)
+    if pixbuf is not None:
+        return Gtk.Image.new_from_pixbuf(pixbuf)
+    return Gtk.Image.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.MENU)
+
+
+# ------------------------------------------------------------------------------
+# Morning Breeze Light CSS (Adwaita Gradient/Blue Leakage Eliminated)
+# ------------------------------------------------------------------------------
+MORNING_BREEZE_CSS = b"""
+/* Base Application Window & Canvas */
+window,
+window.background,
+window.csd {
+    background-color: #F5F7F7;
+    background-image: none;
     box-shadow: none;
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-headerbar .title {
-    color: #f8fafc;
+/* HeaderBar Shell (#E9F1F4 Warm Ice Mist) */
+headerbar,
+headerbar.titlebar,
+headerbar:backdrop {
+    background-color: #E9F1F4;
+    background-image: none;
+    box-shadow: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    border-bottom: 1px solid #D5E2E7;
+    color: #0F172A;
+    min-height: 48px;
+    padding: 6px 14px;
+}
+
+headerbar .title,
+headerbar title {
+    color: #0F172A;
     font-weight: 700;
-    font-size: 15px;
+    font-size: 14px;
 }
 
-headerbar .subtitle {
-    color: #38bdf8;
+headerbar .subtitle,
+headerbar subtitle {
+    color: #475569;
     font-size: 11px;
     font-weight: 500;
 }
 
 headerbar button {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    color: #94a3b8;
+    color: #0F172A;
+    font-weight: 600;
+    font-size: 12px;
     padding: 6px 12px;
-    transition: all 120ms ease;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 headerbar button:hover {
-    background-color: #1e293b;
-    color: #38bdf8;
-    border-color: #38bdf8;
+    background-color: #D6E9EE;
+    background-image: none;
+    border-color: #0E7490;
+    color: #0C5B73;
 }
 
-/* Sidebar Navigation */
+headerbar button:active {
+    background-color: #C2DFE7;
+    background-image: none;
+    border-color: #0C627A;
+    color: #0F172A;
+}
+
+headerbar button:disabled {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #475569;
+    opacity: 0.65;
+}
+
+headerbar button.titlebutton {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #475569;
+    padding: 4px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+headerbar button.titlebutton:hover {
+    background-color: #D6E9EE;
+    border-color: #9ECAD6;
+    color: #0F172A;
+}
+
+headerbar button.titlebutton.close:hover {
+    background-color: #FEE2E2;
+    border-color: #FCA5A5;
+    color: #B91C1C;
+}
+
+/* Reset ScrolledWindow & Viewport Leakage */
+scrolledwindow,
+viewport,
+scrolledwindow undershoot.top,
+scrolledwindow undershoot.bottom,
+scrolledwindow overshoot.top,
+scrolledwindow overshoot.bottom {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    border: none;
+}
+
+scrolledwindow.content-scroll,
+scrolledwindow.content-scroll viewport {
+    background-color: #F5F7F7;
+    background-image: none;
+}
+
+/* Sidebar Navigation Shell (#E9F1F4 Warm Ice Mist) */
 .sidebar-box {
-    background-color: #070a12;
-    border-right: 1px solid #1e293b;
-    min-width: 220px;
+    background-color: #E9F1F4;
+    background-image: none;
+    box-shadow: none;
+    border-right: 1px solid #D5E2E7;
+    min-width: 240px;
 }
 
-.sidebar-search {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
+list,
+listbox {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    border: none;
+    padding: 4px 0;
+}
+
+/* Search Entry */
+entry,
+entry.sidebar-search {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    color: #f8fafc;
-    padding: 6px 10px;
-    margin: 12px 14px 8px 14px;
+    color: #0F172A;
+    font-size: 13px;
+    padding: 7px 10px;
+    min-height: 20px;
+    transition: border-color 120ms ease;
 }
 
-.sidebar-search:focus {
-    border-color: #38bdf8;
+entry.sidebar-search {
+    margin: 12px 12px 8px 12px;
 }
 
-.sidebar-row {
-    padding: 10px 14px;
+entry:focus,
+entry.sidebar-search:focus {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 2px solid #0E7490;
+    padding: 6px 9px;
+    outline: none;
+}
+
+entry placeholder {
+    color: #475569;
+}
+
+entry image {
+    color: #475569;
+}
+
+entry image:hover {
+    color: #0E7490;
+}
+
+entry selection {
+    background-color: #D6E9EE;
+    color: #0F172A;
+}
+
+/* Sidebar Rows (Attached Directly to Gtk.ListBoxRow) */
+row.sidebar-row {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    border: none;
+    border-left: 3px solid transparent;
     border-radius: 8px;
     margin: 2px 10px;
-    color: #94a3b8;
+    padding: 9px 12px;
+    color: #475569;
     font-weight: 500;
     font-size: 13px;
-    transition: all 100ms ease;
+    transition: background-color 120ms ease, color 120ms ease;
 }
 
-.sidebar-row:hover {
-    background-color: #0f172a;
-    color: #f8fafc;
+row.sidebar-row label {
+    color: #475569;
+    font-weight: 500;
 }
 
-.sidebar-row:selected {
-    background-color: #0f172a;
-    color: #38bdf8;
-    border-left: 3px solid #38bdf8;
+row.sidebar-row:hover {
+    background-color: #DCE9EE;
+    background-image: none;
+    box-shadow: none;
+}
+
+row.sidebar-row:hover label {
+    color: #0F172A;
+}
+
+row.sidebar-row:selected,
+row.sidebar-row:selected:hover,
+row.sidebar-row:selected:focus {
+    background-color: #D6E9EE;
+    background-image: none;
+    box-shadow: none;
+    border-left: 3px solid #0E7490;
+}
+
+row.sidebar-row:selected label,
+row.sidebar-row:selected:hover label,
+row.sidebar-row:selected:focus label {
+    color: #0C5B73;
     font-weight: 600;
 }
 
-/* Content Area */
+.sidebar-empty {
+    color: #475569;
+    font-size: 12px;
+    padding: 16px 14px;
+}
+
+/* Content Canvas (#F5F7F7 Warm Cloud Porcelain) */
 .content-area {
-    background-color: #0b0f19;
+    background-color: #F5F7F7;
+    background-image: none;
     padding: 24px 28px;
 }
 
+.section-header-box {
+    margin-bottom: 18px;
+}
+
+.section-icon-wrap {
+    background-color: #D6E9EE;
+    border: 1px solid #B6D7E2;
+    border-radius: 10px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+}
+
 .section-header {
-    color: #f8fafc;
-    font-size: 20px;
+    color: #0F172A;
+    font-size: 19px;
     font-weight: 700;
-    margin-bottom: 4px;
 }
 
 .section-subtitle {
-    color: #94a3b8;
+    color: #475569;
     font-size: 13px;
-    margin-bottom: 20px;
+    margin-top: 2px;
 }
 
-/* Setting Cards */
+/* Setting Cards (#FFFFFF Surface + Hairline #CBD5E1 Border, Zero Shadows) */
 .setting-card {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 12px;
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid #CBD5E1;
+    border-radius: 10px;
     padding: 18px 20px;
     margin-bottom: 16px;
 }
 
 .card-title {
-    color: #f8fafc;
+    color: #0F172A;
     font-size: 14px;
     font-weight: 600;
 }
 
 .card-desc {
-    color: #94a3b8;
+    color: #475569;
     font-size: 12px;
     margin-top: 2px;
 }
 
-/* Form Controls */
+.spec-key {
+    color: #475569;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.spec-val {
+    color: #0F172A;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+separator {
+    background-color: #E2E8F0;
+    background-image: none;
+    min-height: 1px;
+    min-width: 1px;
+}
+
+/* Form Controls: ComboBox, Menu, RadioButton, Switch, Scale */
 combobox button {
-    background-color: #0b0f19;
-    border: 1px solid #1e293b;
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    color: #f8fafc;
-    padding: 6px 12px;
+    color: #0F172A;
+    padding: 7px 12px;
+    font-size: 13px;
 }
 
 combobox button:hover {
-    border-color: #38bdf8;
+    background-color: #F5F7F7;
+    border-color: #0E7490;
+}
+
+combobox button:disabled {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #475569;
+    opacity: 0.65;
+}
+
+menu {
+    background-color: #FFFFFF;
+    background-image: none;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 4px;
+    color: #0F172A;
+}
+
+menuitem {
+    background-color: transparent;
+    background-image: none;
+    color: #0F172A;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+menuitem:hover {
+    background-color: #D6E9EE;
+    color: #0C5B73;
+}
+
+radiobutton,
+checkbutton {
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: #0F172A;
+    padding: 4px 2px;
+}
+
+radiobutton label,
+checkbutton label {
+    color: #0F172A;
+    padding-left: 6px;
+    font-size: 13px;
+}
+
+radiobutton radio {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    -gtk-icon-source: none;
+    border: 2px solid #64748B;
+    border-radius: 9999px;
+    min-width: 18px;
+    min-height: 18px;
+}
+
+radiobutton:hover radio {
+    border-color: #0E7490;
+}
+
+radiobutton:checked radio {
+    background-color: #0E7490;
+    background-image: none;
+    box-shadow: inset 0 0 0 4px #FFFFFF;
+    border: 2px solid #0E7490;
+}
+
+checkbutton check {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 2px solid #64748B;
+    border-radius: 5px;
+    min-width: 17px;
+    min-height: 17px;
+    color: #FFFFFF;
+}
+
+checkbutton:hover check {
+    border-color: #0E7490;
+}
+
+checkbutton:checked check {
+    background-color: #0E7490;
+    background-image: none;
+    border-color: #0E7490;
+    color: #FFFFFF;
 }
 
 switch {
-    background-color: #1e293b;
+    background-color: #CBD5E1;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 14px;
-    border: 1px solid #334155;
+    min-width: 44px;
+    min-height: 24px;
+    color: transparent;
 }
 
-button:focus,
-switch:focus,
-combobox button:focus,
-entry:focus,
-scale:focus,
-row:focus {
-    outline: 2px solid #38bdf8;
-    outline-offset: 2px;
+switch image {
+    color: transparent;
 }
 
 switch:checked {
-    background-color: #0284c7;
-    border-color: #38bdf8;
+    background-color: #0E7490;
+    background-image: none;
+    border-color: #0C627A;
 }
 
 switch slider {
-    background-color: #ffffff;
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+    border: 1px solid #64748B;
     border-radius: 12px;
     min-width: 20px;
     min-height: 20px;
+    margin: 1px;
+}
+
+switch:checked slider {
+    border-color: #0C627A;
 }
 
 scale trough {
-    background-color: #1e293b;
+    background-color: #E2E8F0;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid #94A3B8;
     border-radius: 4px;
     min-height: 6px;
 }
 
 scale highlight {
-    background-color: #38bdf8;
+    background-color: #0E7490;
+    background-image: none;
     border-radius: 4px;
 }
 
 scale slider {
-    background-color: #ffffff;
-    border: 2px solid #0284c7;
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 2px solid #0E7490;
     border-radius: 10px;
-    min-width: 16px;
-    min-height: 16px;
+    min-width: 18px;
+    min-height: 18px;
 }
 
-/* Action Buttons */
-.btn-primary {
-    background-image: linear-gradient(135deg, #38bdf8 0%, #0284c7 50%, #1d4ed8 100%);
-    color: #ffffff;
+scale slider:hover {
+    background-color: #D6E9EE;
+    border-color: #0C627A;
+}
+
+scale value {
+    color: #0F172A;
     font-weight: 600;
+    font-size: 12px;
+}
+
+/* Action Buttons (Solid Cerulean Teal #0E7490, Zero Gradients) */
+button {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    border: none;
+    color: #0F172A;
+    font-weight: 500;
+    padding: 8px 16px;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+button:hover {
+    background-color: #E9F1F4;
+    background-image: none;
+    border-color: #0E7490;
+    color: #0C5B73;
+}
+
+button:active {
+    background-color: #D6E9EE;
+    background-image: none;
+    border-color: #0C627A;
+    color: #0F172A;
+}
+
+button:disabled {
+    background-color: #F1F5F9;
+    background-image: none;
+    border-color: #CBD5E1;
+    color: #475569;
+    opacity: 0.65;
+}
+
+button.btn-primary {
+    background-color: #0E7490;
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid #0C627A;
+    border-radius: 8px;
+    color: #FFFFFF;
+    font-weight: 600;
     padding: 8px 18px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
-.btn-primary:hover {
-    background-image: linear-gradient(135deg, #7dd3fc 0%, #0284c7 50%, #2563eb 100%);
+button.btn-primary label {
+    color: #FFFFFF;
+    font-weight: 600;
 }
 
-.btn-secondary {
-    background-color: #1e293b;
-    border: 1px solid #334155;
+button.btn-primary:hover {
+    background-color: #0C627A;
+    background-image: none;
+    border-color: #094D61;
+    color: #FFFFFF;
+}
+
+button.btn-primary:active {
+    background-color: #094D61;
+    background-image: none;
+    color: #FFFFFF;
+}
+
+button.btn-primary:disabled {
+    background-color: #CBD5E1;
+    background-image: none;
+    border-color: #94A3B8;
+    color: #475569;
+    opacity: 0.75;
+}
+
+button.btn-primary:disabled label {
+    color: #475569;
+}
+
+button.btn-secondary {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid #64748B;
     border-radius: 8px;
-    color: #f8fafc;
+    color: #0F172A;
     padding: 8px 16px;
     font-weight: 500;
 }
 
-.btn-secondary:hover {
-    background-color: #334155;
-    border-color: #38bdf8;
+button.btn-secondary:hover {
+    background-color: #E9F1F4;
+    background-image: none;
+    border-color: #0E7490;
+    color: #0C5B73;
 }
 
-/* Status Badges */
+button.btn-secondary:active {
+    background-color: #D6E9EE;
+    background-image: none;
+    border-color: #0C627A;
+    color: #0F172A;
+}
+
+/* Wallpaper Preset Cards */
+button.wp-card {
+    background-color: #FFFFFF;
+    background-image: none;
+    box-shadow: none;
+    border: 1px solid #64748B;
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-width: 210px;
+}
+
+button.wp-card:hover {
+    background-color: #F5F7F7;
+    border-color: #0E7490;
+}
+
+button.wp-card.active-preset {
+    background-color: #D6E9EE;
+    background-image: none;
+    border: 2px solid #0E7490;
+    padding: 11px 13px;
+}
+
+button.wp-card.active-preset .card-title {
+    color: #0C5B73;
+}
+
+button.wp-card.active-preset .card-desc {
+    color: #0F172A;
+}
+
+.swatch-silk {
+    background-image: linear-gradient(135deg, #DCECF2 0%, #B8DCE8 65%, #1B7A94 100%);
+    border: 1px solid #64748B;
+    border-radius: 6px;
+    min-height: 30px;
+}
+
+.swatch-mist {
+    background-color: #DCECF2;
+    background-image: none;
+    border: 1px solid #64748B;
+    border-radius: 6px;
+    min-height: 30px;
+}
+
+.swatch-slate {
+    background-color: #1E293B;
+    background-image: none;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    min-height: 30px;
+}
+
+/* Wi-Fi & Snapshot Row Items */
+.sub-row {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+/* Focus Ring Accessibility (R-32: Visible 2px #0E7490 Indicator) */
+button:focus,
+switch:focus,
+combobox button:focus,
+radiobutton:focus,
+checkbutton:focus,
+scale:focus,
+row.sidebar-row:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+}
+
+row.sidebar-row:focus {
+    outline-offset: -2px;
+}
+
+/* Status Badges (Verified >= 4.5:1 Contrast Pairs) */
 .badge-active {
-    background-color: rgba(34, 197, 94, 0.15);
-    color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background-color: #DCFCE7;
+    color: #15803D;
+    border: 1px solid #86EFAC;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
@@ -261,9 +832,9 @@ scale slider {
 }
 
 .badge-info {
-    background-color: rgba(56, 189, 248, 0.15);
-    color: #38bdf8;
-    border: 1px solid rgba(56, 189, 248, 0.3);
+    background-color: #D6E9EE;
+    color: #0C5B73;
+    border: 1px solid #9ECAD6;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
@@ -271,9 +842,9 @@ scale slider {
 }
 
 .badge-warn {
-    background-color: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(251, 191, 36, 0.35);
+    background-color: #FEF3C7;
+    color: #92400E;
+    border: 1px solid #FCD34D;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
@@ -281,21 +852,80 @@ scale slider {
 }
 
 .badge-error {
-    background-color: rgba(244, 63, 94, 0.15);
-    color: #fb7185;
-    border: 1px solid rgba(244, 63, 94, 0.35);
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    border: 1px solid #FCA5A5;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 600;
 }
+
+/* Dialogs & Tooltips */
+dialog,
+messagedialog {
+    background-color: #F5F7F7;
+    background-image: none;
+    color: #0F172A;
+}
+
+dialog headerbar,
+messagedialog headerbar {
+    background-color: #E9F1F4;
+    background-image: none;
+    border-bottom: 1px solid #D5E2E7;
+}
+
+tooltip {
+    background-color: #0F172A;
+    background-image: none;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #FFFFFF;
+    padding: 6px 10px;
+}
+
+tooltip label {
+    color: #FFFFFF;
+    font-size: 12px;
+}
+
+/* Clean Morning Breeze Scrollbars */
+scrollbar {
+    background-color: transparent;
+}
+
+scrollbar trough {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    min-width: 6px;
+    min-height: 6px;
+    border-radius: 9999px;
+    background-color: #94A3B8;
+    border: none;
+    margin: 2px;
+}
+
+scrollbar slider:hover {
+    background-color: #64748B;
+}
+
+scrollbar slider:active {
+    background-color: #0E7490;
+}
 """
+
 
 class BriskControlCenter(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title=APP_NAME)
-        self.set_default_size(960, 640)
+        self.set_default_size(980, 660)
+        self.set_size_request(760, 520)
         self.set_position(Gtk.WindowPosition.CENTER)
+        Gtk.Window.set_default_icon_name("brisk-control")
         self.set_icon_name("brisk-control")
 
         self._loading_night = False
@@ -304,6 +934,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self._loading_power = False
         self._loading_appearance = False
         self._loading_network = False
+        self._snapshot_busy = False
         self._temp_debounce_id = None
         self._input_debounce_id = None
         self._vol_debounce_id = None
@@ -311,24 +942,37 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self._audio_sinks = []
         self._active_wifi_con = None
         self._active_wifi_dev = None
+        self._sidebar_rows = {}
+        self._active_cat_id = "display"
 
-        # Load Custom Night Glass CSS
         css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(NIGHT_GLASS_CSS)
+        css_provider.load_from_data(MORNING_BREEZE_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
             css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
         self._build_headerbar()
         self._build_ui()
+        self.connect("key-press-event", self._on_window_key_press)
         self._load_all_states()
         self.show_all()
+        if hasattr(self, "sidebar_empty_lbl"):
+            self.sidebar_empty_lbl.hide()
+
+        # Focus sidebar row instead of SearchEntry on launch so SearchEntry does not trap keypresses
+        GLib.idle_add(self._focus_initial_row)
 
     # --------------------------------------------------------------------------
-    # Shared Async, Config, & Dialog Helpers
+    # Shared Async, Config, Badge & Dialog Helpers
     # --------------------------------------------------------------------------
+    def _focus_initial_row(self):
+        row = self.nav_list.get_selected_row() or self.nav_list.get_row_at_index(0)
+        if row:
+            row.grab_focus()
+        return False
+
     def _ui(self, fn, *args):
         def _cb():
             fn(*args)
@@ -349,15 +993,25 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         except Exception as exc:
             return False, "", str(exc)
 
+    def _set_badge(self, label_widget, text, style_class):
+        ctx = label_widget.get_style_context()
+        for cls in ("badge-active", "badge-info", "badge-warn", "badge-error"):
+            ctx.remove_class(cls)
+        ctx.add_class(style_class)
+        label_widget.set_text(text)
+
     def _show_dialog(self, msg_type, title, body):
         dialog = Gtk.MessageDialog(
             transient_for=self,
-            flags=0,
+            modal=True,
             message_type=msg_type,
             buttons=Gtk.ButtonsType.OK,
-            text=title
+            text=title,
         )
         dialog.format_secondary_text(body)
+        ok_btn = dialog.get_widget_for_response(Gtk.ResponseType.OK)
+        if ok_btn:
+            ok_btn.get_style_context().add_class("btn-primary")
         dialog.run()
         dialog.destroy()
 
@@ -373,6 +1027,39 @@ class BriskControlCenter(Gtk.ApplicationWindow):
     def _clear_box(self, box):
         for child in box.get_children():
             box.remove(child)
+
+    def _make_section_header(self, icon_name, title_text, subtitle_text):
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        hdr.get_style_context().add_class("section-header-box")
+
+        icon_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        icon_wrap.get_style_context().add_class("section-icon-wrap")
+        icon_wrap.set_valign(Gtk.Align.CENTER)
+        icon_wrap.add(svg_icon(icon_name, color=COLOR_ACCENT_TEXT, size=22))
+
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        text_box.set_valign(Gtk.Align.CENTER)
+        h = Gtk.Label(label=title_text, xalign=0)
+        h.get_style_context().add_class("section-header")
+        h.set_line_wrap(True)
+
+        sub = Gtk.Label(label=subtitle_text, xalign=0)
+        sub.get_style_context().add_class("section-subtitle")
+        sub.set_line_wrap(True)
+
+        text_box.pack_start(h, False, False, 0)
+        text_box.pack_start(sub, False, False, 0)
+
+        hdr.pack_start(icon_wrap, False, False, 0)
+        hdr.pack_start(text_box, True, True, 0)
+        return hdr, sub
+
+    def select_panel(self, cat_id):
+        row = self._sidebar_rows.get(cat_id)
+        if row:
+            row.show()
+            self.nav_list.select_row(row)
+            self.stack.set_visible_child_name(cat_id)
 
     def _load_all_states(self):
         self._load_display_state()
@@ -391,50 +1078,61 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         header.set_subtitle(APP_SUBTITLE)
         self.set_titlebar(header)
 
-        # Quick Time-Travel Snapshot Button in Header
-        snap_btn = Gtk.Button()
+        # Quick Time-Travel Snapshot Button in Header (SVG Icon + Preserved Label)
+        self.hdr_snap_btn = Gtk.Button()
         snap_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        snap_icon = Gtk.Label(label="🛡️")
-        snap_lbl = Gtk.Label(label="Snapshot")
+        snap_icon = svg_icon("snapshot", color=COLOR_ACCENT_TEXT, size=16)
+        self.hdr_snap_lbl = Gtk.Label(label="Snapshot")
         snap_box.pack_start(snap_icon, False, False, 0)
-        snap_box.pack_start(snap_lbl, False, False, 0)
-        snap_btn.add(snap_box)
-        snap_btn.set_tooltip_text("Ambil Titik Pemulihan Sistem Instan (Brisk Time-Travel)")
-        snap_btn.connect("clicked", self._on_quick_snapshot)
-        header.pack_end(snap_btn)
+        snap_box.pack_start(self.hdr_snap_lbl, False, False, 0)
+        self.hdr_snap_btn.add(snap_box)
+        self.hdr_snap_btn.set_tooltip_text("Ambil Titik Pemulihan Sistem Instan (Brisk Time-Travel)")
+        self.hdr_snap_btn.connect("clicked", self._on_quick_snapshot)
+        header.pack_end(self.hdr_snap_btn)
 
     def _build_ui(self):
         main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.add(main_box)
 
         # ----------------------------------------------------------------------
-        # Left Sidebar Navigation
+        # Left Sidebar Navigation (#E9F1F4)
         # ----------------------------------------------------------------------
         sidebar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         sidebar_box.get_style_context().add_class("sidebar-box")
         main_box.pack_start(sidebar_box, False, False, 0)
 
-        # Search Bar
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_placeholder_text("Cari pengaturan...")
         self.search_entry.get_style_context().add_class("sidebar-search")
         self.search_entry.connect("search-changed", self._on_search_changed)
+        self.search_entry.connect("key-press-event", self._on_search_key_press)
         sidebar_box.pack_start(self.search_entry, False, False, 0)
 
-        # Sidebar List
         scrolled_nav = Gtk.ScrolledWindow()
         scrolled_nav.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         sidebar_box.pack_start(scrolled_nav, True, True, 0)
 
+        nav_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        scrolled_nav.add(nav_wrap)
+
         self.nav_list = Gtk.ListBox()
         self.nav_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.nav_list.connect("row-selected", self._on_nav_selected)
-        scrolled_nav.add(self.nav_list)
+        nav_wrap.pack_start(self.nav_list, False, False, 0)
+
+        self.sidebar_empty_lbl = Gtk.Label(
+            label="Tidak ada pengaturan yang cocok. Tekan Esc untuk mereset pencarian.",
+            xalign=0,
+        )
+        self.sidebar_empty_lbl.set_line_wrap(True)
+        self.sidebar_empty_lbl.get_style_context().add_class("sidebar-empty")
+        nav_wrap.pack_start(self.sidebar_empty_lbl, False, False, 0)
 
         # ----------------------------------------------------------------------
-        # Right Stack Area
+        # Right Stack Area (#F5F7F7)
         # ----------------------------------------------------------------------
         content_scroll = Gtk.ScrolledWindow()
+        content_scroll.get_style_context().add_class("content-scroll")
         content_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         main_box.pack_start(content_scroll, True, True, 0)
 
@@ -443,34 +1141,39 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self.stack.set_transition_duration(150)
         content_scroll.add(self.stack)
 
-        # Categories
         self.categories = [
-            ("display", "🖥️  Layar & Tampilan", self._create_display_panel),
-            ("nightlight", "🌙  Pelindung Mata", self._create_nightlight_panel),
-            ("network", "📶  Wi-Fi & Jaringan", self._create_network_panel),
-            ("sound", "🎧  Suara & Audio", self._create_sound_panel),
-            ("input", "🖱️  Mouse & Touchpad", self._create_input_panel),
-            ("power", "⚡  Daya & Baterai", self._create_power_panel),
-            ("appearance", "🎨  Personalisasi", self._create_appearance_panel),
-            ("timetravel", "🛡️  Cadangan Sistem", self._create_timetravel_panel),
-            ("about", "ℹ️  Tentang Laptop & OS", self._create_about_panel),
+            ("display", "Layar & Tampilan", "display", self._create_display_panel),
+            ("nightlight", "Pelindung Mata", "nightlight", self._create_nightlight_panel),
+            ("network", "Wi-Fi & Jaringan", "network", self._create_network_panel),
+            ("sound", "Suara & Audio", "sound", self._create_sound_panel),
+            ("input", "Mouse & Touchpad", "input", self._create_input_panel),
+            ("power", "Daya & Baterai", "power", self._create_power_panel),
+            ("appearance", "Personalisasi", "appearance", self._create_appearance_panel),
+            ("timetravel", "Cadangan Sistem", "timetravel", self._create_timetravel_panel),
+            ("about", "Tentang Laptop & OS", "about", self._create_about_panel),
         ]
 
-        for cat_id, cat_title, builder in self.categories:
-            # Add to Sidebar
+        for cat_id, cat_title, icon_name, builder in self.categories:
             row = Gtk.ListBoxRow()
             row.cat_id = cat_id
             row.cat_title = cat_title
-            lbl = Gtk.Label(label=cat_title, xalign=0)
-            lbl.get_style_context().add_class("sidebar-row")
-            row.add(lbl)
+            row.icon_name = icon_name
+            row.get_style_context().add_class("sidebar-row")
+
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            row_img = svg_icon(icon_name, color=COLOR_TEXT_SECONDARY, size=18)
+            row_lbl = Gtk.Label(label=cat_title, xalign=0)
+            row_box.pack_start(row_img, False, False, 0)
+            row_box.pack_start(row_lbl, True, True, 0)
+            row.icon_img = row_img
+            row.add(row_box)
+
+            self._sidebar_rows[cat_id] = row
             self.nav_list.add(row)
 
-            # Build and add Panel
             panel = builder()
             self.stack.add_named(panel, cat_id)
 
-        # Select first row
         first_row = self.nav_list.get_row_at_index(0)
         if first_row:
             self.nav_list.select_row(first_row)
@@ -482,12 +1185,12 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Layar & Tampilan (Display)", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Atur resolusi, kecepatan refresh, dan skala teks layar laptop Anda.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "display",
+            "Layar & Tampilan",
+            "Atur resolusi, kecepatan refresh, dan skala teks layar laptop Anda.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         # Card 1: Monitor Detection & Resolution
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
@@ -499,16 +1202,29 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_m.get_style_context().add_class("card-title")
         self.lbl_display_desc = Gtk.Label(label="Memeriksa output layar Wayland...", xalign=0)
         self.lbl_display_desc.get_style_context().add_class("card-desc")
+        self.lbl_display_desc.set_line_wrap(True)
         vbox1.pack_start(lbl_m, False, False, 0)
         vbox1.pack_start(self.lbl_display_desc, False, False, 0)
+
+        right_m = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        right_m.set_valign(Gtk.Align.CENTER)
         self.badge_display = Gtk.Label(label="Memuat")
         self.badge_display.get_style_context().add_class("badge-info")
+        self.btn_refresh_display = Gtk.Button()
+        ref_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        ref_box.pack_start(svg_icon("refresh", color=COLOR_TEXT_PRIMARY, size=14), False, False, 0)
+        ref_box.pack_start(Gtk.Label(label="Deteksi Ulang"), False, False, 0)
+        self.btn_refresh_display.add(ref_box)
+        self.btn_refresh_display.get_style_context().add_class("btn-secondary")
+        self.btn_refresh_display.connect("clicked", lambda _b: self._load_display_state())
+        right_m.pack_start(self.badge_display, False, False, 0)
+        right_m.pack_start(self.btn_refresh_display, False, False, 0)
+
         row1.pack_start(vbox1, True, True, 0)
-        row1.pack_end(self.badge_display, False, False, 0)
+        row1.pack_end(right_m, False, False, 0)
         card1.pack_start(row1, False, False, 0)
 
-        sep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        card1.pack_start(sep1, False, False, 0)
+        card1.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
         # Resolution Dropdown
         row_res = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -517,6 +1233,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_res.get_style_context().add_class("card-title")
         lbl_resd = Gtk.Label(label="Pilih ketajaman piksel layar sesuai rasio monitor Anda", xalign=0)
         lbl_resd.get_style_context().add_class("card-desc")
+        lbl_resd.set_line_wrap(True)
         vbox_res.pack_start(lbl_res, False, False, 0)
         vbox_res.pack_start(lbl_resd, False, False, 0)
 
@@ -536,6 +1253,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_hz.get_style_context().add_class("card-title")
         lbl_hzd = Gtk.Label(label="Semakin tinggi Hz, pergerakan kursor dan jendela semakin mulus", xalign=0)
         lbl_hzd.get_style_context().add_class("card-desc")
+        lbl_hzd.set_line_wrap(True)
         vbox_hz.pack_start(lbl_hz, False, False, 0)
         vbox_hz.pack_start(lbl_hzd, False, False, 0)
 
@@ -549,7 +1267,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card1.pack_start(row_hz, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
-        # Card 2: HiDPI Display Scale
+        # Card 2: HiDPI Display Scale & Apply Action
         card2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card2.get_style_context().add_class("setting-card")
 
@@ -557,13 +1275,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_sc.get_style_context().add_class("card-title")
         lbl_scd = Gtk.Label(label="Perbesar ukuran teks dan ikon agar pas di layar laptop Anda tanpa buram", xalign=0)
         lbl_scd.get_style_context().add_class("card-desc")
+        lbl_scd.set_line_wrap(True)
         card2.pack_start(lbl_sc, False, False, 0)
         card2.pack_start(lbl_scd, False, False, 0)
 
-        # Radio Scale Buttons
         scale_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         self.scale_100 = Gtk.RadioButton.new_with_label(None, "100% (Standar)")
-        self.scale_125 = Gtk.RadioButton.new_with_label_from_widget(self.scale_100, "125% (Rekomendasi Laptop)")
+        self.scale_125 = Gtk.RadioButton.new_with_label_from_widget(self.scale_100, "125% (Rekomendasi)")
         self.scale_150 = Gtk.RadioButton.new_with_label_from_widget(self.scale_100, "150% (Besar Nyaman)")
         self.scale_100.set_active(True)
 
@@ -572,11 +1290,26 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         scale_box.pack_start(self.scale_150, False, False, 0)
         card2.pack_start(scale_box, False, False, 0)
 
-        # Apply Button
-        self.btn_apply_display = Gtk.Button(label="Terapkan Pengaturan Layar")
+        card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
+
+        # Compact right-aligned primary action button (never stretched full-width)
+        action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        lbl_hint = Gtk.Label(label="Perubahan langsung diterapkan melalui Wayland wlr-randr.", xalign=0)
+        lbl_hint.get_style_context().add_class("card-desc")
+        lbl_hint.set_line_wrap(True)
+
+        self.btn_apply_display = Gtk.Button()
+        btn_apply_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_apply_box.pack_start(svg_icon("check", color=COLOR_WHITE, size=16), False, False, 0)
+        btn_apply_box.pack_start(Gtk.Label(label="Terapkan Pengaturan Layar"), False, False, 0)
+        self.btn_apply_display.add(btn_apply_box)
         self.btn_apply_display.get_style_context().add_class("btn-primary")
+        self.btn_apply_display.set_halign(Gtk.Align.END)
         self.btn_apply_display.connect("clicked", self._on_apply_display)
-        card2.pack_start(self.btn_apply_display, False, False, 6)
+
+        action_row.pack_start(lbl_hint, True, True, 0)
+        action_row.pack_end(self.btn_apply_display, False, False, 0)
+        card2.pack_start(action_row, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
         return box
@@ -588,36 +1321,42 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Pelindung Mata (Night Light)", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Kurangi radiasi cahaya biru di malam hari agar mata tidak lelah dan tidur lebih nyenyak.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "nightlight",
+            "Pelindung Mata (Night Light)",
+            "Kurangi radiasi cahaya biru di malam hari agar mata tidak lelah dan tidur lebih nyenyak.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         card.get_style_context().add_class("setting-card")
 
-        # Master Switch
         row_sw = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_sw = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_sw = Gtk.Label(label="Aktifkan Night Light", xalign=0)
         lbl_sw.get_style_context().add_class("card-title")
-        lbl_swd = Gtk.Label(label="Ubah nada warna layar menjadi lebih hangat", xalign=0)
+        lbl_swd = Gtk.Label(label="Ubah nada warna layar menjadi lebih hangat menggunakan Gammastep", xalign=0)
         lbl_swd.get_style_context().add_class("card-desc")
+        lbl_swd.set_line_wrap(True)
         v_sw.pack_start(lbl_sw, False, False, 0)
         v_sw.pack_start(lbl_swd, False, False, 0)
 
+        right_nl = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        right_nl.set_valign(Gtk.Align.CENTER)
+        self.badge_night = Gtk.Label(label="Nonaktif")
+        self.badge_night.get_style_context().add_class("badge-info")
         self.sw_night = Gtk.Switch()
         self.sw_night.set_active(False)
         self.sw_night.connect("state-set", self._on_nightlight_toggle)
+        right_nl.pack_start(self.badge_night, False, False, 0)
+        right_nl.pack_start(self.sw_night, False, False, 0)
+
         row_sw.pack_start(v_sw, True, True, 0)
-        row_sw.pack_end(self.sw_night, False, False, 0)
+        row_sw.pack_end(right_nl, False, False, 0)
         card.pack_start(row_sw, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Color Temperature Slider
         v_temp = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         lbl_t = Gtk.Label(label="Suhu Warna Layar (Hangat vs Dingin)", xalign=0)
         lbl_t.get_style_context().add_class("card-title")
@@ -630,9 +1369,8 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self.scale_temp.connect("value-changed", self._on_temp_changed)
         v_temp.pack_start(self.scale_temp, False, False, 0)
 
-        # Temperature Hints
         hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        lbl_warm = Gtk.Label(label="3500K (Sangat Hangat / Tidur)")
+        lbl_warm = Gtk.Label(label="3500K (Sangat Hangat / Malam)")
         lbl_warm.get_style_context().add_class("card-desc")
         lbl_cool = Gtk.Label(label="6500K (Standar Siang)")
         lbl_cool.get_style_context().add_class("card-desc")
@@ -643,18 +1381,19 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Automatic Schedule
         row_sch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_sch = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_sch = Gtk.Label(label="Jadwal Otomatis (18:00 - 06:00)", xalign=0)
         lbl_sch.get_style_context().add_class("card-title")
         lbl_schd = Gtk.Label(label="Aktifkan Night Light otomatis saat malam hari (pukul 18:00 hingga 06:00)", xalign=0)
         lbl_schd.get_style_context().add_class("card-desc")
+        lbl_schd.set_line_wrap(True)
         v_sch.pack_start(lbl_sch, False, False, 0)
         v_sch.pack_start(lbl_schd, False, False, 0)
 
         self.sw_sch = Gtk.Switch()
         self.sw_sch.set_active(False)
+        self.sw_sch.set_valign(Gtk.Align.CENTER)
         self.sw_sch.connect("state-set", self._on_schedule_toggle)
         row_sch.pack_start(v_sch, True, True, 0)
         row_sch.pack_end(self.sw_sch, False, False, 0)
@@ -670,14 +1409,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Wi-Fi & Jaringan", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Kelola koneksi internet nirkabel, sinyal Wi-Fi, dan status jaringan.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "network",
+            "Wi-Fi & Jaringan",
+            "Kelola koneksi internet nirkabel, sinyal Wi-Fi, dan status jaringan.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
-        # Card 1: Wi-Fi Master & Status
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card1.get_style_context().add_class("setting-card")
 
@@ -687,11 +1425,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_wf.get_style_context().add_class("card-title")
         lbl_wfd = Gtk.Label(label="Pindai dan sambungkan laptop ke jaringan hotspot sekitar", xalign=0)
         lbl_wfd.get_style_context().add_class("card-desc")
+        lbl_wfd.set_line_wrap(True)
         v_wf.pack_start(lbl_wf, False, False, 0)
         v_wf.pack_start(lbl_wfd, False, False, 0)
 
         self.sw_wifi = Gtk.Switch()
         self.sw_wifi.set_active(False)
+        self.sw_wifi.set_valign(Gtk.Align.CENTER)
         self.sw_wifi.connect("state-set", self._on_wifi_switch)
         row_wf.pack_start(v_wf, True, True, 0)
         row_wf.pack_end(self.sw_wifi, False, False, 0)
@@ -699,18 +1439,19 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card1.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Current Connection Status
         row_cur = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_cur = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.lbl_cur_net = Gtk.Label(label="Memeriksa Jaringan...", xalign=0)
         self.lbl_cur_net.get_style_context().add_class("card-title")
         self.lbl_cur_net_desc = Gtk.Label(label="Membaca status NetworkManager...", xalign=0)
         self.lbl_cur_net_desc.get_style_context().add_class("card-desc")
+        self.lbl_cur_net_desc.set_line_wrap(True)
         v_cur.pack_start(self.lbl_cur_net, False, False, 0)
         v_cur.pack_start(self.lbl_cur_net_desc, False, False, 0)
 
         self.btn_disc = Gtk.Button(label="Putuskan")
         self.btn_disc.get_style_context().add_class("btn-secondary")
+        self.btn_disc.set_valign(Gtk.Align.CENTER)
         self.btn_disc.set_sensitive(False)
         self.btn_disc.connect("clicked", self._on_disconnect_wifi)
         row_cur.pack_start(v_cur, True, True, 0)
@@ -718,16 +1459,21 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card1.pack_start(row_cur, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
-        # Card 2: Available Wi-Fi Networks
         card2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         card2.get_style_context().add_class("setting-card")
 
         row_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         lbl_av = Gtk.Label(label="Jaringan Wi-Fi Sekitar", xalign=0)
         lbl_av.get_style_context().add_class("card-title")
-        self.btn_scan = Gtk.Button(label="Pindai Ulang")
+
+        self.btn_scan = Gtk.Button()
+        scan_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        scan_box.pack_start(svg_icon("refresh", color=COLOR_TEXT_PRIMARY, size=14), False, False, 0)
+        scan_box.pack_start(Gtk.Label(label="Pindai Ulang"), False, False, 0)
+        self.btn_scan.add(scan_box)
         self.btn_scan.get_style_context().add_class("btn-secondary")
         self.btn_scan.connect("clicked", self._on_scan_wifi)
+
         row_hdr.pack_start(lbl_av, True, True, 0)
         row_hdr.pack_end(self.btn_scan, False, False, 0)
         card2.pack_start(row_hdr, False, False, 0)
@@ -748,17 +1494,16 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Suara & Audio (PipeWire Engine)", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Kendali volume master, pemilihan speaker/headphone, dan pengujian audio stereo.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "sound",
+            "Suara & Audio (PipeWire Engine)",
+            "Kendali volume master, status bisu, pemilihan speaker/headphone, dan pengujian stereo.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         card.get_style_context().add_class("setting-card")
 
-        # Master Volume Slider
         v_vol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         row_vl = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         lbl_v = Gtk.Label(label="Volume Suara Utama", xalign=0)
@@ -771,9 +1516,29 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         self.scale_vol = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self.scale_vol.set_value(65)
+        self.scale_vol.set_draw_value(False)
         self.scale_vol.connect("value-changed", self._on_volume_changed)
         v_vol.pack_start(self.scale_vol, False, False, 0)
         card.pack_start(v_vol, False, False, 0)
+
+        # Mute Switch Row
+        row_mute = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        v_mute = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_mute = Gtk.Label(label="Bisukan Suara (Mute)", xalign=0)
+        lbl_mute.get_style_context().add_class("card-title")
+        lbl_muted = Gtk.Label(label="Matikan keluaran audio sistem sementara tanpa mengubah tingkat volume", xalign=0)
+        lbl_muted.get_style_context().add_class("card-desc")
+        lbl_muted.set_line_wrap(True)
+        v_mute.pack_start(lbl_mute, False, False, 0)
+        v_mute.pack_start(lbl_muted, False, False, 0)
+
+        self.sw_mute = Gtk.Switch()
+        self.sw_mute.set_active(False)
+        self.sw_mute.set_valign(Gtk.Align.CENTER)
+        self.sw_mute.connect("state-set", self._on_mute_toggled)
+        row_mute.pack_start(v_mute, True, True, 0)
+        row_mute.pack_end(self.sw_mute, False, False, 0)
+        card.pack_start(row_mute, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
@@ -784,6 +1549,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_dev.get_style_context().add_class("card-title")
         lbl_devd = Gtk.Label(label="Pilih speaker laptop internal atau headphone kabel/Bluetooth", xalign=0)
         lbl_devd.get_style_context().add_class("card-desc")
+        lbl_devd.set_line_wrap(True)
         v_dev.pack_start(lbl_dev, False, False, 0)
         v_dev.pack_start(lbl_devd, False, False, 0)
 
@@ -803,16 +1569,18 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         v_tst = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_tst = Gtk.Label(label="Uji Kualitas Suara Stereo", xalign=0)
         lbl_tst.get_style_context().add_class("card-title")
-        lbl_tstd = Gtk.Label(label="Putar nada pengujian pada saluran kiri dan kanan", xalign=0)
+        lbl_tstd = Gtk.Label(label="Putar nada pengujian pada saluran audio aktif", xalign=0)
         lbl_tstd.get_style_context().add_class("card-desc")
+        lbl_tstd.set_line_wrap(True)
         v_tst.pack_start(lbl_tst, False, False, 0)
         v_tst.pack_start(lbl_tstd, False, False, 0)
 
-        btn_snd_test = Gtk.Button(label="Tes Stereo")
-        btn_snd_test.get_style_context().add_class("btn-secondary")
-        btn_snd_test.connect("clicked", self._on_test_stereo)
+        self.btn_snd_test = Gtk.Button(label="Tes Stereo")
+        self.btn_snd_test.get_style_context().add_class("btn-secondary")
+        self.btn_snd_test.set_valign(Gtk.Align.CENTER)
+        self.btn_snd_test.connect("clicked", self._on_test_stereo)
         row_tst.pack_start(v_tst, True, True, 0)
-        row_tst.pack_end(btn_snd_test, False, False, 0)
+        row_tst.pack_end(self.btn_snd_test, False, False, 0)
         card.pack_start(row_tst, False, False, 0)
 
         box.pack_start(card, False, False, 0)
@@ -825,42 +1593,57 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Mouse & Touchpad", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Sesuaikan sensitivitas kursor dan gestur sentuh touchpad laptop.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "input",
+            "Mouse & Touchpad",
+            "Sesuaikan sensitivitas kursor dan gestur sentuh touchpad laptop.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         card.get_style_context().add_class("setting-card")
 
-        # Pointer Speed Slider
         v_spd = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        row_spd_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         lbl_spd = Gtk.Label(label="Kecepatan Kursor Pointer", xalign=0)
         lbl_spd.get_style_context().add_class("card-title")
-        v_spd.pack_start(lbl_spd, False, False, 0)
+        self.lbl_input_status = Gtk.Label(label="Sinkron dengan Labwc")
+        self.lbl_input_status.get_style_context().add_class("badge-info")
+        row_spd_hdr.pack_start(lbl_spd, True, True, 0)
+        row_spd_hdr.pack_end(self.lbl_input_status, False, False, 0)
+        v_spd.pack_start(row_spd_hdr, False, False, 0)
 
         self.scale_spd = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 10, 1)
         self.scale_spd.set_value(6)
+        self.scale_spd.set_value_pos(Gtk.PositionType.RIGHT)
         self.scale_spd.connect("value-changed", self._on_input_slider_changed)
         v_spd.pack_start(self.scale_spd, False, False, 0)
+
+        spd_hints = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        lbl_slow = Gtk.Label(label="Lambat (Presisi)")
+        lbl_slow.get_style_context().add_class("card-desc")
+        lbl_fast = Gtk.Label(label="Cepat (Responsif)")
+        lbl_fast.get_style_context().add_class("card-desc")
+        spd_hints.pack_start(lbl_slow, False, False, 0)
+        spd_hints.pack_end(lbl_fast, False, False, 0)
+        v_spd.pack_start(spd_hints, False, False, 0)
         card.pack_start(v_spd, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Natural Scrolling Switch
         row_nat = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_nat = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_nat = Gtk.Label(label="Arah Gulir Alami (Natural Scrolling)", xalign=0)
         lbl_nat.get_style_context().add_class("card-title")
-        lbl_natd = Gtk.Label(label="Konten bergerak searah dengan jari Anda (gaya smartphone/laptop modern)", xalign=0)
+        lbl_natd = Gtk.Label(label="Konten bergerak searah dengan jari Anda (gaya touchpad modern)", xalign=0)
         lbl_natd.get_style_context().add_class("card-desc")
+        lbl_natd.set_line_wrap(True)
         v_nat.pack_start(lbl_nat, False, False, 0)
         v_nat.pack_start(lbl_natd, False, False, 0)
 
         self.sw_nat = Gtk.Switch()
         self.sw_nat.set_active(True)
+        self.sw_nat.set_valign(Gtk.Align.CENTER)
         self.sw_nat.connect("state-set", self._on_input_switch_changed)
         row_nat.pack_start(v_nat, True, True, 0)
         row_nat.pack_end(self.sw_nat, False, False, 0)
@@ -868,18 +1651,19 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Tap-to-Click Switch
         row_tap = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_tap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_tap = Gtk.Label(label="Ketuk untuk Klik (Tap-to-Click)", xalign=0)
         lbl_tap.get_style_context().add_class("card-title")
-        lbl_tapd = Gtk.Label(label="Cukup ketuk permukaan touchpad tanpa perlu menekan tombol fisik keras-keras", xalign=0)
+        lbl_tapd = Gtk.Label(label="Cukup ketuk permukaan touchpad tanpa perlu menekan tombol fisik", xalign=0)
         lbl_tapd.get_style_context().add_class("card-desc")
+        lbl_tapd.set_line_wrap(True)
         v_tap.pack_start(lbl_tap, False, False, 0)
         v_tap.pack_start(lbl_tapd, False, False, 0)
 
         self.sw_tap = Gtk.Switch()
         self.sw_tap.set_active(True)
+        self.sw_tap.set_valign(Gtk.Align.CENTER)
         self.sw_tap.connect("state-set", self._on_input_switch_changed)
         row_tap.pack_start(v_tap, True, True, 0)
         row_tap.pack_end(self.sw_tap, False, False, 0)
@@ -895,20 +1679,24 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Daya & Baterai (Brisk Glide Engine)", xalign=0)
-        h.get_style_context().add_class("section-header")
-        self.lbl_power_hw = Gtk.Label(label="Membaca telemetri baterai dan profil daya...", xalign=0)
-        self.lbl_power_hw.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(self.lbl_power_hw, False, False, 0)
+        hdr, self.lbl_power_hw = self._make_section_header(
+            "power",
+            "Daya & Baterai (Brisk Glide Engine)",
+            "Membaca telemetri baterai dan profil daya...",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card1.get_style_context().add_class("setting-card")
 
-        # TLP Power Profiles
+        row_prof_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         lbl_prof = Gtk.Label(label="Profil Performa Daya", xalign=0)
         lbl_prof.get_style_context().add_class("card-title")
-        card1.pack_start(lbl_prof, False, False, 0)
+        self.badge_power = Gtk.Label(label="BALANCED")
+        self.badge_power.get_style_context().add_class("badge-info")
+        row_prof_hdr.pack_start(lbl_prof, True, True, 0)
+        row_prof_hdr.pack_end(self.badge_power, False, False, 0)
+        card1.pack_start(row_prof_hdr, False, False, 0)
 
         prof_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         self.prof_eco = Gtk.RadioButton.new_with_label(None, "Hemat Daya (Eco)")
@@ -925,7 +1713,6 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         card1.pack_start(prof_box, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
-        # Card 2: Brisk Glide Mode
         card2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card2.get_style_context().add_class("setting-card")
 
@@ -935,11 +1722,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         lbl_gm.get_style_context().add_class("card-title")
         lbl_gmd = Gtk.Label(label="Aktifkan penghematan baterai agresif otomatis saat daya laptop di bawah 20%", xalign=0)
         lbl_gmd.get_style_context().add_class("card-desc")
+        lbl_gmd.set_line_wrap(True)
         v_gm.pack_start(lbl_gm, False, False, 0)
         v_gm.pack_start(lbl_gmd, False, False, 0)
 
         self.sw_gm = Gtk.Switch()
         self.sw_gm.set_active(True)
+        self.sw_gm.set_valign(Gtk.Align.CENTER)
         self.sw_gm.connect("state-set", self._on_glide_toggle)
         row_gm.pack_start(v_gm, True, True, 0)
         row_gm.pack_end(self.sw_gm, False, False, 0)
@@ -947,18 +1736,19 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Auto-Dimming
         row_dim = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_dim = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_dim = Gtk.Label(label="Peredupan Layar Halus ke 35%", xalign=0)
         lbl_dim.get_style_context().add_class("card-title")
         lbl_dimd = Gtk.Label(label="Turunkan kecerahan layar dengan transisi lembut saat Glide Mode terpicu", xalign=0)
         lbl_dimd.get_style_context().add_class("card-desc")
+        lbl_dimd.set_line_wrap(True)
         v_dim.pack_start(lbl_dim, False, False, 0)
         v_dim.pack_start(lbl_dimd, False, False, 0)
 
         self.sw_dim = Gtk.Switch()
         self.sw_dim.set_active(True)
+        self.sw_dim.set_valign(Gtk.Align.CENTER)
         self.sw_dim.connect("state-set", self._on_glide_dim_toggle)
         row_dim.pack_start(v_dim, True, True, 0)
         row_dim.pack_end(self.sw_dim, False, False, 0)
@@ -966,22 +1756,32 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # 80% Battery Conservation Mode
         row_80 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_80 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_80 = Gtk.Label(label="Mode Konservasi Kesehatan Baterai (Batas 80%)", xalign=0)
         lbl_80.get_style_context().add_class("card-title")
-        lbl_80d = Gtk.Label(label="Hentikan pengisian di 80% saat dicolok charger untuk melipatgandakan umur baterai", xalign=0)
+        lbl_80d = Gtk.Label(label="Hentikan pengisian di 80% saat dicolok charger untuk menjaga umur sel baterai", xalign=0)
         lbl_80d.get_style_context().add_class("card-desc")
+        lbl_80d.set_line_wrap(True)
         v_80.pack_start(lbl_80, False, False, 0)
         v_80.pack_start(lbl_80d, False, False, 0)
 
         self.sw_80 = Gtk.Switch()
         self.sw_80.set_active(True)
+        self.sw_80.set_valign(Gtk.Align.CENTER)
         self.sw_80.connect("state-set", self._on_battery_ceiling_toggle)
         row_80.pack_start(v_80, True, True, 0)
         row_80.pack_end(self.sw_80, False, False, 0)
         card2.pack_start(row_80, False, False, 0)
+
+        card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
+
+        btn_sentinel_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_sentinel_gui = Gtk.Button(label="Buka Monitor Baterai Sentinel")
+        btn_sentinel_gui.get_style_context().add_class("btn-secondary")
+        btn_sentinel_gui.connect("clicked", self._on_open_sentinel_gui)
+        btn_sentinel_row.pack_start(btn_sentinel_gui, False, False, 0)
+        card2.pack_start(btn_sentinel_row, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
         return box
@@ -993,57 +1793,72 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Personalisasi & Tema", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Pilih latar desktop, mode warna solid, dan gaya panel taskbar Waybar.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "appearance",
+            "Personalisasi & Tema",
+            "Pilih latar desktop Morning Breeze, warna solid hemat GPU, dan gaya panel taskbar Waybar.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         card.get_style_context().add_class("setting-card")
 
-        # Wallpaper Selection
         lbl_w = Gtk.Label(label="Latar Belakang Desktop (Wallpaper)", xalign=0)
         lbl_w.get_style_context().add_class("card-title")
         card.pack_start(lbl_w, False, False, 0)
 
-        wp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        wp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
         wp_presets = [
-            ("default", "Night Glass Default", "Wallpaper SVG Bawaan"),
-            ("midnight", "Midnight Slate Matte", "Warna Solid Hemat GPU (#0f172a)"),
+            ("default", "Morning Breeze Silk", "Wallpaper vektor bawaan", "swatch-silk"),
+            ("mist", "Morning Mist Matte", "Solid ringan (#DCECF2)", "swatch-mist"),
+            ("slate", "Deep Slate Matte", "Solid gelap (#1E293B)", "swatch-slate"),
         ]
         self.wp_buttons = {}
-        for wp_key, wp_name, wp_desc in wp_presets:
+        self.wp_badges = {}
+        for wp_key, wp_name, wp_desc, swatch_cls in wp_presets:
             b = Gtk.Button()
-            v_b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            l_t = Gtk.Label(label=wp_name)
+            b.get_style_context().add_class("wp-card")
+            v_b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+            swatch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            swatch.get_style_context().add_class(swatch_cls)
+            v_b.pack_start(swatch, False, False, 0)
+
+            top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            l_t = Gtk.Label(label=wp_name, xalign=0)
             l_t.get_style_context().add_class("card-title")
-            l_d = Gtk.Label(label=wp_desc)
+            badge_p = Gtk.Label(label="Aktif")
+            badge_p.get_style_context().add_class("badge-active")
+            badge_p.set_no_show_all(True)
+            top_row.pack_start(l_t, True, True, 0)
+            top_row.pack_end(badge_p, False, False, 0)
+
+            l_d = Gtk.Label(label=wp_desc, xalign=0)
             l_d.get_style_context().add_class("card-desc")
-            v_b.pack_start(l_t, False, False, 0)
+
+            v_b.pack_start(top_row, False, False, 0)
             v_b.pack_start(l_d, False, False, 0)
             b.add(v_b)
-            b.get_style_context().add_class("btn-secondary")
             b.connect("clicked", self._on_select_wallpaper, wp_key)
             self.wp_buttons[wp_key] = b
+            self.wp_badges[wp_key] = badge_p
             wp_box.pack_start(b, False, False, 0)
         card.pack_start(wp_box, False, False, 0)
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Taskbar Style
         row_tb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_tb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_tb = Gtk.Label(label="Gaya Taskbar Waybar", xalign=0)
         lbl_tb.get_style_context().add_class("card-title")
         lbl_tbd = Gtk.Label(label="Pilih tata letak panel taskbar di bagian bawah layar", xalign=0)
         lbl_tbd.get_style_context().add_class("card-desc")
+        lbl_tbd.set_line_wrap(True)
         v_tb.pack_start(lbl_tb, False, False, 0)
         v_tb.pack_start(lbl_tbd, False, False, 0)
 
         self.combo_tb = Gtk.ComboBoxText()
-        self.combo_tb.append_text("Pulau Mengambang (Floating Islands - Bawaan)")
+        self.combo_tb.append_text("Pulau Mengambang (Floating Islands)")
         self.combo_tb.append_text("Gaya Dermaga Penuh (Full Edge Dock)")
         self.combo_tb.set_active(0)
         self.combo_tb.connect("changed", self._on_taskbar_style_changed)
@@ -1062,23 +1877,23 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Cadangan & Pemulihan (Brisk Time-Travel)", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Titik pemulihan sistem instan. Putar balik sistem ke kondisi sehat jika terjadi kendala.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "timetravel",
+            "Cadangan & Pemulihan (Brisk Time-Travel)",
+            "Titik pemulihan sistem instan. Putar balik sistem ke kondisi sehat jika terjadi kendala.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         card.get_style_context().add_class("setting-card")
 
-        # Snapshot Status
         row_st = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         v_st = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_st = Gtk.Label(label="Status Perlindungan Sistem", xalign=0)
         lbl_st.get_style_context().add_class("card-title")
         self.lbl_tt_desc = Gtk.Label(label="Memeriksa daftar titik pemulihan sistem...", xalign=0)
         self.lbl_tt_desc.get_style_context().add_class("card-desc")
+        self.lbl_tt_desc.set_line_wrap(True)
         v_st.pack_start(lbl_st, False, False, 0)
         v_st.pack_start(self.lbl_tt_desc, False, False, 0)
 
@@ -1090,18 +1905,36 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Snapshot Action Buttons
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        btn_create = Gtk.Button(label="Buat Snapshot Baru Sekarang")
-        btn_create.get_style_context().add_class("btn-primary")
-        btn_create.connect("clicked", self._on_quick_snapshot)
+        self.tt_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.pack_start(self.tt_list_box, False, False, 0)
 
-        btn_gui = Gtk.Button(label="Buka Wizard Pemulihan Time-Travel")
+        card.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.btn_create_snap = Gtk.Button()
+        create_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        create_inner.pack_start(svg_icon("snapshot", color=COLOR_WHITE, size=16), False, False, 0)
+        self.btn_create_snap_lbl = Gtk.Label(label="Buat Snapshot Baru")
+        create_inner.pack_start(self.btn_create_snap_lbl, False, False, 0)
+        self.btn_create_snap.add(create_inner)
+        self.btn_create_snap.get_style_context().add_class("btn-primary")
+        self.btn_create_snap.connect("clicked", self._on_quick_snapshot)
+
+        btn_gui = Gtk.Button(label="Buka Wizard Time-Travel")
         btn_gui.get_style_context().add_class("btn-secondary")
         btn_gui.connect("clicked", self._on_open_timetravel_gui)
 
-        btn_box.pack_start(btn_create, False, False, 0)
+        btn_tt_ref = Gtk.Button()
+        tt_ref_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        tt_ref_box.pack_start(svg_icon("refresh", color=COLOR_TEXT_PRIMARY, size=14), False, False, 0)
+        tt_ref_box.pack_start(Gtk.Label(label="Segarkan"), False, False, 0)
+        btn_tt_ref.add(tt_ref_box)
+        btn_tt_ref.get_style_context().add_class("btn-secondary")
+        btn_tt_ref.connect("clicked", lambda _b: self._load_timetravel_state())
+
+        btn_box.pack_start(self.btn_create_snap, False, False, 0)
         btn_box.pack_start(btn_gui, False, False, 0)
+        btn_box.pack_end(btn_tt_ref, False, False, 0)
         card.pack_start(btn_box, False, False, 0)
 
         box.pack_start(card, False, False, 0)
@@ -1114,25 +1947,36 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.get_style_context().add_class("content-area")
 
-        h = Gtk.Label(label="Tentang Laptop & Sistem Operasi", xalign=0)
-        h.get_style_context().add_class("section-header")
-        sub = Gtk.Label(label="Informasi perangkat keras laptop dan status saluran pembaruan resmi BriskOS.", xalign=0)
-        sub.get_style_context().add_class("section-subtitle")
-        box.pack_start(h, False, False, 0)
-        box.pack_start(sub, False, False, 0)
+        hdr, _ = self._make_section_header(
+            "about",
+            "Tentang Laptop & Sistem Operasi",
+            "Informasi perangkat keras laptop dan status saluran pembaruan resmi BriskOS.",
+        )
+        box.pack_start(hdr, False, False, 0)
 
-        # Card 1: OS Branding & Specs
         card1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card1.get_style_context().add_class("setting-card")
 
         row_b = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        lbl_logo = Gtk.Image.new_from_icon_name("brisk-logo", Gtk.IconSize.DIALOG)
+        lbl_logo = None
+        try:
+            theme = Gtk.IconTheme.get_default()
+            if theme and theme.has_icon("brisk-logo"):
+                pb = theme.load_icon("brisk-logo", 48, 0)
+                if pb is not None:
+                    lbl_logo = Gtk.Image.new_from_pixbuf(pb)
+        except Exception:
+            lbl_logo = None
+        if lbl_logo is None:
+            lbl_logo = svg_icon("brisk_mark", color=COLOR_ACCENT, size=44)
 
         v_b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        v_b.set_valign(Gtk.Align.CENTER)
         lbl_os = Gtk.Label(label="BriskOS 1.0 LTS (Feather)", xalign=0)
-        lbl_os.get_style_context().add_class("section-header")
+        lbl_os.get_style_context().add_class("card-title")
         lbl_osd = Gtk.Label(label=self._get_os_info(), xalign=0)
         lbl_osd.get_style_context().add_class("card-desc")
+        lbl_osd.set_line_wrap(True)
         v_b.pack_start(lbl_os, False, False, 0)
         v_b.pack_start(lbl_osd, False, False, 0)
 
@@ -1142,7 +1986,6 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card1.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
-        # Real Hardware Telemetry Grid
         specs = [
             ("Prosesor (CPU)", self._get_cpu_info()),
             ("Memori (RAM)", self._get_ram_info()),
@@ -1157,16 +2000,16 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         for i, (k, v) in enumerate(specs):
             lbl_k = Gtk.Label(label=k, xalign=0)
-            lbl_k.get_style_context().add_class("card-desc")
+            lbl_k.get_style_context().add_class("spec-key")
             lbl_v = Gtk.Label(label=v, xalign=0)
-            lbl_v.get_style_context().add_class("card-title")
+            lbl_v.get_style_context().add_class("spec-val")
+            lbl_v.set_line_wrap(True)
             grid.attach(lbl_k, 0, i, 1, 1)
             grid.attach(lbl_v, 1, i, 1, 1)
 
         card1.pack_start(grid, False, False, 0)
         box.pack_start(card1, False, False, 0)
 
-        # Card 2: Update Stream & Check
         card2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         card2.get_style_context().add_class("setting-card")
 
@@ -1182,6 +2025,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             xalign=0,
         )
         lbl_upd.get_style_context().add_class("card-desc")
+        lbl_upd.set_line_wrap(True)
         v_up.pack_start(lbl_up, False, False, 0)
         v_up.pack_start(lbl_upd, False, False, 0)
 
@@ -1193,6 +2037,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         card2.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
+        self.lbl_up_status = Gtk.Label(label="Klik periksa untuk mengecek rilis terbaru.", xalign=0)
+        self.lbl_up_status.get_style_context().add_class("card-desc")
+        self.lbl_up_status.set_line_wrap(True)
+        card2.pack_start(self.lbl_up_status, False, False, 0)
+
         row_btn = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.btn_chk_updates = Gtk.Button(label="Periksa Pembaruan Sistem")
         self.btn_chk_updates.get_style_context().add_class("btn-primary")
@@ -1202,12 +2051,8 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self.btn_open_updater.get_style_context().add_class("btn-secondary")
         self.btn_open_updater.connect("clicked", self._on_open_updater_gui)
 
-        self.lbl_up_status = Gtk.Label(label="Klik periksa untuk mengecek rilis terbaru.", xalign=0)
-        self.lbl_up_status.get_style_context().add_class("card-desc")
-
         row_btn.pack_start(self.btn_chk_updates, False, False, 0)
         row_btn.pack_start(self.btn_open_updater, False, False, 0)
-        row_btn.pack_start(self.lbl_up_status, True, True, 8)
         card2.pack_start(row_btn, False, False, 0)
 
         box.pack_start(card2, False, False, 0)
@@ -1219,7 +2064,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
     def _get_os_info(self):
         pretty = "BriskOS 1.0 LTS (Feather)"
         try:
-            with open("/etc/os-release", "r") as f:
+            with open("/etc/os-release", "r", encoding="utf-8") as f:
                 data = {}
                 for line in f:
                     if "=" in line:
@@ -1235,7 +2080,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
     def _get_cpu_info(self):
         try:
-            with open("/proc/cpuinfo", "r") as f:
+            with open("/proc/cpuinfo", "r", encoding="utf-8") as f:
                 for line in f:
                     if "model name" in line:
                         return line.split(":", 1)[1].strip()
@@ -1245,7 +2090,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
     def _get_ram_info(self):
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
                 for line in f:
                     if "MemTotal" in line:
                         kb = int(line.split()[1])
@@ -1260,8 +2105,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         if ok and out:
             for line in out.splitlines():
                 if any(tag in line for tag in ("VGA compatible controller:", "3D controller:", "Display controller:")):
-                    desc = line.split(":", 2)[-1].strip()
-                    return desc
+                    return line.split(":", 2)[-1].strip()
         return "Wayland DRM Graphics"
 
     def _get_storage_info(self):
@@ -1291,7 +2135,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
     # Live System State Loaders
     # --------------------------------------------------------------------------
     def _parse_wlr_randr(self):
-        ok, out, err = self._run_cmd(["wlr-randr", "--json"], timeout=4)
+        ok, out, _ = self._run_cmd(["wlr-randr", "--json"], timeout=4)
         if ok and out:
             try:
                 outputs = json.loads(out)
@@ -1314,7 +2158,6 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             except Exception:
                 pass
 
-        # Plain-text wlr-randr fallback
         ok, out, _ = self._run_cmd(["wlr-randr"], timeout=4)
         if not ok or not out:
             return None
@@ -1347,28 +2190,34 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         return {"name": name, "desc": desc, "scale": scale, "modes": modes}
 
     def _load_display_state(self):
+        self.btn_refresh_display.set_sensitive(False)
+
         def worker():
             info = self._parse_wlr_randr()
+
             def apply_ui():
+                self.btn_refresh_display.set_sensitive(True)
                 if not info:
                     self.display_output = None
-                    self.lbl_display_desc.set_text("Output Wayland belum aktif atau dijalankan di luar sesi compositor")
-                    self.badge_display.set_text("Offline")
-                    ctx = self.badge_display.get_style_context()
-                    ctx.remove_class("badge-info")
-                    ctx.remove_class("badge-active")
-                    ctx.add_class("badge-warn")
+                    self.lbl_display_desc.set_text("Output Wayland belum aktif atau berjalan di luar sesi compositor")
+                    self._set_badge(self.badge_display, "Offline", "badge-warn")
                     self.btn_apply_display.set_sensitive(False)
+                    self.combo_res.set_sensitive(False)
+                    self.combo_hz.set_sensitive(False)
+                    self.scale_100.set_sensitive(False)
+                    self.scale_125.set_sensitive(False)
+                    self.scale_150.set_sensitive(False)
                     return
 
                 self.display_output = info["name"]
                 self.lbl_display_desc.set_text(f"{info['desc']} ({info['name']}) • Wayland DRM")
-                self.badge_display.set_text("Aktif")
-                ctx = self.badge_display.get_style_context()
-                ctx.remove_class("badge-info")
-                ctx.remove_class("badge-warn")
-                ctx.add_class("badge-active")
+                self._set_badge(self.badge_display, "Aktif", "badge-active")
                 self.btn_apply_display.set_sensitive(True)
+                self.combo_res.set_sensitive(True)
+                self.combo_hz.set_sensitive(True)
+                self.scale_100.set_sensitive(True)
+                self.scale_125.set_sensitive(True)
+                self.scale_150.set_sensitive(True)
 
                 res_list = []
                 hz_list = []
@@ -1420,7 +2269,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         cfg = {"enabled": False, "temp": 4500, "schedule": False}
         try:
             if os.path.exists(cfg_path):
-                with open(cfg_path, "r") as f:
+                with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg.update(json.load(f))
         except Exception:
             pass
@@ -1434,6 +2283,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self.scale_temp.set_value(max(3500, min(6500, int(cfg.get("temp", 4500)))))
         self.sw_sch.set_active(bool(cfg.get("schedule", False)))
         self.sw_night.set_active(active)
+        self._set_badge(self.badge_night, "Aktif" if active else "Nonaktif", "badge-active" if active else "badge-info")
         self._loading_night = False
 
         if sched_due and not running:
@@ -1443,7 +2293,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         cfg_path = os.path.expanduser("~/.config/brisk/nightlight.conf")
         os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
         try:
-            with open(cfg_path, "w") as f:
+            with open(cfg_path, "w", encoding="utf-8") as f:
                 json.dump({"enabled": bool(enabled), "temp": int(temp), "schedule": bool(schedule)}, f, indent=2)
         except Exception:
             pass
@@ -1454,23 +2304,55 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         def worker():
             self._run_cmd(["pkill", "-x", "gammastep"], timeout=2)
-            if enabled:
-                try:
-                    subprocess.Popen(
-                        ["gammastep", "-O", str(int(temp))],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        start_new_session=True,
-                    )
-                except FileNotFoundError:
-                    def reset_ui():
+            if not enabled:
+                self._ui(self._set_badge, self.badge_night, "Nonaktif", "badge-info")
+                return
+            try:
+                proc = subprocess.Popen(
+                    ["gammastep", "-O", str(int(temp))],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                time.sleep(0.25)
+                rc = proc.poll()
+                if rc is not None and rc != 0:
+                    err_msg = ""
+                    try:
+                        err_msg = proc.stderr.read().decode("utf-8", errors="ignore").strip()
+                    except Exception:
+                        pass
+
+                    def failed_ui():
                         self._loading_night = True
                         self.sw_night.set_active(False)
                         self._loading_night = False
-                        self._show_dialog(Gtk.MessageType.WARNING, "Gammastep Tidak Tersedia", "Paket 'gammastep' tidak ditemukan untuk mengatur Night Light Wayland.")
-                    self._ui(reset_ui)
-                except Exception as exc:
-                    self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Menjalankan Night Light", str(exc))
+                        self._set_badge(self.badge_night, "Tidak Didukung", "badge-warn")
+                        if save:
+                            self._save_nightlight_cfg(False, temp, self.sw_sch.get_active())
+                        self._show_dialog(
+                            Gtk.MessageType.WARNING,
+                            "Night Light Tidak Dapat Dijalankan",
+                            err_msg or "Pastikan berjalan di sesi Wayland dengan dukungan wlr-gamma-control.",
+                        )
+                    self._ui(failed_ui)
+                else:
+                    self._ui(self._set_badge, self.badge_night, f"Aktif ({int(temp)}K)", "badge-active")
+            except FileNotFoundError:
+                def missing_ui():
+                    self._loading_night = True
+                    self.sw_night.set_active(False)
+                    self._loading_night = False
+                    self._set_badge(self.badge_night, "Gammastep Hilang", "badge-warn")
+                    self._show_dialog(
+                        Gtk.MessageType.WARNING,
+                        "Gammastep Tidak Tersedia",
+                        "Paket 'gammastep' tidak ditemukan untuk mengatur Night Light Wayland.",
+                    )
+                self._ui(missing_ui)
+            except Exception as exc:
+                self._ui(self._set_badge, self.badge_night, "Kesalahan", "badge-error")
+                self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Menjalankan Night Light", str(exc))
         self._run_bg(worker)
 
     def _split_nmcli_row(self, line):
@@ -1574,31 +2456,44 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                 if not has_nm:
                     lbl = Gtk.Label(label="Layanan jaringan NetworkManager tidak berjalan.", xalign=0)
                     lbl.get_style_context().add_class("card-desc")
+                    lbl.set_line_wrap(True)
                     self.wifi_list_box.pack_start(lbl, False, False, 0)
                 elif not has_wifi_hw:
                     lbl = Gtk.Label(label="Tidak ada adaptor Wi-Fi terdeteksi pada perangkat ini.", xalign=0)
                     lbl.get_style_context().add_class("card-desc")
+                    lbl.set_line_wrap(True)
                     self.wifi_list_box.pack_start(lbl, False, False, 0)
                 elif not wifi_on:
                     lbl = Gtk.Label(label="Adaptor Wi-Fi dimatikan. Aktifkan sakelar di atas untuk memindai.", xalign=0)
                     lbl.get_style_context().add_class("card-desc")
+                    lbl.set_line_wrap(True)
                     self.wifi_list_box.pack_start(lbl, False, False, 0)
                 elif scan_err and not nets:
                     lbl = Gtk.Label(label=f"Gagal memindai Wi-Fi: {scan_err}", xalign=0)
                     lbl.get_style_context().add_class("card-desc")
+                    lbl.set_line_wrap(True)
                     self.wifi_list_box.pack_start(lbl, False, False, 0)
                 elif not nets:
                     lbl = Gtk.Label(label="Belum ada jaringan Wi-Fi ditemukan di sekitar. Klik Pindai Ulang.", xalign=0)
                     lbl.get_style_context().add_class("card-desc")
+                    lbl.set_line_wrap(True)
                     self.wifi_list_box.pack_start(lbl, False, False, 0)
                 else:
                     for net in nets:
                         item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                        item.get_style_context().add_class("sub-row")
+                        sec_txt = "Terbuka" if net["security"] in ("", "--", "Terbuka") else net["security"]
+                        is_open = sec_txt == "Terbuka"
+                        item.pack_start(
+                            svg_icon("wifi_open" if is_open else "wifi_lock", color=COLOR_ACCENT_TEXT if net["in_use"] else COLOR_TEXT_SECONDARY, size=18),
+                            False, False, 0,
+                        )
+
                         v_i = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
                         status_tag = " (Aktif)" if net["in_use"] else ""
                         s_name = Gtk.Label(label=f"{net['ssid']}{status_tag}", xalign=0)
                         s_name.get_style_context().add_class("card-title")
-                        sec_txt = "Terbuka" if net["security"] in ("", "--", "Terbuka") else net["security"]
+                        s_name.set_ellipsize(Pango.EllipsizeMode.END)
                         s_info = Gtk.Label(label=f"Sinyal {net['signal']}% • {sec_txt}", xalign=0)
                         s_info.get_style_context().add_class("card-desc")
                         v_i.pack_start(s_name, False, False, 0)
@@ -1607,15 +2502,17 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                         if net["in_use"]:
                             badge = Gtk.Label(label="Terhubung")
                             badge.get_style_context().add_class("badge-active")
+                            badge.set_valign(Gtk.Align.CENTER)
                             item.pack_start(v_i, True, True, 0)
                             item.pack_end(badge, False, False, 0)
                         else:
                             btn_c = Gtk.Button(label="Sambungkan")
                             btn_c.get_style_context().add_class("btn-secondary")
+                            btn_c.set_valign(Gtk.Align.CENTER)
                             btn_c.connect("clicked", self._on_connect_wifi_dialog, net["ssid"], net["security"])
                             item.pack_start(v_i, True, True, 0)
                             item.pack_end(btn_c, False, False, 0)
-                        self.wifi_list_box.pack_start(item, False, False, 4)
+                        self.wifi_list_box.pack_start(item, False, False, 0)
 
                 self.wifi_list_box.show_all()
 
@@ -1625,17 +2522,22 @@ class BriskControlCenter(Gtk.ApplicationWindow):
     def _load_audio_state(self):
         def worker():
             vol_pct = 65
+            muted = False
             ok_w, out_w, _ = self._run_cmd(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], timeout=3)
             if ok_w and out_w:
                 m = re.search(r'([\d.]+)', out_w)
                 if m:
                     vol_pct = max(0, min(100, int(round(float(m.group(1)) * 100))))
+                muted = "[MUTED]" in out_w.upper()
             else:
                 ok_p, out_p, _ = self._run_cmd(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], timeout=3)
                 if ok_p and out_p:
                     m = re.search(r'(\d+)%', out_p)
                     if m:
                         vol_pct = max(0, min(100, int(m.group(1))))
+                ok_m, out_m, _ = self._run_cmd(["pactl", "get-sink-mute", "@DEFAULT_SINK@"], timeout=3)
+                if ok_m and "yes" in out_m.lower():
+                    muted = True
 
             ok_def, def_sink, _ = self._run_cmd(["pactl", "get-default-sink"], timeout=3)
             def_sink = def_sink.strip() if ok_def else ""
@@ -1660,7 +2562,12 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             def apply_ui():
                 self._loading_audio = True
                 self.scale_vol.set_value(vol_pct)
-                self.lbl_vval.set_text(f"{vol_pct}%")
+                self.sw_mute.set_active(muted)
+                if muted:
+                    self._set_badge(self.lbl_vval, f"{vol_pct}% (Bisu)", "badge-warn")
+                else:
+                    self._set_badge(self.lbl_vval, f"{vol_pct}%", "badge-info")
+
                 self.combo_out.remove_all()
                 self._audio_sinks = sinks
                 if not sinks:
@@ -1736,10 +2643,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                 prof = kv.get("PROFILE", "balanced").lower()
                 if prof == "eco":
                     self.prof_eco.set_active(True)
+                    self._set_badge(self.badge_power, "ECO", "badge-active")
                 elif prof == "turbo":
                     self.prof_turb.set_active(True)
+                    self._set_badge(self.badge_power, "TURBO", "badge-warn")
                 else:
                     self.prof_bal.set_active(True)
+                    self._set_badge(self.badge_power, "BALANCED", "badge-info")
 
                 self.sw_gm.set_active(kv.get("GLIDE_AUTO_ENABLED", "true").lower() == "true")
                 self.sw_dim.set_active(kv.get("GLIDE_AUTO_DIM", "true").lower() == "true")
@@ -1766,87 +2676,168 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         cfg = {"wallpaper": "default", "taskbar": "islands"}
         try:
             if os.path.exists(cfg_path):
-                with open(cfg_path, "r") as f:
+                with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg.update(json.load(f))
             else:
                 wb_css = os.path.expanduser("~/.config/waybar/style.css")
                 if os.path.exists(wb_css):
-                    with open(wb_css, "r") as f:
+                    with open(wb_css, "r", encoding="utf-8") as f:
                         if "BRISK-DOCK-MODE-START" in f.read():
                             cfg["taskbar"] = "dock"
         except Exception:
             pass
 
+        wp_key = cfg.get("wallpaper", "default")
+        if wp_key == "midnight":
+            wp_key = "slate"
+        if wp_key not in self.wp_buttons:
+            wp_key = "default"
+
         self._loading_appearance = True
         self.combo_tb.set_active(1 if cfg.get("taskbar") == "dock" else 0)
-        self._update_wp_button_styles(cfg.get("wallpaper", "default"))
+        self._update_wp_button_styles(wp_key)
         self._loading_appearance = False
 
     def _update_wp_button_styles(self, active_key):
         for key, btn in self.wp_buttons.items():
             ctx = btn.get_style_context()
+            badge = self.wp_badges.get(key)
             if key == active_key:
-                ctx.remove_class("btn-secondary")
-                ctx.add_class("btn-primary")
+                ctx.add_class("active-preset")
+                if badge:
+                    badge.show()
             else:
-                ctx.remove_class("btn-primary")
-                ctx.add_class("btn-secondary")
+                ctx.remove_class("active-preset")
+                if badge:
+                    badge.hide()
 
     def _load_timetravel_state(self):
         def worker():
             auto_on = True
             if os.path.exists("/etc/brisk/timetravel.conf"):
                 try:
-                    with open("/etc/brisk/timetravel.conf", "r") as f:
+                    with open("/etc/brisk/timetravel.conf", "r", encoding="utf-8") as f:
                         txt = f.read()
                     if re.search(r'^AUTO_BACKUP_ENABLED=false\b', txt, re.M):
                         auto_on = False
                 except Exception:
                     pass
 
-            ok, out, _ = self._run_cmd(["sudo", "-n", "/usr/local/bin/brisk-timetravel", "list", "--raw"], timeout=5)
+            cli_bin = "/usr/local/bin/brisk-timetravel"
+            if not os.path.exists(cli_bin):
+                ok, out, err = False, "", "Utilitas brisk-timetravel tidak terpasang."
+            elif os.geteuid() == 0:
+                ok, out, err = self._run_cmd([cli_bin, "list", "--raw"], timeout=5)
+            else:
+                ok, out, err = self._run_cmd(["sudo", "-n", cli_bin, "list", "--raw"], timeout=5)
+
             lines = [ln for ln in out.splitlines() if ln.strip()] if ok and out else []
 
             def apply_ui():
-                ctx = self.badge_tt.get_style_context()
-                ctx.remove_class("badge-info")
-                ctx.remove_class("badge-active")
-                ctx.remove_class("badge-warn")
-                if lines:
-                    latest = lines[0].split("|")
+                self._clear_box(self.tt_list_box)
+                auto_txt = "Auto-Checkpoint aktif" if auto_on else "Auto-Checkpoint nonaktif"
+
+                if not ok:
+                    self._set_badge(self.badge_tt, "Perlu Izin / Error", "badge-error")
+                    self.lbl_tt_desc.set_text(err or f"Tidak dapat membaca daftar snapshot • {auto_txt}")
+                    msg_lbl = Gtk.Label(
+                        label="Daftar checkpoint tidak dapat diakses saat ini. Gunakan Wizard Time-Travel atau klik Buat Snapshot Baru.",
+                        xalign=0,
+                    )
+                    msg_lbl.get_style_context().add_class("card-desc")
+                    msg_lbl.set_line_wrap(True)
+                    self.tt_list_box.pack_start(msg_lbl, False, False, 0)
+                elif lines:
+                    parsed = [ln.split("|") for ln in lines]
+                    latest = parsed[-1]
                     latest_date = latest[1] if len(latest) > 1 else latest[0]
-                    auto_txt = "Auto-Checkpoint aktif" if auto_on else "Auto-Checkpoint nonaktif"
+                    self._set_badge(self.badge_tt, "Terlindungi", "badge-active")
                     self.lbl_tt_desc.set_text(f"{len(lines)} titik pemulihan tersedia • Terbaru: {latest_date} • {auto_txt}")
-                    self.badge_tt.set_text("Terlindungi")
-                    ctx.add_class("badge-active")
+
+                    for parts in reversed(parsed[-4:]):
+                        sid = parts[0]
+                        sdate = parts[1] if len(parts) > 1 else "-"
+                        stype = parts[2] if len(parts) > 2 else "-"
+                        ssize = parts[3] if len(parts) > 3 else "-"
+                        scomment = parts[4] if len(parts) > 4 else "Checkpoint sistem"
+
+                        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                        row.get_style_context().add_class("sub-row")
+                        row.pack_start(svg_icon("timetravel", color=COLOR_ACCENT_TEXT, size=18), False, False, 0)
+
+                        v_s = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                        t_lbl = Gtk.Label(label=f"{scomment}", xalign=0)
+                        t_lbl.get_style_context().add_class("card-title")
+                        t_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+                        d_lbl = Gtk.Label(label=f"ID: {sid} • {sdate} • {stype.upper()} ({ssize})", xalign=0)
+                        d_lbl.get_style_context().add_class("card-desc")
+                        v_s.pack_start(t_lbl, False, False, 0)
+                        v_s.pack_start(d_lbl, False, False, 0)
+                        row.pack_start(v_s, True, True, 0)
+                        self.tt_list_box.pack_start(row, False, False, 0)
                 else:
-                    auto_txt = "Auto-Checkpoint aktif" if auto_on else "Auto-Checkpoint nonaktif"
+                    self._set_badge(self.badge_tt, "Belum Ada Snapshot", "badge-warn")
                     self.lbl_tt_desc.set_text(f"Belum ada snapshot tersimpan • {auto_txt}")
-                    self.badge_tt.set_text("Belum Ada Snapshot")
-                    ctx.add_class("badge-warn")
+                    empty_lbl = Gtk.Label(
+                        label="Belum ada titik pemulihan tersimpan. Klik 'Buat Snapshot Baru' untuk mencadangkan kondisi sistem saat ini.",
+                        xalign=0,
+                    )
+                    empty_lbl.get_style_context().add_class("card-desc")
+                    empty_lbl.set_line_wrap(True)
+                    self.tt_list_box.pack_start(empty_lbl, False, False, 0)
+
+                self.tt_list_box.show_all()
 
             self._ui(apply_ui)
         self._run_bg(worker)
 
     # --------------------------------------------------------------------------
-    # Event Handlers & Signals
+    # Event Handlers, Keyboard Shortcuts & Signals
     # --------------------------------------------------------------------------
+    def _on_window_key_press(self, widget, event):
+        ctrl = bool(event.state & Gdk.ModifierType.CONTROL_MASK)
+        if ctrl and event.keyval in (Gdk.KEY_f, Gdk.KEY_F):
+            self.search_entry.grab_focus()
+            return True
+        return False
+
+    def _on_search_key_press(self, entry, event):
+        if event.keyval == Gdk.KEY_Escape:
+            if entry.get_text():
+                entry.set_text("")
+            row = self.nav_list.get_selected_row() or self.nav_list.get_row_at_index(0)
+            if row:
+                row.grab_focus()
+            return True
+        return False
+
     def _on_nav_selected(self, listbox, row):
         if row and hasattr(row, "cat_id"):
+            self._active_cat_id = row.cat_id
             self.stack.set_visible_child_name(row.cat_id)
+        for r in self.nav_list.get_children():
+            if hasattr(r, "icon_img") and hasattr(r, "icon_name"):
+                is_sel = (r == row)
+                color = COLOR_ACCENT if is_sel else COLOR_TEXT_SECONDARY
+                pb = svg_pixbuf(r.icon_name, color=color, size=18)
+                if pb is not None:
+                    r.icon_img.set_from_pixbuf(pb)
 
     def _on_search_changed(self, entry):
         query = entry.get_text().strip().lower()
+        visible_count = 0
         for row in self.nav_list.get_children():
-            if not query:
+            title = getattr(row, "cat_title", "").lower()
+            cid = getattr(row, "cat_id", "").lower()
+            if not query or query in title or query in cid:
                 row.show()
+                visible_count += 1
             else:
-                title = getattr(row, "cat_title", "").lower()
-                cid = getattr(row, "cat_id", "").lower()
-                if query in title or query in cid:
-                    row.show()
-                else:
-                    row.hide()
+                row.hide()
+        if visible_count == 0:
+            self.sidebar_empty_lbl.show()
+        else:
+            self.sidebar_empty_lbl.hide()
 
     def _on_apply_display(self, btn):
         if not self.display_output:
@@ -1898,7 +2889,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         return False
 
     def _on_temp_changed(self, scale):
-        if self._loading_night or not self.sw_night.get_active():
+        if self._loading_night:
             return
         if self._temp_debounce_id:
             GLib.source_remove(self._temp_debounce_id)
@@ -1906,8 +2897,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         def fire():
             self._temp_debounce_id = None
-            if self.sw_night.get_active():
+            active = self.sw_night.get_active()
+            if active:
                 self._apply_gammastep(True, val, save=True)
+            else:
+                self._save_nightlight_cfg(False, val, self.sw_sch.get_active())
             return False
 
         self._temp_debounce_id = GLib.timeout_add(180, fire)
@@ -1932,6 +2926,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         def worker():
             ok, _, err = self._run_cmd(["nmcli", "radio", "wifi", action], timeout=8)
+
             def done():
                 self.sw_wifi.set_sensitive(True)
                 if not ok:
@@ -1949,6 +2944,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         def worker():
             ok, _, err = self._run_cmd(["nmcli", "connection", "down", "id", con_name], timeout=8)
+
             def done():
                 if not ok:
                     self._show_dialog(Gtk.MessageType.ERROR, "Gagal Memutuskan Koneksi", err or f"Tidak dapat memutus {con_name}.")
@@ -1969,6 +2965,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             if password:
                 cmd.extend(["password", password])
             ok, out, err = self._run_cmd(cmd, timeout=25)
+
             def done():
                 if ok:
                     self._show_dialog(Gtk.MessageType.INFO, "Wi-Fi Terhubung", f"Berhasil tersambung ke {ssid}.")
@@ -1986,24 +2983,34 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         dialog = Gtk.Dialog(
             title=f"Sambungkan ke {ssid}",
-            parent=self,
-            flags=Gtk.DialogFlags.MODAL
+            transient_for=self,
+            modal=True,
         )
-        dialog.set_default_size(380, 170)
-        dialog.add_button("Batal", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Sambungkan", Gtk.ResponseType.OK)
+        dialog.set_default_size(400, 190)
+        cancel_btn = dialog.add_button("Batal", Gtk.ResponseType.CANCEL)
+        ok_btn = dialog.add_button("Sambungkan", Gtk.ResponseType.OK)
+        cancel_btn.get_style_context().add_class("btn-secondary")
+        ok_btn.get_style_context().add_class("btn-primary")
         dialog.set_default_response(Gtk.ResponseType.OK)
 
         content = dialog.get_content_area()
         content.set_spacing(10)
         content.set_border_width(16)
 
-        lbl = Gtk.Label(label=f"Masukkan sandi Wi-Fi ({security}) untuk {ssid}:", xalign=0)
+        lbl = Gtk.Label(label=f"Masukkan kata sandi Wi-Fi ({security}) untuk {ssid}:", xalign=0)
+        lbl.get_style_context().add_class("card-title")
+        lbl.set_line_wrap(True)
+
         pwd = Gtk.Entry()
         pwd.set_visibility(False)
         pwd.set_activates_default(True)
+
+        chk_show = Gtk.CheckButton(label="Tampilkan kata sandi")
+        chk_show.connect("toggled", lambda c: pwd.set_visibility(c.get_active()))
+
         content.pack_start(lbl, False, False, 0)
         content.pack_start(pwd, False, False, 0)
+        content.pack_start(chk_show, False, False, 0)
         dialog.show_all()
 
         resp = dialog.run()
@@ -2016,9 +3023,15 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                 return
             self._connect_wifi_async(ssid, password)
 
+    def _update_vol_badge(self, val, muted):
+        if muted:
+            self._set_badge(self.lbl_vval, f"{val}% (Bisu)", "badge-warn")
+        else:
+            self._set_badge(self.lbl_vval, f"{val}%", "badge-info")
+
     def _on_volume_changed(self, scale):
         val = int(scale.get_value())
-        self.lbl_vval.set_text(f"{val}%")
+        self._update_vol_badge(val, self.sw_mute.get_active())
         if self._loading_audio:
             return
         if self._vol_debounce_id:
@@ -2026,6 +3039,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         def apply_vol():
             self._vol_debounce_id = None
+
             def worker():
                 ok, _, _ = self._run_cmd(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val}%"], timeout=2)
                 if not ok:
@@ -2035,6 +3049,20 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
         self._vol_debounce_id = GLib.timeout_add(60, apply_vol)
 
+    def _on_mute_toggled(self, switch, state):
+        val = int(self.scale_vol.get_value())
+        self._update_vol_badge(val, bool(state))
+        if self._loading_audio:
+            return False
+        flag = "1" if state else "0"
+
+        def worker():
+            ok, _, _ = self._run_cmd(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", flag], timeout=2)
+            if not ok:
+                self._run_cmd(["pactl", "set-sink-mute", "@DEFAULT_SINK@", flag], timeout=2)
+        self._run_bg(worker)
+        return False
+
     def _on_output_changed(self, combo):
         if self._loading_audio:
             return
@@ -2042,6 +3070,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         if idx < 0 or idx >= len(self._audio_sinks):
             return
         sink_name = self._audio_sinks[idx][0]
+
         def worker():
             ok, _, err = self._run_cmd(["pactl", "set-default-sink", sink_name], timeout=4)
             if not ok:
@@ -2050,12 +3079,25 @@ class BriskControlCenter(Gtk.ApplicationWindow):
 
     def _on_test_stereo(self, btn):
         btn.set_sensitive(False)
+        btn.set_label("Memutar Nada...")
+
         def worker():
-            ok, _, err = self._run_cmd(["speaker-test", "-t", "sine", "-f", "440", "-c", "2", "-l", "1"], timeout=10)
+            if shutil.which("speaker-test"):
+                ok, _, err = self._run_cmd(["speaker-test", "-t", "sine", "-f", "440", "-c", "2", "-l", "1"], timeout=10)
+            elif shutil.which("paplay") and os.path.exists("/usr/share/sounds/freedesktop/stereo/bell.oga"):
+                ok, _, err = self._run_cmd(["paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"], timeout=6)
+            else:
+                ok, err = False, "Utilitas uji suara ('speaker-test' atau 'paplay') tidak tersedia."
+
             def done():
+                btn.set_label("Tes Stereo")
                 btn.set_sensitive(True)
                 if not ok:
-                    self._show_dialog(Gtk.MessageType.WARNING, "Tes Audio Gagal", err or "Pastikan utilitas 'speaker-test' (alsa-utils) dan PipeWire aktif.")
+                    self._show_dialog(
+                        Gtk.MessageType.WARNING,
+                        "Tes Audio Gagal",
+                        err or "Pastikan utilitas 'speaker-test' (alsa-utils) dan PipeWire aktif.",
+                    )
             self._ui(done)
         self._run_bg(worker)
 
@@ -2064,6 +3106,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         ptr_speed = round(((spd_slider - 1.0) / 9.0) * 1.6 - 0.8, 2)
         nat_val = "yes" if self.sw_nat.get_active() else "no"
         tap_val = "yes" if self.sw_tap.get_active() else "no"
+        self._set_badge(self.lbl_input_status, "Menyimpan...", "badge-info")
 
         def worker():
             try:
@@ -2093,7 +3136,9 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                 tree.write(tmp_path, encoding="utf-8", xml_declaration=True)
                 os.replace(tmp_path, rc_path)
                 self._run_cmd(["labwc", "--reconfigure"], timeout=3)
+                self._ui(self._set_badge, self.lbl_input_status, "Tersimpan", "badge-active")
             except Exception as exc:
+                self._ui(self._set_badge, self.lbl_input_status, "Gagal", "badge-error")
                 self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Menyimpan Pengaturan Input", str(exc))
         self._run_bg(worker)
 
@@ -2102,6 +3147,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             return
         if self._input_debounce_id:
             GLib.source_remove(self._input_debounce_id)
+
         def fire():
             self._input_debounce_id = None
             self._write_input_settings()
@@ -2146,9 +3192,10 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         if self._loading_power:
             return False
         desired = "true" if state else "false"
+        cli_bin = "/usr/local/bin/brisk-sentinel"
 
         def worker():
-            ok_g, raw_g, _ = self._run_cmd(["/usr/local/bin/brisk-sentinel", "glide", "status", "--raw"], timeout=4)
+            ok_g, raw_g, _ = self._run_cmd([cli_bin, "glide", "status", "--raw"], timeout=4)
             cur = "true"
             if ok_g:
                 for line in raw_g.splitlines():
@@ -2156,7 +3203,13 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                         cur = line.split("=", 1)[1].strip().strip('"\'').lower()
                         break
             if cur != desired:
-                self._run_sentinel(["glide", "toggle-dim"])
+                cmd = [cli_bin, "glide", "toggle-dim"] if os.geteuid() == 0 else ["sudo", "-n", cli_bin, "glide", "toggle-dim"]
+                ok, out, err = self._run_cmd(cmd, timeout=10)
+                if not ok and os.geteuid() != 0 and shutil.which("pkexec"):
+                    ok, out, err = self._run_cmd(["pkexec", cli_bin, "glide", "toggle-dim"], timeout=15)
+                if not ok:
+                    self._ui(self._show_dialog, Gtk.MessageType.ERROR, "Gagal Mengubah Peredupan Glide", err or out or "Periksa izin brisk-sentinel.")
+                self._ui(self._load_power_state)
         self._run_bg(worker)
         return False
 
@@ -2166,19 +3219,25 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self._run_sentinel(["threshold", "80" if state else "100"])
         return False
 
+    def _on_open_sentinel_gui(self, btn):
+        try:
+            subprocess.Popen(["/usr/local/bin/brisk-sentinel-gui"], start_new_session=True)
+        except Exception as exc:
+            self._show_dialog(Gtk.MessageType.ERROR, "Gagal Membuka Brisk Sentinel", str(exc))
+
     def _save_appearance_cfg(self, **updates):
         cfg_path = os.path.expanduser("~/.config/brisk/appearance.conf")
         os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
         cfg = {"wallpaper": "default", "taskbar": "islands"}
         try:
             if os.path.exists(cfg_path):
-                with open(cfg_path, "r") as f:
+                with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg.update(json.load(f))
         except Exception:
             pass
         cfg.update(updates)
         try:
-            with open(cfg_path, "w") as f:
+            with open(cfg_path, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, indent=2)
         except Exception:
             pass
@@ -2195,9 +3254,12 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             if wp_key == "default" and os.path.exists(wp_svg):
                 sway_args = ["-i", wp_svg, "-m", "fill"]
                 autostart_block = f'swaybg -i "{wp_svg}" -m fill &'
+            elif wp_key == "mist":
+                sway_args = ["-c", "#DCECF2"]
+                autostart_block = "swaybg -c '#DCECF2' &"
             else:
-                sway_args = ["-c", "#0f172a"]
-                autostart_block = "swaybg -c '#0f172a' &"
+                sway_args = ["-c", "#1E293B"]
+                autostart_block = "swaybg -c '#1E293B' &"
 
             try:
                 subprocess.Popen(
@@ -2212,7 +3274,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             try:
                 autostart_path = self._seed_user_config("labwc/autostart")
                 if os.path.exists(autostart_path):
-                    with open(autostart_path, "r") as f:
+                    with open(autostart_path, "r", encoding="utf-8") as f:
                         txt = f.read()
                     new_txt = re.sub(
                         r'# 1\. Desktop Wallpaper Daemon.*?# 2\. Status Bar',
@@ -2221,7 +3283,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                         flags=re.S,
                     )
                     if new_txt != txt:
-                        with open(autostart_path, "w") as f:
+                        with open(autostart_path, "w", encoding="utf-8") as f:
                             f.write(new_txt)
             except Exception:
                 pass
@@ -2239,7 +3301,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                 css_path = self._seed_user_config("waybar/style.css")
 
                 if os.path.exists(cfg_path):
-                    with open(cfg_path, "r") as f:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
                         raw_cfg = f.read()
                     margin_val = "0" if mode == "dock" else "8"
                     for mkey in ("margin-bottom", "margin-left", "margin-right"):
@@ -2248,11 +3310,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                             rf'\g<1>{margin_val}',
                             raw_cfg,
                         )
-                    with open(cfg_path, "w") as f:
+                    with open(cfg_path, "w", encoding="utf-8") as f:
                         f.write(raw_cfg)
 
                 if os.path.exists(css_path):
-                    with open(css_path, "r") as f:
+                    with open(css_path, "r", encoding="utf-8") as f:
                         raw_css = f.read()
                     raw_css = re.sub(
                         r'\n*/\* BRISK-DOCK-MODE-START \*/.*?/\* BRISK-DOCK-MODE-END \*/\s*',
@@ -2264,8 +3326,8 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                         raw_css += (
                             "\n/* BRISK-DOCK-MODE-START */\n"
                             "window#waybar {\n"
-                            "    background-color: rgba(15, 23, 42, 0.94);\n"
-                            "    border-top: 1px solid rgba(56, 189, 248, 0.25);\n"
+                            "    background-color: rgba(233, 241, 244, 0.96);\n"
+                            "    border-top: 1px solid #CBD5E1;\n"
                             "}\n"
                             ".modules-left,\n"
                             ".modules-center,\n"
@@ -2277,7 +3339,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
                             "}\n"
                             "/* BRISK-DOCK-MODE-END */\n"
                         )
-                    with open(css_path, "w") as f:
+                    with open(css_path, "w", encoding="utf-8") as f:
                         f.write(raw_css)
 
                 self._run_cmd(["pkill", "-x", "waybar"], timeout=3)
@@ -2292,13 +3354,20 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         self._run_bg(worker)
 
     def _on_quick_snapshot(self, btn):
-        btn.set_sensitive(False)
-        orig_label = btn.get_label()
-        btn.set_label("Membuat Snapshot...")
+        if self._snapshot_busy:
+            return
+        self._snapshot_busy = True
+        self.hdr_snap_btn.set_sensitive(False)
+        self.btn_create_snap.set_sensitive(False)
+        self.hdr_snap_lbl.set_text("Membuat...")
+        self.btn_create_snap_lbl.set_text("Membuat Snapshot...")
 
         def run_snapshot():
             comment = "Manual Quick Checkpoint from Control Center"
             cli_bin = "/usr/local/bin/brisk-timetravel"
+            if not os.path.exists(cli_bin):
+                self._ui(self._finish_quick_snapshot, False, "Utilitas /usr/local/bin/brisk-timetravel tidak ditemukan.")
+                return
             if os.geteuid() == 0:
                 cmd = [cli_bin, "create", comment]
             elif shutil.which("sudo"):
@@ -2306,31 +3375,37 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             elif shutil.which("pkexec"):
                 cmd = ["pkexec", cli_bin, "create", comment]
             else:
-                self._ui(self._finish_quick_snapshot, btn, orig_label, False, "Utility sudo/pkexec tidak tersedia.")
+                self._ui(self._finish_quick_snapshot, False, "Utility sudo/pkexec tidak tersedia.")
                 return
 
             try:
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                if proc.returncode != 0 and os.geteuid() != 0 and "sudo" in cmd[0] and shutil.which("pkexec"):
+                    proc = subprocess.run(["pkexec", cli_bin, "create", comment], capture_output=True, text=True, timeout=300)
+
                 if proc.returncode == 0:
                     snap_id = (proc.stdout.strip().splitlines() or [""])[-1]
-                    self._ui(self._finish_quick_snapshot, btn, orig_label, True, snap_id)
+                    self._ui(self._finish_quick_snapshot, True, snap_id)
                 else:
                     err = (proc.stderr or proc.stdout or "Gagal membuat snapshot pemulihan.").strip()
-                    self._ui(self._finish_quick_snapshot, btn, orig_label, False, err)
+                    self._ui(self._finish_quick_snapshot, False, err)
             except Exception as exc:
-                self._ui(self._finish_quick_snapshot, btn, orig_label, False, str(exc))
+                self._ui(self._finish_quick_snapshot, False, str(exc))
 
         self._run_bg(run_snapshot)
 
-    def _finish_quick_snapshot(self, btn, orig_label, success, detail):
-        btn.set_label(orig_label)
-        btn.set_sensitive(True)
+    def _finish_quick_snapshot(self, success, detail):
+        self._snapshot_busy = False
+        self.hdr_snap_lbl.set_text("Snapshot")
+        self.btn_create_snap_lbl.set_text("Buat Snapshot Baru")
+        self.hdr_snap_btn.set_sensitive(True)
+        self.btn_create_snap.set_sensitive(True)
         if success:
             self._load_timetravel_state()
             suffix = f" ({detail})" if detail else ""
             self._show_dialog(
                 Gtk.MessageType.INFO,
-                "Snapshot Pemulihan Berhasil Dibuat!",
+                "Snapshot Pemulihan Berhasil Dibuat",
                 f"Titik pemulihan sistem{suffix} telah disimpan. Anda dapat memutar balik ke titik ini kapan saja.",
             )
         else:
@@ -2359,7 +3434,7 @@ class BriskControlCenter(Gtk.ApplicationWindow):
         def worker():
             local_ver = "1.0"
             try:
-                with open("/etc/os-release", "r") as f:
+                with open("/etc/os-release", "r", encoding="utf-8") as f:
                     for line in f:
                         if line.startswith("VERSION_ID="):
                             local_ver = line.split("=", 1)[1].strip().strip('"\'')
@@ -2371,9 +3446,11 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             ok, out, _ = self._run_cmd(["/usr/local/bin/brisk-update-checker", "--now"], timeout=15)
             status_msg = "Tidak dapat memeriksa rilis daring (offline atau API tidak terjangkau)."
 
-            if ok and os.path.exists(cache_file):
+            if ok and "skipped" in out.lower():
+                status_msg = "Pemeriksaan rilis dilewati (offline atau batas API GitHub tercapai)."
+            elif ok and os.path.exists(cache_file):
                 try:
-                    with open(cache_file, "r") as f:
+                    with open(cache_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     if isinstance(data, list) and data:
                         data = data[0]
@@ -2395,18 +3472,46 @@ class BriskControlCenter(Gtk.ApplicationWindow):
             self._ui(done)
         self._run_bg(worker)
 
+
 # ------------------------------------------------------------------------------
 # Main Entry Point
 # ------------------------------------------------------------------------------
 class BriskControlApp(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id=APP_ID)
+        super().__init__(
+            application_id=APP_ID,
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+        )
+        self.window = None
 
     def do_activate(self):
-        win = BriskControlCenter(self)
+        if self.window is None:
+            self.window = BriskControlCenter(self)
+        self.window.present()
+
+    def do_command_line(self, command_line):
+        args = command_line.get_arguments()[1:]
+        self.activate()
+        if self.window and args:
+            target = args[-1].lstrip("-")
+            if target.startswith("panel="):
+                target = target.split("=", 1)[1]
+            self.window.select_panel(target)
+        return 0
+
 
 if __name__ == "__main__":
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print("Brisk Control Center (brisk-control)")
+        print("Usage: brisk-control [panel]")
+        print("Panels: display, nightlight, network, sound, input, power, appearance, timetravel, about")
+        sys.exit(0)
+    if "--version" in sys.argv[1:]:
+        print(f"{APP_NAME} {APP_VERSION}")
+        sys.exit(0)
+
+    GLib.set_application_name(APP_NAME)
+    GLib.set_prgname("brisk-control")
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     app = BriskControlApp()
     sys.exit(app.run(sys.argv))
-
