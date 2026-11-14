@@ -9,7 +9,7 @@
 
   <!-- Window decorations and theme styling -->
   <theme>
-    <name>Brisk-Dark</name>
+    <name>Brisk-Morning</name>
     <cornerRadius>10</cornerRadius>
     <dropShadow>yes</dropShadow>
     <font place="ActiveWindow">
@@ -65,6 +65,12 @@
     <!-- Windows compatibility layer (Wine) -->
     <windowRule identifier="*.exe" serverDecoration="yes" />
     <windowRule identifier="wine" serverDecoration="yes" />
+
+    <!-- Client-side decoration (GTK HeaderBar) apps: avoid double titlebars -->
+    <windowRule identifier="org.briskos.control" serverDecoration="no" />
+    <windowRule identifier="brisk-control" serverDecoration="no" />
+    <windowRule identifier="brisk-store" serverDecoration="no" />
+    <windowRule identifier="org.briskos.store" serverDecoration="no" />
   </windowRules>
 
   <!-- Keyboard Bindings -->
@@ -111,6 +117,11 @@
       <action name="Execute" command="pkill -x wofi || wofi --show drun" />
     </keybind>
 
+    <!-- Alt+F1: Toggle Wofi application launcher -->
+    <keybind key="A-F1">
+      <action name="Execute" command="pkill -x wofi || wofi --show drun" />
+    </keybind>
+
     <!-- Window Snapping and Geometry Keybindings -->
     <!-- Super+Left: Snap window to left half of screen -->
     <keybind key="W-Left">
@@ -145,7 +156,7 @@
 
     <!-- Super+l: Lock screen -->
     <keybind key="W-l">
-      <action name="Execute" command="swaylock -f -c 0f172a" />
+      <action name="Execute" command="swaylock -f -c dcecf2" />
     </keybind>
 
     <!-- Hardware Media & Brightness Keys (Brisk Floating OSD HUD) -->

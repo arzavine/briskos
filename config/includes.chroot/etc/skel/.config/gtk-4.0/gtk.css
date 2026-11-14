@@ -1,30 +1,29 @@
-/* BriskOS Night Glass Ghost Scrollbars */
+/* BriskOS 1.0 LTS GTK 4.0 User Styling ("Morning Breeze") */
+
 scrollbar {
-  background-color: transparent;
-  -GtkScrollbar-has-backward-stepper: 0;
-  -GtkScrollbar-has-forward-stepper: 0;
+    background-color: transparent;
+    border: none;
 }
 
 scrollbar trough {
-  background-color: transparent;
-  border: none;
+    background-color: transparent;
+    border: none;
 }
 
 scrollbar slider {
-  min-width: 6px;
-  min-height: 6px;
-  border-radius: 9999px;
-  background-color: rgba(148, 163, 184, 0.25);
-  border: none;
-  margin: 2px;
+    min-width: 6px;
+    min-height: 6px;
+    margin: 2px;
+    border-radius: 9999px;
+    background-color: rgba(71, 85, 105, 0.35);
+    border: 1px solid transparent;
+    transition: background-color 150ms ease;
 }
 
 scrollbar slider:hover {
-  min-width: 9px;
-  min-height: 9px;
-  background-color: rgba(56, 189, 248, 0.6);
+    background-color: rgba(14, 116, 144, 0.65);
 }
 
 scrollbar slider:active {
-  background-color: #38bdf8;
+    background-color: #0e7490;
 }

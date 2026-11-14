@@ -87,7 +87,7 @@
 
     <!-- Session Management -->
     <item label="Lock Screen" icon="system-lock-screen">
-      <action name="Execute" command="swaylock -f -c 0f172a" />
+      <action name="Execute" command="swaylock -f -c dcecf2" />
     </item>
     <item label="Log Out" icon="system-log-out">
       <action name="Exit" />

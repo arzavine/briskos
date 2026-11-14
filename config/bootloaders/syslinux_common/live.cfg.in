@@ -1,0 +1,12 @@
+label live-@FLAVOUR@
+	menu label ^BriskOS 1.0 LTS (Live & Install)
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-failsafe
+	menu label BriskOS 1.0 LTS (^Safe Graphics Mode)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE_FAILSAFE@

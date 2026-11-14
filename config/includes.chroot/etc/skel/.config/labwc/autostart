@@ -10,7 +10,7 @@ if command -v swaybg >/dev/null 2>&1; then
     if [ -f "$WALLPAPER" ]; then
         swaybg -i "$WALLPAPER" -m fill &
     else
-        swaybg -c '#0f172a' &
+        swaybg -c '#dcecf2' &
     fi
 elif command -v wbg >/dev/null 2>&1 && [ -f "$WALLPAPER" ]; then
     wbg "$WALLPAPER" &
@@ -18,7 +18,7 @@ fi
 
 # 2. Status Bar and Panel (Waybar)
 if command -v waybar >/dev/null 2>&1; then
-    waybar &
+    waybar >/tmp/waybar.log 2>&1 &
 fi
 
 # 3. Notification Daemon (Mako)
@@ -42,8 +42,8 @@ done
 # 5. Screen Idle Management and Screen Locker (Swayidle)
 if command -v swayidle >/dev/null 2>&1; then
     swayidle -w \
-        timeout 600 'swaylock -f -c 0f172a' \
-        before-sleep 'swaylock -f -c 0f172a' &
+        timeout 600 'swaylock -f -c dcecf2' \
+        before-sleep 'swaylock -f -c dcecf2' &
 fi
 
 # 6. XDG Autostart Applications (e.g., brisk-update-checker)

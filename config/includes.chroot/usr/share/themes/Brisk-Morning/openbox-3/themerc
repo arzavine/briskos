@@ -1,0 +1,130 @@
+# Brisk-Morning - Openbox 3 / Labwc Theme for BriskOS 1.0 LTS ("Morning Breeze")
+
+# Window geometry
+border.width: 1
+padding.width: 8
+padding.height: 7
+window.client.padding.width: 0
+window.client.padding.height: 0
+window.handle.width: 4
+window.button.spacing: 6
+
+# Active window frame & titlebar
+window.active.border.color: #cbd5e1
+window.active.client.color: #f5f7f7
+
+window.active.title.bg: flat solid
+window.active.title.bg.color: #e9f1f4
+
+window.active.label.bg: parentrelative
+window.active.label.text.color: #0f172a
+window.label.text.justify: left
+
+# Active window buttons
+window.active.button.unpressed.bg: parentrelative
+window.active.button.unpressed.image.color: #475569
+
+window.active.button.hover.bg: flat solid
+window.active.button.hover.bg.color: #d6e9ee
+window.active.button.hover.image.color: #0c5b73
+
+window.active.button.pressed.bg: flat solid
+window.active.button.pressed.bg.color: #cbd5e1
+window.active.button.pressed.image.color: #0f172a
+
+window.active.button.disabled.bg: parentrelative
+window.active.button.disabled.image.color: #94a3b8
+
+window.active.button.toggled.unpressed.bg: flat solid
+window.active.button.toggled.unpressed.bg.color: #d6e9ee
+window.active.button.toggled.unpressed.image.color: #0c5b73
+
+# Inactive window frame & titlebar
+window.inactive.border.color: #d5e2e7
+window.inactive.client.color: #f5f7f7
+
+window.inactive.title.bg: flat solid
+window.inactive.title.bg.color: #f5f7f7
+
+window.inactive.label.bg: parentrelative
+window.inactive.label.text.color: #475569
+
+# Inactive window buttons
+window.inactive.button.unpressed.bg: parentrelative
+window.inactive.button.unpressed.image.color: #64748b
+
+window.inactive.button.hover.bg: flat solid
+window.inactive.button.hover.bg.color: #e9f1f4
+window.inactive.button.hover.image.color: #0f172a
+
+window.inactive.button.pressed.bg: flat solid
+window.inactive.button.pressed.bg.color: #d5e2e7
+window.inactive.button.pressed.image.color: #0f172a
+
+window.inactive.button.disabled.bg: parentrelative
+window.inactive.button.disabled.image.color: #94a3b8
+
+window.inactive.button.toggled.unpressed.bg: parentrelative
+window.inactive.button.toggled.unpressed.image.color: #475569
+
+# Shadows & snapping overlay (Labwc)
+window.active.shadow.size: 28
+window.active.shadow.color: #0f172a24
+window.inactive.shadow.size: 16
+window.inactive.shadow.color: #0f172a12
+
+snapping.overlay.region.bg.enabled: yes
+snapping.overlay.region.bg.color: #0e749022
+snapping.overlay.region.border.enabled: yes
+snapping.overlay.region.border.color: #0e7490
+
+snapping.overlay.edge.bg.enabled: yes
+snapping.overlay.edge.bg.color: #0e749022
+snapping.overlay.edge.border.enabled: yes
+snapping.overlay.edge.border.color: #0e7490
+
+# Compositor right-click & window menu
+menu.width.min: 180
+menu.width.max: 320
+menu.border.width: 1
+menu.border.color: #cbd5e1
+menu.separator.width: 1
+menu.separator.padding.width: 8
+menu.separator.padding.height: 4
+menu.separator.color: #d5e2e7
+
+menu.title.bg: flat solid
+menu.title.bg.color: #e9f1f4
+menu.title.text.color: #0f172a
+menu.title.text.justify: left
+
+menu.items.bg: flat solid
+menu.items.bg.color: #ffffff
+menu.items.text.color: #0f172a
+menu.items.disabled.text.color: #64748b
+
+menu.items.active.bg: flat solid
+menu.items.active.bg.color: #d6e9ee
+menu.items.active.text.color: #0f172a
+
+menu.items.padding.x: 12
+menu.items.padding.y: 6
+
+# OSD (Alt-Tab window switcher & workspace HUD)
+osd.bg: flat solid
+osd.bg.color: #ffffff
+osd.border.width: 1
+osd.border.color: #cbd5e1
+osd.label.text.color: #0f172a
+osd.workspace-switcher.boxes.width: 24
+osd.workspace-switcher.boxes.height: 24
+osd.workspace-switcher.boxes.border.width: 1
+osd.workspace-switcher.boxes.bg.color: #e9f1f4
+osd.workspace-switcher.boxes.border.color: #cbd5e1
+osd.window-switcher.width: 560
+osd.window-switcher.padding: 12
+osd.window-switcher.item.padding.x: 10
+osd.window-switcher.item.padding.y: 8
+osd.window-switcher.item.active.border.width: 2
+osd.window-switcher.preview.border.width: 2
+osd.window-switcher.preview.border.color: #0e7490

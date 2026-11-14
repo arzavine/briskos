@@ -1,265 +1,313 @@
-/* =============================================================================
- * BriskOS Waybar Bottom Taskbar Stylesheet
- * Night Glass Design System: Floating 3-Island Architecture
- * Translucent glass: rgba(15, 23, 42, 0.88), 14px radius, 1px highlight edge,
- * and the single Ice Cyan focus glow: box-shadow 0 0 12px rgba(56, 189, 248, 0.45).
- * ============================================================================= */
+/* BriskOS 1.0 LTS Waybar Stylesheet ("Morning Breeze")
+ * Valid GTK3 CSS: no :empty, no var(), no max-width, no gap.
+ */
 
 * {
     border: none;
     border-radius: 0;
-    font-family: "Inter", "Noto Color Emoji", sans-serif;
+    font-family: "Inter", "Noto Sans", sans-serif;
     font-size: 13px;
-    font-weight: 500;
     min-height: 0;
 }
 
-/* Base transparent layer for detached floating islands */
 window#waybar {
-    background-color: transparent;
-    border: none;
-    color: #f8fafc;
+    background-color: rgba(255, 255, 255, 0.92);
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    color: #0f172a;
 }
 
-/* -----------------------------------------------------------------------------
- * Floating Glass Islands (Left, Center, Right)
- * ----------------------------------------------------------------------------- */
 .modules-left,
 .modules-center,
 .modules-right {
-    background-color: rgba(15, 23, 42, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
-    padding: 2px 6px;
-}
-
-/* Hide center container when no windows are open */
-.modules-center:empty {
     background-color: transparent;
     border: none;
-    box-shadow: none;
-    padding: 0;
+    padding: 3px 6px;
 }
 
-/* -----------------------------------------------------------------------------
- * Left Island: Start Menu & Quick-Launch Pinned Items
- * ----------------------------------------------------------------------------- */
+/* Primary Launcher: Apps */
 #custom-startmenu {
-    background-color: transparent;
-    color: #38bdf8;
-    font-size: 15px;
-    padding: 0 10px;
-    margin: 2px 2px;
-    border: 1px solid transparent;
+    background-color: #e9f1f4;
+    background-image: url("icons/apps.svg");
+    background-repeat: no-repeat;
+    background-position: 10px center;
+    background-size: 16px 16px;
+    color: #0f172a;
+    font-weight: 600;
+    padding: 0 12px 0 32px;
+    margin: 2px 3px 2px 2px;
+    border: 1px solid #cbd5e1;
     border-radius: 8px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 #custom-startmenu:hover {
-    background-color: #1e293b;
-    color: #f8fafc;
-    border-color: rgba(255, 255, 255, 0.08);
+    background-color: #d6e9ee;
+    border-color: #0e7490;
 }
 
-#custom-startmenu:active {
-    background-color: #38bdf8;
-    color: #0f172a;
-    border-color: #38bdf8;
-}
-
+/* Branded Action Pills: Store and Live Installer */
 #custom-store {
-    background-color: rgba(30, 41, 59, 0.40);
-    color: #f8fafc;
-    padding: 0 10px;
-    margin: 2px 2px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    font-size: 13px;
+    background-color: #ffffff;
+    background-image: url("icons/store.svg");
+    background-repeat: no-repeat;
+    background-position: 9px center;
+    background-size: 15px 15px;
+    color: #0f172a;
     font-weight: 600;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    padding: 0 11px 0 30px;
+    margin: 2px 2px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 #custom-store:hover {
-    background-color: #1e293b;
-    color: #38bdf8;
-    border-color: #38bdf8;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
-}
-
-#custom-store:active {
-    background-color: #38bdf8;
-    color: #0f172a;
-    border-color: #38bdf8;
+    background-color: #e9f1f4;
+    border-color: #94a3b8;
 }
 
 #custom-installer {
-    background-color: rgba(56, 189, 248, 0.10);
-    color: #38bdf8;
-    padding: 0 10px;
-    margin: 2px 2px;
-    border: 1px solid rgba(56, 189, 248, 0.28);
-    border-radius: 8px;
-    font-size: 13px;
+    background-color: #d6e9ee;
+    background-image: url("icons/install.svg");
+    background-repeat: no-repeat;
+    background-position: 9px center;
+    background-size: 15px 15px;
+    color: #0c5b73;
     font-weight: 600;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    padding: 0 11px 0 30px;
+    margin: 2px 4px 2px 2px;
+    border: 1px solid #0e7490;
+    border-radius: 8px;
+    transition: background-color 150ms ease;
 }
 
 #custom-installer:hover {
-    background-color: #38bdf8;
-    color: #0f172a;
-    border-color: #38bdf8;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+    background-color: #c5e1e8;
 }
 
-#custom-browser,
+/* Quick Launch Icon Buttons */
 #custom-files,
+#custom-browser,
 #custom-terminal,
-#custom-office {
-    background-color: transparent;
-    color: #94a3b8;
-    padding: 0 8px;
+#custom-office,
+#custom-settings {
+    min-width: 30px;
+    min-height: 28px;
+    padding: 0 4px;
     margin: 2px 1px;
     border: 1px solid transparent;
     border-radius: 8px;
-    font-size: 14px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    background-color: transparent;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px 16px;
+    color: #0f172a;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
-#custom-browser:hover,
+#custom-files {
+    background-image: url("icons/files.svg");
+}
+
+#custom-browser {
+    background-image: url("icons/browser.svg");
+}
+
+#custom-terminal {
+    background-image: url("icons/terminal.svg");
+}
+
+#custom-office {
+    background-image: url("icons/office.svg");
+}
+
+#custom-settings {
+    background-image: url("icons/settings.svg");
+}
+
 #custom-files:hover,
+#custom-browser:hover,
 #custom-terminal:hover,
-#custom-office:hover {
-    background-color: #1e293b;
-    color: #f8fafc;
-    border-color: rgba(255, 255, 255, 0.08);
+#custom-office:hover,
+#custom-settings:hover {
+    background-color: #e9f1f4;
+    border-color: #cbd5e1;
 }
 
-/* -----------------------------------------------------------------------------
- * Center Island: Window Taskbar
- * Active task gets 3px rounded Ice Cyan underline with the ONE glow.
- * ----------------------------------------------------------------------------- */
+/* Center Taskbar */
 #taskbar {
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+#taskbar.empty {
+    background-color: transparent;
+    border: none;
+    padding: 0;
     margin: 0;
 }
 
 #taskbar button {
     background-color: transparent;
-    color: #94a3b8;
+    color: #475569;
     border: 1px solid transparent;
     border-bottom: 3px solid transparent;
-    border-radius: 8px 8px 6px 6px;
-    padding: 0 12px;
+    border-radius: 8px 8px 4px 4px;
+    padding: 0 10px;
     margin: 2px 2px;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    font-weight: 500;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 #taskbar button:hover {
-    background-color: #1e293b;
-    color: #f8fafc;
-    border-color: rgba(255, 255, 255, 0.08);
+    background-color: #e9f1f4;
+    color: #0f172a;
+    border-color: #cbd5e1;
     border-bottom: 3px solid transparent;
 }
 
 #taskbar button.active {
-    background-color: #1e293b;
-    color: #f8fafc;
-    border: 1px solid rgba(56, 189, 248, 0.35);
-    border-bottom: 3px solid #38bdf8;
-    border-radius: 8px 8px 6px 6px;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
+    background-color: #d6e9ee;
+    color: #0f172a;
+    font-weight: 600;
+    border: 1px solid #cbd5e1;
+    border-bottom: 3px solid #0e7490;
+    border-radius: 8px 8px 4px 4px;
 }
 
 #taskbar button.minimized {
-    background-color: transparent;
-    color: #64748b;
-    border: 1px dashed rgba(255, 255, 255, 0.06);
+    color: #475569;
+    background-color: #f5f7f7;
+    border: 1px dashed #cbd5e1;
     border-bottom: 3px solid transparent;
 }
 
-/* -----------------------------------------------------------------------------
- * Right Island: Continuous Glass with Subtle 1px Vertical Dividers
- * ----------------------------------------------------------------------------- */
-#pulseaudio,
-#network,
-#battery,
-#clock,
-#custom-power {
-    background-color: transparent;
-    color: #f8fafc;
-    border: none;
-    border-radius: 6px;
-    padding: 0 10px;
-    margin: 2px 0;
-    transition: background-color 0.15s ease, color 0.15s ease;
+/* Right System Tray & Status Controls */
+#tray {
+    padding: 0 6px;
+    margin: 2px 2px;
+    border-radius: 8px;
 }
 
+#pulseaudio,
 #network,
-#battery,
-#clock,
-#custom-power {
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+#battery {
+    color: #0f172a;
+    background-color: transparent;
+    background-repeat: no-repeat;
+    background-position: 9px center;
+    background-size: 15px 15px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 10px 0 30px;
+    margin: 2px 2px;
+    font-weight: 500;
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+#pulseaudio {
+    background-image: url("icons/volume.svg");
+}
+
+#pulseaudio.muted {
+    color: #475569;
+    background-image: url("icons/volume-muted.svg");
+}
+
+#network {
+    background-image: url("icons/ethernet.svg");
+}
+
+#network.wifi {
+    background-image: url("icons/wifi.svg");
+}
+
+#network.ethernet,
+#network.linked {
+    background-image: url("icons/ethernet.svg");
+}
+
+#network.disconnected {
+    color: #b91c1c;
+    background-image: url("icons/offline.svg");
+}
+
+#battery {
+    background-image: url("icons/battery.svg");
+}
+
+#battery.charging,
+#battery.plugged {
+    color: #0c5b73;
+    background-image: url("icons/battery-charging.svg");
+}
+
+#battery.warning:not(.charging) {
+    color: #92400e;
+    background-color: #fef3c7;
+}
+
+#battery.critical:not(.charging) {
+    color: #b91c1c;
+    background-color: #fee2e2;
 }
 
 #pulseaudio:hover,
 #network:hover,
-#battery:hover,
-#clock:hover {
-    background-color: rgba(255, 255, 255, 0.06);
-    color: #f8fafc;
-}
-
-#pulseaudio.muted {
-    color: #94a3b8;
-}
-
-#network.disconnected {
-    color: #f43f5e;
-}
-
-#battery.warning:not(.charging) {
-    color: #f59e0b;
-}
-
-#battery.critical:not(.charging) {
-    color: #f43f5e;
-}
-
-#battery.charging {
-    color: #38bdf8;
+#battery:hover {
+    background-color: #e9f1f4;
+    border-color: #cbd5e1;
 }
 
 #clock {
+    color: #0f172a;
     font-weight: 600;
-    padding: 0 12px;
+    font-size: 13px;
+    padding: 0 11px;
+    margin: 2px 3px 2px 4px;
+    border: 1px solid #d5e2e7;
+    border-radius: 8px;
+    background-color: #f5f7f7;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
-/* Power button: muted at rest, red ONLY on hover */
+#clock:hover {
+    background-color: #e9f1f4;
+    border-color: #cbd5e1;
+}
+
 #custom-power {
-    color: #94a3b8;
-    font-size: 14px;
-    padding: 0 12px;
+    min-width: 30px;
+    min-height: 28px;
+    padding: 0 4px;
+    margin: 2px 2px 2px 2px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background-color: transparent;
+    background-image: url("icons/power.svg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px 16px;
+    color: #0f172a;
+    transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 #custom-power:hover {
-    background-color: #f43f5e;
-    color: #ffffff;
-    border-radius: 6px;
+    background-color: #fee2e2;
+    border-color: #fca5a5;
 }
 
-/* -----------------------------------------------------------------------------
- * Tooltips & Popovers
- * ----------------------------------------------------------------------------- */
+/* Morning Breeze Tooltips & Calendar */
 tooltip {
-    background-color: rgba(15, 23, 42, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 8px 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
 }
 
 tooltip label {
-    color: #f8fafc;
-    font-family: "Inter", "Noto Color Emoji", sans-serif;
+    color: #0f172a;
     font-size: 12px;
+    padding: 6px 10px;
 }

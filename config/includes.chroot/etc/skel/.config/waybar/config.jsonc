@@ -1,31 +1,28 @@
+// BriskOS 1.0 LTS Waybar Configuration ("Morning Breeze")
 {
-    // =========================================================================
-    // BriskOS Waybar Bottom Taskbar Configuration
-    // Night Glass Design System: Floating 3-Island Architecture
-    // =========================================================================
     "layer": "top",
     "position": "bottom",
-    "height": 40,
+    "height": 42,
     "margin-bottom": 8,
     "margin-left": 8,
     "margin-right": 8,
-    "spacing": 0,
+    "spacing": 4,
 
-    // Module Layout - 3-Island Architecture
     "modules-left": [
         "custom/startmenu",
         "custom/store",
-        "custom/settings",
         "custom/installer",
-        "custom/browser",
         "custom/files",
+        "custom/browser",
         "custom/terminal",
-        "custom/office"
+        "custom/office",
+        "custom/settings"
     ],
     "modules-center": [
         "wlr/taskbar"
     ],
     "modules-right": [
+        "tray",
         "pulseaudio",
         "network",
         "battery",
@@ -33,145 +30,139 @@
         "custom/power"
     ],
 
-    // -------------------------------------------------------------------------
-    // Left Island: Start Menu & Quick-Launch Pinned Items
-    // -------------------------------------------------------------------------
+    // Launcher & Pinned Desktop Actions
     "custom/startmenu": {
-        "format": "❖",
-        "tooltip-format": "Applications & Search (Super)",
-        "on-click": "pkill -x wofi || wofi --show drun",
-        "escape": true
-    },
-    "custom/store": {
-        "format": "Store",
-        "tooltip-format": "Brisk Store (Pusat Aplikasi Modern)",
-        "on-click": "brisk-store",
-        "escape": true
-    },
-    "custom/settings": {
-        "format": "⚙️",
-        "tooltip-format": "Brisk Control Center (Pusat Pengaturan)",
-        "on-click": "brisk-control",
-        "escape": true
-    },
-    "custom/installer": {
-        "format": "💿 Install",
-        "tooltip-format": "Install BriskOS 1.0 LTS permanently to disk",
-        "on-click": "brisk-installer"
-    },
-    "custom/browser": {
-        "format": "🌐",
-        "tooltip-format": "Web Browser",
-        "on-click": "x-www-browser",
-        "escape": true
-    },
-    "custom/files": {
-        "format": "📁",
-        "tooltip-format": "File Manager (Thunar)",
-        "on-click": "thunar",
-        "escape": true
-    },
-    "custom/terminal": {
-        "format": "💻",
-        "tooltip-format": "Terminal (Foot)",
-        "on-click": "foot",
-        "escape": true
-    },
-    "custom/office": {
-        "format": "📝",
-        "tooltip-format": "Productivity Suite (Office)",
-        "on-click": "sh -c 'command -v onlyoffice-desktopeditors >/dev/null 2>&1 && exec onlyoffice-desktopeditors || exec libreoffice --writer'",
-        "escape": true
+        "format": "Apps",
+        "interval": "once",
+        "tooltip-format": "Applications and Search (Super)",
+        "on-click": "pkill -x wofi || wofi --show drun"
     },
 
-    // -------------------------------------------------------------------------
-    // Center Island: Window Taskbar
-    // -------------------------------------------------------------------------
+    "custom/store": {
+        "format": "Store",
+        "interval": "once",
+        "tooltip-format": "Brisk Store",
+        "on-click": "brisk-store"
+    },
+
+    "custom/installer": {
+        "format": "Install",
+        "interval": "once",
+        "tooltip-format": "Install BriskOS 1.0 LTS to disk",
+        "on-click": "brisk-installer"
+    },
+
+    "custom/files": {
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "File Manager (Thunar)",
+        "on-click": "thunar"
+    },
+
+    "custom/browser": {
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "Web Browser",
+        "on-click": "x-www-browser"
+    },
+
+    "custom/terminal": {
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "Terminal (Foot)",
+        "on-click": "foot"
+    },
+
+    "custom/office": {
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "LibreOffice Writer",
+        "on-click": "libreoffice --writer"
+    },
+
+    "custom/settings": {
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "Brisk Control Center",
+        "on-click": "brisk-control"
+    },
+
+    // Center Taskbar
     "wlr/taskbar": {
-        "format": "{icon} {title}",
+        "format": "{icon} {title:.18}",
         "icon-size": 18,
-        "icon-theme": "Papirus-Dark",
-        "spacing": 4,
+        "icon-theme": "Papirus",
+        "all-outputs": true,
         "tooltip-format": "{title}",
         "on-click": "activate",
         "on-click-middle": "close",
         "ignore-list": [
             "wofi"
-        ],
-        "max-length": 30
+        ]
     },
 
-    // -------------------------------------------------------------------------
-    // Right Island: System Indicators & Session Controls
-    // -------------------------------------------------------------------------
+    // System Tray & Status Modules
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8
+    },
+
     "pulseaudio": {
-        "format": "{icon} {volume}%",
-        "format-bluetooth": "󰂯 {icon} {volume}%",
-        "format-bluetooth-muted": "󰂯 🔇 {volume}%",
-        "format-muted": "🔇 {volume}%",
-        "format-icons": {
-            "headphone": "🎧",
-            "hands-free": "🎧",
-            "headset": "🎧",
-            "phone": "📞",
-            "portable": "📱",
-            "car": "🚗",
-            "default": ["🔈", "🔉", "🔊"]
-        },
         "scroll-step": 5,
+        "format": "{volume}%",
+        "format-bluetooth": "{volume}%",
+        "format-muted": "Muted",
         "on-click": "pavucontrol",
+        "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
         "tooltip-format": "Volume: {volume}% ({desc})"
     },
+
     "network": {
         "interval": 5,
-        "format-wifi": "📶 {essid} ({signalStrength}%)",
-        "format-ethernet": "🖧 {ipaddr}",
-        "format-linked": "🖧 {ifname} (No IP)",
-        "format-disconnected": "⚠️ Offline",
+        "format": "Online",
+        "format-wifi": "{essid}",
+        "format-ethernet": "Wired",
+        "format-linked": "Wired",
+        "format-disconnected": "Offline",
         "tooltip-format": "Interface: {ifname}\nIP: {ipaddr}/{cidr}\nGateway: {gwaddr}",
-        "tooltip-format-wifi": "SSID: {essid} ({signalStrength}%)\nIP: {ipaddr}/{cidr}",
-        "tooltip-format-ethernet": "Ethernet: {ifname}\nIP: {ipaddr}/{cidr}",
-        "tooltip-format-disconnected": "Network Disconnected",
         "on-click": "brisk-control"
     },
+
     "battery": {
         "states": {
-            "good": 95,
-            "warning": 30,
-            "critical": 20
+            "warning": 25,
+            "critical": 12
         },
-        "format": "{icon} {capacity}%",
-        "format-charging": "⚡ {capacity}%",
-        "format-plugged": "🔌 {capacity}%",
-        "format-critical": "🪽🪫 {capacity}%",
-        "format-alt": "{icon} {time}",
-        "format-icons": ["🪫", "🔋", "🔋"],
-        "tooltip-format": "{capacity}% ({time}) • {status}\n⚡ Brisk Sentinel & Glide Mode Auto-Guard\nClick to open power settings",
-        "tooltip-format-critical": "🪽 GLIDE MODE ACTIVE ({capacity}%)\nAuto-guard low-battery protection engaged\nClick to open power settings",
-        "tooltip-format-charging": "⚡ Charging: {capacity}% ({time} until full)\nClick to open power settings",
+        "format": "{capacity}%",
+        "format-charging": "{capacity}%",
+        "format-plugged": "{capacity}%",
+        "tooltip-format": "{capacity}% ({time}) - {status}\nBrisk Sentinel Power Guard",
         "on-click": "brisk-sentinel-gui"
     },
+
     "clock": {
         "interval": 1,
         "format": "{:%H:%M}",
-        "format-alt": "{:%A, %d %B %Y  %H:%M:%S}",
+        "format-alt": "{:%a %d %b  %H:%M}",
         "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>",
         "calendar": {
             "mode": "month",
             "mode-mon-col": 3,
             "on-scroll": 1,
             "format": {
-                "months": "<span color='#f8fafc'><b>{}</b></span>",
-                "days": "<span color='#94a3b8'><b>{}</b></span>",
-                "weekdays": "<span color='#38bdf8'><b>{}</b></span>",
-                "today": "<span color='#0f172a' background='#38bdf8'><b><u>{}</u></b></span>"
+                "months": "<span color='#0f172a'><b>{}</b></span>",
+                "days": "<span color='#475569'>{}</span>",
+                "weeks": "<span color='#0c5b73'><b>W{}</b></span>",
+                "weekdays": "<span color='#0e7490'><b>{}</b></span>",
+                "today": "<span color='#ffffff' background='#0e7490'><b> {} </b></span>"
             }
         }
     },
+
     "custom/power": {
-        "format": "⏻",
-        "tooltip-format": "Power Off / Exit Session",
-        "on-click": "labwc --exit",
-        "escape": true
+        "format": " ",
+        "interval": "once",
+        "tooltip-format": "Log Out / Exit Session",
+        "on-click": "labwc --exit"
     }
 }

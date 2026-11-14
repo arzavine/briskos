@@ -1,103 +1,22 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <!-- Unified Supersonic Frost Gradient: 4-Stop System Identity -->
-    <!-- Stop 0%: Frost White #ffffff (specular highlight tip) -->
-    <!-- Stop 30%: Ice Cyan #38bdf8 (core glow identity) -->
-    <!-- Stop 70%: Electric Sky #0284c7 (aerodynamic body) -->
-    <!-- Stop 100%: Deep Cobalt Sapphire #1d4ed8 (base foundation) -->
-    <linearGradient id="supersonicFrostGrad" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+    <linearGradient id="briskTile" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e7490" />
+      <stop offset="100%" stop-color="#0c5b73" />
     </linearGradient>
-
-    <!-- Feather Blade Layer 1 & Primary Delta -->
-    <linearGradient id="featherGrad1" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+    <linearGradient id="breezeSoft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#d6e9ee" />
     </linearGradient>
-
-    <!-- Feather Mid-Span Compression Vane Layer 2 -->
-    <linearGradient id="featherGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#e0f2fe"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1e40af"/>
-    </linearGradient>
-
-    <!-- Feather Lower Trailing Vane Layer 3 -->
-    <linearGradient id="featherGrad3" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="40%" stop-color="#0284c7"/>
-      <stop offset="80%" stop-color="#1d4ed8"/>
-      <stop offset="100%" stop-color="#0f172a"/>
-    </linearGradient>
-
-    <!-- Supersonic Chine Spar / Spine Glow -->
-    <linearGradient id="spineGlow" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#38bdf8"/>
-      <stop offset="70%" stop-color="#0284c7"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
-    </linearGradient>
-
-    <!-- Ambient Core Bloom -->
-    <radialGradient id="ambientCoreBloom" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32"/>
-      <stop offset="35%" stop-color="#0284c7" stop-opacity="0.14"/>
-      <stop offset="70%" stop-color="#1d4ed8" stop-opacity="0.05"/>
-      <stop offset="100%" stop-color="#0b1120" stop-opacity="0"/>
-    </radialGradient>
-
-    <!-- Apex Specular Flare -->
-    <radialGradient id="apexSpecularFlare" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.45"/>
-      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
-    </radialGradient>
   </defs>
 
-  <!-- Ambient Ice Cyan Bloom -->
-  <circle cx="256" cy="256" r="230" fill="url(#ambientCoreBloom)"/>
+  <!-- Clean Morning Breeze Cerulean badge -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#briskTile)" />
 
-  <!-- Concentric Aerodynamic Streamlines -->
-  <path d="M 60 410 C 160 380, 310 260, 440 90" 
-        fill="none" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.25"/>
-  <path d="M 100 450 C 200 420, 350 300, 465 130" 
-        fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.15"/>
-  <path d="M 40 370 C 130 330, 270 210, 400 60" 
-        fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.12"/>
-
-  <!-- Feather / Wing Layer 3 (Lower Trailing Vane) -->
-  <path d="M 120 410 C 170 400, 240 370, 305 315 L 260 295 C 200 340, 150 375, 120 410 Z"
-        fill="url(#featherGrad3)"/>
-
-  <!-- Feather / Wing Layer 2 (Mid-Span Compression Vane) -->
-  <path d="M 165 365 C 230 330, 320 275, 380 205 L 325 190 C 265 245, 195 310, 165 365 Z"
-        fill="url(#featherGrad2)"/>
-
-  <!-- Feather / Wing Layer 1 (Forward Supersonic Blade) -->
-  <path d="M 220 305 C 295 245, 385 170, 445 80 L 385 95 C 320 160, 245 235, 220 305 Z"
-        fill="url(#featherGrad1)"/>
-
-  <!-- Main Primary Swept Aerodynamic Wing Delta -->
-  <path d="M 90 430 C 150 380, 260 260, 445 75 C 420 135, 370 265, 285 345 C 220 405, 135 435, 90 430 Z"
-        fill="url(#featherGrad1)" fill-opacity="0.95"/>
-
-  <!-- Feather Spine / Supersonic Chine Spar -->
-  <path d="M 75 445 C 145 385, 275 255, 465 60"
-        fill="none" stroke="url(#spineGlow)" stroke-width="7" stroke-linecap="round"/>
-
-  <!-- Aerodynamic Caliber Slots (Vane Separation) -->
-  <line x1="285" y1="210" x2="355" y2="245" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="225" y1="270" x2="285" y2="305" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
-  <line x1="165" y1="340" x2="215" y2="368" stroke="#0b1120" stroke-width="3.5" stroke-linecap="round"/>
-
-  <!-- Apex Luminous Specular Node -->
-  <circle cx="465" cy="60" r="14" fill="url(#apexSpecularFlare)"/>
-  <circle cx="465" cy="60" r="5" fill="#ffffff"/>
+  <!-- Geometric twin breeze ribbons -->
+  <path d="M 16 26 C 24 16, 40 16, 48 22 C 41 25, 31 24, 21 31 C 19 32, 16 29, 16 26 Z"
+        fill="#ffffff" />
+  <path d="M 16 37 C 26 28, 41 29, 49 34 C 42 40, 29 41, 18 45 C 15 44, 14 40, 16 37 Z"
+        fill="url(#breezeSoft)" />
+  <circle cx="46" cy="43" r="3.2" fill="#ffffff" fill-opacity="0.92" />
 </svg>

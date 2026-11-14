@@ -1,99 +1,80 @@
-/* =============================================================================
- * BriskOS Wofi Floating Start Menu Stylesheet
- * Night Glass Design System: Translucent surface rgba(15, 23, 42, 0.88),
- * 14px border-radius, recessed search input (#0f172a) with Ice Cyan focus,
- * 3px left indicator bar for selected item.
- * ============================================================================= */
+/* BriskOS 1.0 LTS Wofi Launcher ("Morning Breeze") */
 
 * {
-    font-family: "Inter", "Noto Color Emoji", sans-serif;
-    font-size: 13px;
-    font-weight: 500;
+    font-family: "Inter", "Noto Sans", sans-serif;
+    font-size: 14px;
 }
 
-#window {
-    background-color: rgba(15, 23, 42, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+window {
+    margin: 0px;
+    border: 1px solid #cbd5e1;
     border-radius: 14px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
-    color: #f8fafc;
+    background-color: #f5f7f7;
+    color: #0f172a;
 }
 
 #outer-box {
-    margin: 12px;
+    margin: 0px;
+    padding: 12px;
+    border: none;
     background-color: transparent;
 }
 
-/* -----------------------------------------------------------------------------
- * Recessed Search Input Box (#0f172a with focused Ice Cyan outline #38bdf8)
- * ----------------------------------------------------------------------------- */
 #input {
-    margin-bottom: 12px;
+    margin: 0px 0px 10px 0px;
     padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    background-color: #0f172a;
-    color: #f8fafc;
-    font-size: 13px;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+    border: 1px solid #64748b;
+    border-radius: 10px;
+    background-color: #ffffff;
+    color: #0f172a;
+    outline-style: none;
+    box-shadow: none;
 }
 
 #input:focus {
-    border: 1px solid #38bdf8;
-    outline: none;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px #38bdf8;
+    border: 2px solid #0e7490;
+    padding: 9px 13px;
 }
 
-/* -----------------------------------------------------------------------------
- * Application List View & Scroll Area
- * ----------------------------------------------------------------------------- */
 #scroll {
-    margin: 0;
+    margin: 0px;
     border: none;
     background-color: transparent;
 }
 
 #inner-box {
-    margin: 0;
+    margin: 0px;
+    padding: 0px;
+    border: none;
     background-color: transparent;
 }
 
-/* -----------------------------------------------------------------------------
- * Application List Items: 3px #38bdf8 Left Indicator Bar on Selection
- * ----------------------------------------------------------------------------- */
 #entry {
-    padding: 8px 10px;
-    margin: 2px 0;
-    border: 1px solid transparent;
+    margin: 2px 0px;
+    padding: 8px 12px;
+    border: none;
     border-left: 3px solid transparent;
-    border-radius: 6px;
+    border-radius: 10px;
     background-color: transparent;
-    color: #94a3b8;
-    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    color: #0f172a;
+    outline-style: none;
 }
 
-#entry:hover:not(:focus):not(:selected) {
-    background-color: rgba(30, 41, 59, 0.5);
-    color: #f8fafc;
+#entry:hover {
+    background-color: #e9f1f4;
 }
 
-#entry:focus,
 #entry:selected {
-    background-color: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-left: 3px solid #38bdf8;
-    color: #f8fafc;
+    background-color: #d6e9ee;
+    border-left: 3px solid #0e7490;
 }
 
 #text {
-    margin: 0 8px;
-    color: #f8fafc;
-    font-weight: 500;
+    color: #0f172a;
 }
 
-#entry:focus #text,
-#entry:selected #text {
-    color: #f8fafc;
+#text:selected {
+    color: #0f172a;
     font-weight: 600;
 }
 

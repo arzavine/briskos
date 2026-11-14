@@ -1,58 +1,53 @@
-# ==============================================================================
-# BriskOS Labwc Theme Overrides - Night Glass Design
-# Window decorations with 10px radius, 1px active border #38bdf8,
-# inactive #334155, subtle window drop shadow, circular button hover states.
-# ==============================================================================
+# BriskOS 1.0 LTS Labwc Theme Overrides ("Morning Breeze")
+# Matches Brisk-Morning theme tokens and subtle crisp geometry
 
-# Window Borders & Geometry
 border.width: 1
-window.active.border.color: #38bdf8
-window.inactive.border.color: #334155
+padding.width: 8
+padding.height: 7
 
-# Window Drop Shadow (Subtle elevation)
-window.active.shadow.size: 16
-window.active.shadow.color: #00000059
-window.inactive.shadow.size: 10
-window.inactive.shadow.color: #00000033
+window.active.border.color: #cbd5e1
+window.inactive.border.color: #d5e2e7
+window.active.title.bg.color: #e9f1f4
+window.inactive.title.bg.color: #f5f7f7
+window.active.label.text.color: #0f172a
+window.inactive.label.text.color: #475569
 
-# Window Titlebar (Active Window)
-window.active.title.bg: Solid
-window.active.title.bg.color: #1e293b
-window.active.label.text.color: #f8fafc
+window.active.button.unpressed.image.color: #475569
+window.active.button.hover.bg: flat solid
+window.active.button.hover.bg.color: #d6e9ee
+window.active.button.hover.image.color: #0c5b73
 
-# Window Titlebar (Inactive Window)
-window.inactive.title.bg: Solid
-window.inactive.title.bg.color: #0f172a
-window.inactive.label.text.color: #94a3b8
-
-# Window Buttons & Circular Hover States
-window.button.spacing: 6
-window.active.button.unpressed.image.color: #f8fafc
 window.inactive.button.unpressed.image.color: #64748b
-window.active.button.hover.bg.color: #334155
-window.active.button.hover.image.color: #f8fafc
-window.inactive.button.hover.bg.color: #1e293b
-window.inactive.button.hover.image.color: #f8fafc
-window.active.button.pressed.bg.color: #38bdf8
-window.active.button.pressed.image.color: #0f172a
-window.inactive.button.pressed.bg.color: #38bdf8
-window.inactive.button.pressed.image.color: #0f172a
+window.inactive.button.hover.bg: flat solid
+window.inactive.button.hover.bg.color: #e9f1f4
+window.inactive.button.hover.image.color: #0f172a
 
-# Snapping Overlay
-snapping.overlay.edge.bg.color: #38bdf833
-snapping.overlay.edge.border.color: #38bdf8
-snapping.overlay.region.bg.color: #38bdf833
-snapping.overlay.region.border.color: #38bdf8
+window.active.shadow.size: 28
+window.active.shadow.color: #0f172a24
+window.inactive.shadow.size: 16
+window.inactive.shadow.color: #0f172a12
 
-# Root and Window Menus
-menu.border.width: 1
-menu.border.color: #38bdf8
-menu.items.bg: Solid
-menu.items.bg.color: #1e293b
-menu.items.text.color: #f8fafc
-menu.items.active.bg: Solid
-menu.items.active.bg.color: #38bdf8
+snapping.overlay.region.bg.color: #0e749022
+snapping.overlay.region.border.color: #0e7490
+snapping.overlay.edge.bg.color: #0e749022
+snapping.overlay.edge.border.color: #0e7490
+
+menu.items.bg.color: #ffffff
+menu.items.text.color: #0f172a
+menu.items.active.bg.color: #d6e9ee
 menu.items.active.text.color: #0f172a
-menu.separator.color: #334155
-menu.overlap.x: 0
-menu.overlap.y: 0
+menu.items.padding.x: 12
+menu.items.padding.y: 6
+menu.border.width: 1
+menu.border.color: #cbd5e1
+menu.separator.color: #d5e2e7
+
+osd.bg.color: #ffffff
+osd.border.width: 1
+osd.border.color: #cbd5e1
+osd.label.text.color: #0f172a
+osd.window-switcher.width: 560
+osd.window-switcher.padding: 12
+osd.window-switcher.item.padding.x: 10
+osd.window-switcher.item.padding.y: 8
+osd.window-switcher.preview.border.color: #0e7490

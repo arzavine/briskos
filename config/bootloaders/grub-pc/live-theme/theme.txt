@@ -1,0 +1,54 @@
+# BriskOS 1.0 LTS GRUB2 Theme ("Morning Breeze")
+desktop-image: "../splash.png"
+desktop-color: "#f5f7f7"
+title-color: "#0f172a"
+title-font: "Unifont Regular 16"
+title-text: ""
+message-font: "Unifont Regular 16"
+terminal-font: "Unifont Regular 16"
+
+# Help bar at the bottom of the porcelain card
++ label {
+    top = 86%
+    left = 10%
+    width = 80%
+    height = 20
+    text = "@KEYMAP_SHORT@"
+    align = "center"
+    color = "#475569"
+    font = "Unifont Regular 16"
+}
+
+# Boot menu centered inside the porcelain card
++ boot_menu {
+    left = 11%
+    width = 78%
+    top = 36%
+    height = 42%
+    item_color = "#475569"
+    item_font = "Unifont Regular 16"
+    selected_item_color = "#0f172a"
+    selected_item_font = "Unifont Regular 16"
+    selected_item_pixmap_style = "select_*.png"
+    item_height = 30
+    item_padding = 12
+    item_spacing = 6
+    icon_width = 0
+    icon_height = 0
+    item_icon_space = 0
+}
+
+# Countdown bar anchored cleanly near card bottom
++ progress_bar {
+    id = "__timeout__"
+    left = 15%
+    top = 80%
+    height = 18
+    width = 70%
+    font = "Unifont Regular 16"
+    text_color = "#0f172a"
+    fg_color = "#0e7490"
+    bg_color = "#d5e2e7"
+    border_color = "#94a3b8"
+    text = "@TIMEOUT_NOTIFICATION_LONG@"
+}
