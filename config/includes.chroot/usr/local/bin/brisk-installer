@@ -283,6 +283,8 @@ if [ "$(id -u)" -eq 0 ]; then
         "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/0}"
         "QT_QPA_PLATFORM=${QT_QPA_PLATFORM}"
         "QT_AUTO_SCREEN_SCALE_FACTOR=1"
+        "QT_QUICK_BACKEND=software"
+        "LIBGL_ALWAYS_SOFTWARE=1"
         "GDK_BACKEND=wayland,x11"
     )
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
@@ -312,21 +314,18 @@ else
         WL_SOCK="${XDG_RUNTIME_DIR}/${WL_SOCK}"
     fi
 
-    if command -v pkexec >/dev/null 2>&1; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n -l /usr/local/bin/brisk-installer >/dev/null 2>&1; then
+        log_msg "Executing via passwordless sudo: sudo -n /usr/local/bin/brisk-installer --elevated"
+        set +e
+        sudo -n /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+        EXIT_CODE=$?
+        set -e
+    elif command -v pkexec >/dev/null 2>&1; then
         log_msg "Executing: pkexec /usr/local/bin/brisk-installer --elevated"
         set +e
         pkexec /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
         EXIT_CODE=$?
         set -e
-
-        # If pkexec failed because no polkit agent was active (127) and NOPASSWD sudo is permitted, fall back to sudo -n
-        if [ "$EXIT_CODE" -eq 127 ] && command -v sudo >/dev/null 2>&1 && sudo -n -l /usr/local/bin/brisk-installer >/dev/null 2>&1; then
-            log_msg "Polkit agent unavailable (exit 127); falling back to sudo -n."
-            set +e
-            sudo -n /usr/local/bin/brisk-installer --elevated "$WL_SOCK" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
-            EXIT_CODE=$?
-            set -e
-        fi
     elif command -v sudo >/dev/null 2>&1; then
         log_msg "pkexec not found; executing via sudo."
         set +e

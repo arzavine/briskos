@@ -462,34 +462,40 @@ def main() -> int:
         save_png(tmp_ppm, out_dir / "03-terminal-fastfetch.png")
         print("[SHOT] 03-terminal-fastfetch.png", flush=True)
 
-        # 5. Launch Brisk Control Center (then close cleanly with Alt+F4 so focus returns to Foot)
-        mon.send_text("brisk-control &\n")
-        time.sleep(5.5)
+        # 5. Launch Brisk Control Center via timed job so Foot is never closed by Alt+F4
+        mon.send_text(
+            "brisk-control >/tmp/brisk-control.log 2>&1 & APP_PID=$!; "
+            "sleep 6; kill $APP_PID 2>/dev/null || true; wait $APP_PID 2>/dev/null || true\n"
+        )
+        time.sleep(4.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "04-brisk-control.png")
         print("[SHOT] 04-brisk-control.png", flush=True)
-        mon.sendkey("alt-f4", delay=0.2)
-        time.sleep(1.5)
-        mon.send_text("pkill -f brisk-control || true\n")
-        time.sleep(0.8)
+        time.sleep(2.5)
 
-        # 6. Launch Brisk Store (then close cleanly with Alt+F4 so focus returns to Foot)
-        mon.send_text("brisk-store &\n")
-        time.sleep(5.5)
+        # 6. Launch Brisk Store via timed job so Foot is never closed by Alt+F4
+        mon.send_text(
+            "brisk-store >/tmp/brisk-store.log 2>&1 & APP_PID=$!; "
+            "sleep 6; kill $APP_PID 2>/dev/null || true; wait $APP_PID 2>/dev/null || true\n"
+        )
+        time.sleep(4.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "05-brisk-store.png")
         print("[SHOT] 05-brisk-store.png", flush=True)
-        mon.sendkey("alt-f4", delay=0.2)
-        time.sleep(1.5)
-        mon.send_text("pkill -f brisk-store || true\n")
-        time.sleep(0.8)
+        time.sleep(2.5)
 
-        # 7. Launch Calamares Installer wrapper
-        mon.send_text("brisk-installer &\n")
-        time.sleep(7.0)
+        # 7. Launch Calamares Installer wrapper and schedule diagnostic log dump to serial
+        mon.send_text(
+            "(sleep 9; head -n 120 /tmp/brisk-control.log /tmp/brisk-store.log "
+            "/tmp/brisk-installer.log /var/log/calamares-installer.log 2>&1 "
+            "| sudo tee -a /dev/ttyS0 >/dev/null) & "
+            "brisk-installer >/tmp/brisk-installer.log 2>&1 &\n"
+        )
+        time.sleep(7.5)
         mon.screendump(tmp_ppm)
         save_png(tmp_ppm, out_dir / "06-installer.png")
         print("[SHOT] 06-installer.png", flush=True)
+        time.sleep(2.5)
 
         if not autologin_ok:
             print("[WARN] Desktop only started manually via tty1; greetd autologin needs fixing.", flush=True)

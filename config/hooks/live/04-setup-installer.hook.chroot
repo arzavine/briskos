@@ -62,7 +62,10 @@ mkdir -p /var/log
 touch /var/log/calamares-installer.log
 chmod 666 /var/log/calamares-installer.log
 
-# 6. Refresh desktop database
+# 6. Remove calamares-settings-debian autostart script that errors on sh syntax at login
+rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
+
+# 7. Refresh desktop database
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database /usr/share/applications || true
 fi

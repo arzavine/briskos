@@ -119,7 +119,6 @@ searchentry:focus {
     color: #475569;
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.06em;
     padding: 8px 10px 4px 10px;
 }
 
@@ -314,7 +313,6 @@ flowboxchild:focus {
 .app-card-summary {
     color: #475569;
     font-size: 12px;
-    line-height: 1.35;
 }
 
 .app-card-size {
@@ -979,6 +977,7 @@ class BriskStoreWindow(Gtk.Window):
         root_vbox.pack_end(status_bar, False, False, 0)
 
         self.spinner = Gtk.Spinner()
+        self.spinner.set_no_show_all(True)
         status_bar.pack_start(self.spinner, False, False, 0)
 
         live_note = " (Mode Live: katalog lokal siap)" if is_live_session() else ""
@@ -992,6 +991,8 @@ class BriskStoreWindow(Gtk.Window):
         lbl_foot = Gtk.Label(label="BriskOS 1.0 LTS | APT + Flathub", xalign=1)
         lbl_foot.get_style_context().add_class("status-label")
         status_bar.pack_end(lbl_foot, False, False, 0)
+
+        self.update_filter_view()
 
     # --------------------------------------------------------------------------
     # Widget Generators & Focus Control

@@ -6,6 +6,8 @@
 # Calamares Graphical Installer Framework
 calamares
 calamares-settings-debian
+qtwayland5
+qt6-wayland
 
 # Partitioning and Storage Management
 gparted

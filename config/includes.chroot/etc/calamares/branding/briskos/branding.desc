@@ -26,7 +26,7 @@ images:
     productIcon:         "logo.svg"
     productWelcome:      "welcome.svg"
 
-slideshow:               []
+slideshow:               ["welcome.svg"]
 
 style:
    SidebarBackground:    "#E9F1F4"
