@@ -36,6 +36,7 @@ KEYMAP = {
     "|": "shift-backslash",
     ">": "shift-dot",
     "<": "shift-comma",
+    "@": "shift-2",
     "\n": "ret",
 }
 
@@ -154,6 +155,7 @@ def build_qemu_cmd(
     iso_path: Path,
     boot_mode: str,
     mon_port: int,
+    out_dir: Path,
     work_dir: Path,
 ) -> list[str]:
     has_kvm = os.path.exists("/dev/kvm") and os.access("/dev/kvm", os.R_OK | os.W_OK)
@@ -169,6 +171,8 @@ def build_qemu_cmd(
         "2",
         "-display",
         "none",
+        "-serial",
+        f"file:{out_dir / 'serial.log'}",
         "-monitor",
         f"tcp:127.0.0.1:{mon_port},server,nowait",
         "-vga",
@@ -203,7 +207,6 @@ def build_qemu_cmd(
         elif code:
             cmd.extend(["-bios", str(code)])
 
-    # Add an empty target disk so Calamares / partition tools detect storage cleanly.
     disk_path = work_dir / "target-disk.qcow2"
     subprocess.run(
         ["qemu-img", "create", "-f", "qcow2", str(disk_path), "20G"],
@@ -226,15 +229,18 @@ def wait_for_monitor(port: int, timeout: float = 20.0) -> QemuMonitor:
     raise RuntimeError(f"Timed out waiting for QEMU monitor on port {port}: {last_err}")
 
 
-def wait_for_desktop(
+def wait_for_desktop_or_tty(
     mon: QemuMonitor,
     tmp_ppm: Path,
     boot_sha: str,
     timeout_sec: int,
-) -> tuple[bool, dict[str, object]]:
-    """Poll QEMU framebuffer until graphical Wayland compositor renders cleanly."""
+) -> tuple[str, dict[str, object]]:
+    """Wait for graphical desktop or detect parked tty1 auto-login console."""
     start = time.time()
     retried_enter = False
+    last_sha = ""
+    stable_count = 0
+
     while (time.time() - start) < timeout_sec:
         time.sleep(4.0)
         if not mon.screendump(tmp_ppm):
@@ -247,23 +253,79 @@ def wait_for_desktop(
             f"colors={stats['unique_colors']}",
             flush=True,
         )
-        # If bootloader menu is still parked on initial frame after 12s, hit Enter again.
+
         if not retried_enter and elapsed >= 12 and stats["sha256"] == boot_sha:
             print("[INFO] Boot screen unchanged at 12s; sending Enter...", flush=True)
             mon.sendkey("ret")
             retried_enter = True
             continue
 
-        # Graphical desktop (swaybg SVG + Waybar) has rich color gradients (> 250 sampled colors).
         if (
-            elapsed >= 18
+            elapsed >= 16
             and int(stats["unique_colors"]) >= 250
             and float(stats["non_black_ratio"]) >= 0.45
         ):
-            print("[INFO] Graphical desktop detected; waiting 8s for Waybar/autostart...", flush=True)
+            print("[INFO] Graphical desktop detected; settling 8s...", flush=True)
             time.sleep(8.0)
             mon.screendump(tmp_ppm)
+            return "desktop", analyze_ppm(tmp_ppm)
+
+        # Detect stable DRM fbcon console (e.g. tty1 auto-login prompt).
+        if (
+            elapsed >= 20
+            and int(stats["width"]) >= 1024
+            and int(stats["unique_colors"]) >= 120
+            and float(stats["non_black_ratio"]) >= 0.12
+        ):
+            if stats["sha256"] == last_sha:
+                stable_count += 1
+            else:
+                stable_count = 0
+                last_sha = str(stats["sha256"])
+
+            if stable_count >= 3:
+                print("[INFO] Stable tty1 console detected; ready for diag/labwc.", flush=True)
+                return "tty", stats
+
+    return "timeout", analyze_ppm(tmp_ppm)
+
+
+def collect_tty_diagnostics_and_launch_labwc(
+    mon: QemuMonitor,
+    tmp_ppm: Path,
+    out_dir: Path,
+) -> tuple[bool, dict[str, object]]:
+    """Log greetd/systemd diagnostics over serial and launch labwc from tty1."""
+    save_png(tmp_ppm, out_dir / "01a-tty1-boot.png")
+    print("[SHOT] 01a-tty1-boot.png", flush=True)
+
+    diag_cmds = [
+        "systemctl status greetd display-manager getty@tty1 --no-pager | sudo tee /dev/ttyS0\n",
+        "journalctl -u greetd -b --no-pager | sudo tee -a /dev/ttyS0\n",
+        "ls -la /etc/greetd /etc/systemd/system/display-manager.service /etc/systemd/system/graphical.target.wants /etc/systemd/system/getty@tty1.service.d | sudo tee -a /dev/ttyS0\n",
+    ]
+    for cmd in diag_cmds:
+        mon.send_text(cmd, delay=0.03)
+        time.sleep(1.5)
+
+    print("[INFO] Launching labwc from tty1...", flush=True)
+    mon.send_text("labwc\n", delay=0.04)
+
+    for step in range(10):
+        time.sleep(3.0)
+        mon.screendump(tmp_ppm)
+        stats = analyze_ppm(tmp_ppm)
+        print(
+            f"[labwc +{step * 3 + 3:2d}s] fb={stats['width']}x{stats['height']} "
+            f"non_black={stats['non_black_ratio']:.2f} "
+            f"colors={stats['unique_colors']}",
+            flush=True,
+        )
+        if int(stats["unique_colors"]) >= 250 and float(stats["non_black_ratio"]) >= 0.45:
+            time.sleep(6.0)
+            mon.screendump(tmp_ppm)
             return True, analyze_ppm(tmp_ppm)
+
     return False, analyze_ppm(tmp_ppm)
 
 
@@ -272,7 +334,7 @@ def main() -> int:
     parser.add_argument("--iso", required=True, help="Path to BriskOS-1.0-amd64.iso")
     parser.add_argument("--out", default="screenshots", help="Output PNG directory")
     parser.add_argument("--boot-mode", choices=["uefi", "bios"], default="uefi")
-    parser.add_argument("--boot-timeout", type=int, default=210)
+    parser.add_argument("--boot-timeout", type=int, default=180)
     args = parser.parse_args()
 
     iso_path = Path(args.iso).resolve()
@@ -286,7 +348,7 @@ def main() -> int:
         return 1
 
     mon_port = 4444
-    qemu_cmd = build_qemu_cmd(iso_path, args.boot_mode, mon_port, work_dir)
+    qemu_cmd = build_qemu_cmd(iso_path, args.boot_mode, mon_port, out_dir, work_dir)
     print(f"[INFO] Launching QEMU ({args.boot_mode}): {' '.join(qemu_cmd)}", flush=True)
 
     qemu_log = (out_dir / "qemu.log").open("w", encoding="utf-8")
@@ -304,25 +366,33 @@ def main() -> int:
         save_png(tmp_ppm, out_dir / "00-boot-menu.png")
         print(f"[SHOT] 00-boot-menu.png ({boot_stats['width']}x{boot_stats['height']})", flush=True)
 
-        # Confirm live boot immediately
         mon.sendkey("ret")
 
-        # 2. Wait for Labwc + Waybar + swaybg desktop
-        desktop_ready, desktop_stats = wait_for_desktop(
+        # 2. Wait for Labwc desktop or tty1 fallback
+        state, desktop_stats = wait_for_desktop_or_tty(
             mon, tmp_ppm, str(boot_stats["sha256"]), args.boot_timeout
         )
+
+        autologin_ok = state == "desktop"
+        if state == "tty":
+            desktop_ready, desktop_stats = collect_tty_diagnostics_and_launch_labwc(
+                mon, tmp_ppm, out_dir
+            )
+        else:
+            desktop_ready = autologin_ok
+
         save_png(tmp_ppm, out_dir / "01-desktop.png")
         print(
-            f"[SHOT] 01-desktop.png ready={desktop_ready} "
+            f"[SHOT] 01-desktop.png state={state} ready={desktop_ready} "
             f"({desktop_stats['width']}x{desktop_stats['height']}, "
             f"colors={desktop_stats['unique_colors']})",
             flush=True,
         )
         if not desktop_ready:
-            print("[WARN] Timed out waiting for rich desktop colors; captured fallback frame.", flush=True)
+            print("[WARN] Graphical desktop did not reach threshold.", flush=True)
             return 2
 
-        # 3. Start Menu (Wofi via Super_L)
+        # 3. Start Menu (Wofi via Super_L / Super+d)
         mon.sendkey("meta_l", delay=0.15)
         time.sleep(3.0)
         mon.screendump(tmp_ppm)
@@ -370,6 +440,9 @@ def main() -> int:
         save_png(tmp_ppm, out_dir / "06-installer.png")
         print("[SHOT] 06-installer.png", flush=True)
 
+        if not autologin_ok:
+            print("[WARN] Desktop only started manually via tty1; greetd autologin needs fixing.", flush=True)
+            return 3
         return 0
     finally:
         if mon is not None:
