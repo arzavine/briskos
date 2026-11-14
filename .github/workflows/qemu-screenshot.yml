@@ -1,0 +1,102 @@
+name: BriskOS QEMU Boot & Screenshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run ID of Build BriskOS ISO (kosong = otomatis ambil build sukses terbaru)'
+        required: false
+        default: ''
+        type: string
+      boot_mode:
+        description: 'Firmware boot mode inside QEMU'
+        required: false
+        default: 'uefi'
+        type: choice
+        options:
+          - uefi
+          - bios
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qemu-screenshots:
+    name: Boot ISO in QEMU & Capture Screenshots
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Latest Successful ISO Build Run
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID="${{ inputs.run_id }}"
+          if [ -z "${RUN_ID}" ]; then
+            RUN_ID="$(gh run list --workflow=build-iso.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          if [ -z "${RUN_ID}" ] || [ "${RUN_ID}" = "null" ]; then
+            echo "ERROR: Tidak ditemukan workflow build-iso.yml yang sukses."
+            exit 1
+          fi
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "Using ISO artifact from Build Run ID: ${RUN_ID}"
+
+      - name: Download BriskOS ISO Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BriskOS-1.0-amd64-ISO
+          path: iso-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.resolve.outputs.run_id }}
+
+      - name: Verify Downloaded ISO & Install QEMU
+        run: |
+          ls -lh iso-artifact/
+          if [ ! -f iso-artifact/BriskOS-1.0-amd64.iso ]; then
+            echo "ERROR: iso-artifact/BriskOS-1.0-amd64.iso missing!"
+            exit 1
+          fi
+          if [ -f iso-artifact/BriskOS-1.0-amd64.iso.sha256 ]; then
+            (cd iso-artifact && sha256sum --check BriskOS-1.0-amd64.iso.sha256)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf python3-pil
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || true
+            ls -l /dev/kvm
+          fi
+
+      - name: Boot BriskOS Live ISO & Capture Screenshots
+        run: |
+          python3 scripts/ci-qemu-screenshots.py \
+            --iso iso-artifact/BriskOS-1.0-amd64.iso \
+            --out screenshots \
+            --boot-mode "${{ inputs.boot_mode || 'uefi' }}" \
+            --boot-timeout 240
+
+      - name: Generate Screenshot Summary
+        if: always()
+        run: |
+          echo "### BriskOS 1.0 Live QEMU Screenshots (${{ inputs.boot_mode || 'uefi' }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source Build Run ID: \`${{ steps.resolve.outputs.run_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for img in screenshots/*.png; do
+            [ -f "$img" ] || continue
+            size="$(du -h "$img" | cut -f1)"
+            dims="$(python3 -c 'import sys; from PIL import Image; print("%dx%d" % Image.open(sys.argv[1]).size)' "$img")"
+            echo "- \`$(basename "$img")\` (${dims}, ${size})" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload Screenshots Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BriskOS-QEMU-Screenshots
+          path: screenshots/
+          retention-days: 7
+          if-no-files-found: warn
