@@ -405,18 +405,72 @@ cmd_auto_hook() {
     exit 0
 }
 
+# Safely update /etc/brisk/timetravel.conf via validated CLI arguments
+cmd_set_config() {
+    if [ "$#" -ne 2 ]; then
+        echo "Error: Usage: brisk-timetravel set-config <true|false> <1..50>" >&2
+        exit 1
+    fi
+
+    local auto_enabled="$1"
+    local max_snaps_raw="$2"
+
+    if [ "$auto_enabled" != "true" ] && [ "$auto_enabled" != "false" ]; then
+        echo "Error: Auto-backup value must be 'true' or 'false' (got '${auto_enabled}')." >&2
+        exit 1
+    fi
+
+    if ! [[ "$max_snaps_raw" =~ ^[0-9]+$ ]]; then
+        echo "Error: Retention count must be an integer between 1 and 50." >&2
+        exit 1
+    fi
+
+    local max_snaps=$((10#$max_snaps_raw))
+    if [ "$max_snaps" -lt 1 ] || [ "$max_snaps" -gt 50 ]; then
+        echo "Error: Retention count must be between 1 and 50 (got '${max_snaps}')." >&2
+        exit 1
+    fi
+
+    local config_dir
+    config_dir=$(dirname "$CONFIG_FILE")
+    mkdir -p "$config_dir"
+
+    local tmp_conf
+    tmp_conf=$(mktemp "${CONFIG_FILE}.tmp.XXXXXX")
+    chmod 0644 "$tmp_conf"
+    if ! cat > "$tmp_conf" <<EOF
+# Brisk Time-Travel Configuration
+AUTO_BACKUP_ENABLED=${auto_enabled}
+MAX_SNAPSHOTS=${max_snaps}
+BACKUP_DIR="${BACKUP_DIR}"
+SNAPSHOT_TYPE="${SNAPSHOT_TYPE}"
+EOF
+    then
+        rm -f "$tmp_conf"
+        echo "Error: Failed to stage configuration update." >&2
+        exit 1
+    fi
+
+    if ! mv -f "$tmp_conf" "$CONFIG_FILE"; then
+        rm -f "$tmp_conf"
+        echo "Error: Failed to write ${CONFIG_FILE}." >&2
+        exit 1
+    fi
+}
+
 # Parse help flags first without requiring root
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
     echo "Brisk Time-Travel Recovery CLI"
     echo "Usage: brisk-timetravel [command] [arguments]"
     echo ""
     echo "Commands:"
-    echo "  create [comment]     Create instant system checkpoint (BTRFS subvolume or Rsync)"
-    echo "  list [--raw]         Display table of existing system checkpoints"
-    echo "  restore [id]         Restore system files to specified checkpoint"
-    echo "  delete [id]          Permanently remove a checkpoint"
-    echo "  auto-hook            Automated APT pre-update invocation hook"
-    echo "  help                 Display this help dialog"
+    echo "  create [comment]                Create instant system checkpoint (BTRFS subvolume or Rsync)"
+    echo "  list [--raw]                    Display table of existing system checkpoints"
+    echo "  restore [id]                    Restore system files to specified checkpoint"
+    echo "  delete [id]                     Permanently remove a checkpoint"
+    echo "  set-config <true|false> <1..50> Update auto-backup and retention settings"
+    echo "  auto-hook                       Automated APT pre-update invocation hook"
+    echo "  help                            Display this help dialog"
     exit 0
 fi
 
@@ -438,6 +492,9 @@ case "$ACTION" in
         ;;
     delete)
         cmd_delete "$@"
+        ;;
+    set-config)
+        cmd_set_config "$@"
         ;;
     auto-hook)
         cmd_auto_hook "$@"

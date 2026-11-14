@@ -449,7 +449,7 @@ def run_gui(initial_payload):
                     self._set_svg_icon("volume_muted", muted=True)
                     val_ctx.remove_class("osd-value")
                     val_ctx.add_class("osd-value-muted")
-                    self.lbl_val.set_text("MUTE")
+                    self.lbl_val.set_text("SENYAP")
                     bar_ctx.add_class("muted-bar")
                 else:
                     icon_name = "volume_high" if val > 60 else ("volume_mid" if val > 20 else "volume_low")
@@ -471,7 +471,7 @@ def run_gui(initial_payload):
                     self._set_svg_icon("mic_muted", muted=True)
                     val_ctx.remove_class("osd-value")
                     val_ctx.add_class("osd-value-muted")
-                    self.lbl_val.set_text("MUTE")
+                    self.lbl_val.set_text("SENYAP")
                     bar_ctx.add_class("muted-bar")
                 else:
                     self._set_svg_icon("mic", muted=False)

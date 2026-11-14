@@ -339,17 +339,9 @@ action_settings() {
         return 0
     fi
 
-    local conf_payload
-    conf_payload=$(cat <<EOF
-# Brisk Time-Travel Configuration
-AUTO_BACKUP_ENABLED=${new_auto}
-MAX_SNAPSHOTS=${new_max}
-BACKUP_DIR="${BACKUP_DIR}"
-SNAPSHOT_TYPE="${SNAPSHOT_TYPE}"
-EOF
-)
-    if ! printf '%s\n' "$conf_payload" | sudo tee "$CONFIG_FILE" >/dev/null 2>&1; then
-        show_error "Failed to update ${CONFIG_FILE}. Check sudo permissions."
+    local set_err=""
+    if ! set_err="$(sudo "$CLI_BIN" set-config "$new_auto" "$new_max" 2>&1)"; then
+        show_error "Failed to update ${CONFIG_FILE}: ${set_err:-Permission or validation error.}"
         return 0
     fi
 
