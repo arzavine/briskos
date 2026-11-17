@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# BriskOS 1.0 LTS Wayland Session Launcher (invoked by greetd / tuigreet)
+# BriskOS 1.0 LTS Wayland Session Launcher (invoked by greetd / brisk-greeter)
 # ==============================================================================
 
 export XDG_SESSION_TYPE="wayland"
@@ -8,6 +8,33 @@ export XDG_CURRENT_DESKTOP="wlroots"
 export GDK_BACKEND="wayland,x11"
 export QT_QPA_PLATFORM="wayland;xcb"
 export MOZ_ENABLE_WAYLAND="1"
+
+enable_software_wlr() {
+    export WLR_RENDERER="pixman"
+    export WLR_NO_HARDWARE_CURSORS="1"
+    export WLR_RENDERER_ALLOW_SOFTWARE="1"
+    export LIBGL_ALWAYS_SOFTWARE="1"
+}
+
+needs_sw_wlr=0
+if grep -qsE '(^|[[:space:]])(brisk\.safe_graphics=1|nomodeset)([[:space:]]|$)' /proc/cmdline 2>/dev/null; then
+    needs_sw_wlr=1
+elif [ -d /sys/module/vboxvideo ] || [ -d /sys/module/vboxguest ] || [ -d /sys/module/vmwgfx ]; then
+    needs_sw_wlr=1
+elif grep -qiE 'virtualbox|innotek|oracle|vmware|qemu|kvm|bochs' /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/board_vendor 2>/dev/null; then
+    needs_sw_wlr=1
+elif command -v systemd-detect-virt >/dev/null 2>&1; then
+    virt_type="$(systemd-detect-virt -v 2>/dev/null || true)"
+    case "$virt_type" in
+        oracle|vmware|qemu|kvm|bochs)
+            needs_sw_wlr=1
+            ;;
+    esac
+fi
+
+if [ "$needs_sw_wlr" -eq 1 ]; then
+    enable_software_wlr
+fi
 
 UID_NUM="$(id -u)"
 if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
@@ -28,7 +55,7 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "${XDG_RUNTIME_DIR}/bus" ]; th
 fi
 
 LOG_FILE="/tmp/brisk-session-${UID_NUM}.log"
-echo "=== BriskOS session start $(date -Is 2>/dev/null || date) tty=$(tty 2>/dev/null || echo none) XDG_SESSION_ID=${XDG_SESSION_ID:-} XDG_VTNR=${XDG_VTNR:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} DBUS=${DBUS_SESSION_BUS_ADDRESS:-} ===" >>"$LOG_FILE"
+echo "=== BriskOS session start $(date -Is 2>/dev/null || date) tty=$(tty 2>/dev/null || echo none) XDG_SESSION_ID=${XDG_SESSION_ID:-} XDG_VTNR=${XDG_VTNR:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} WLR_RENDERER=${WLR_RENDERER:-auto} DBUS=${DBUS_SESSION_BUS_ADDRESS:-} ===" >>"$LOG_FILE"
 
 attempt=1
 while [ "$attempt" -le 3 ]; do
@@ -42,10 +69,11 @@ while [ "$attempt" -le 3 ]; do
     fi
     end_ts="$(date +%s 2>/dev/null || echo 10)"
     elapsed=$((end_ts - start_ts))
-    echo "=== labwc attempt=${attempt} rc=${rc} elapsed=${elapsed}s ===" >>"$LOG_FILE"
+    echo "=== labwc attempt=${attempt} rc=${rc} elapsed=${elapsed}s renderer=${WLR_RENDERER:-auto} ===" >>"$LOG_FILE"
     if [ "$rc" -eq 0 ] || [ "$elapsed" -ge 4 ]; then
         exit "$rc"
     fi
+    enable_software_wlr
     if [ -n "${XDG_SESSION_ID:-}" ] && command -v loginctl >/dev/null 2>&1; then
         loginctl activate "$XDG_SESSION_ID" 2>/dev/null || true
     fi

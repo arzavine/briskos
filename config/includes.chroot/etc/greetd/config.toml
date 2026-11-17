@@ -9,7 +9,7 @@ vt = 7
 switch = true
 
 [default_session]
-command = "tuigreet --time --remember --cmd /usr/local/bin/brisk-session"
+command = "/usr/local/bin/brisk-greeter-session"
 user = "_greetd"
 
 [initial_session]

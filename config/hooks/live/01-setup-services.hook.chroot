@@ -39,11 +39,26 @@ if [ -n "$GREETD_UNIT" ]; then
     ln -sf "$GREETD_UNIT" /etc/systemd/system/graphical.target.wants/greetd.service
 fi
 
-# Ensure _greetd system user exists for tuigreet fallback on installed systems
+# Ensure _greetd system user exists for graphical greeter on installed systems / fallback
 if ! id -u _greetd >/dev/null 2>&1; then
     echo "--> Creating fallback system user _greetd..."
     useradd --system --no-create-home --shell /usr/sbin/nologin --home-dir /var/lib/greetd _greetd 2>/dev/null || true
 fi
+
+mkdir -p /var/lib/greetd
+chown _greetd:_greetd /var/lib/greetd 2>/dev/null || true
+for grp in video render input; do
+    if getent group "$grp" >/dev/null 2>&1; then
+        usermod -aG "$grp" _greetd 2>/dev/null || true
+    fi
+done
+
+for bin in /usr/local/bin/brisk-session /usr/local/bin/brisk-greetd-prestart /usr/local/bin/brisk-greeter-session /usr/local/bin/brisk-greeter; do
+    if [ -f "$bin" ]; then
+        chmod 755 "$bin"
+        chown root:root "$bin"
+    fi
+done
 
 # Normalize greetd config & systemd drop-in permissions and validate TOML syntax
 if [ -f "/etc/greetd/config.toml" ]; then

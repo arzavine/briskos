@@ -9,4 +9,4 @@ label live-@FLAVOUR@-failsafe
 	menu label BriskOS 1.0 LTS (^Safe Graphics Mode)
 	linux @LINUX@
 	initrd @INITRD@
-	append @APPEND_LIVE_FAILSAFE@
+	append @APPEND_LIVE@ brisk.safe_graphics=1

@@ -1,0 +1,67 @@
+#!/bin/sh
+# ==============================================================================
+# BriskOS 1.0 LTS - greetd ExecStartPre helper
+# Ensures DRM device readiness (VirtualBox/VMs/hardware), waits for live 'user',
+# guarantees hardware group membership, writes runtime greetd config, and VTs.
+# ==============================================================================
+
+# 1. Probe common DRM kernel modules if /dev/dri/card0 has not appeared yet
+if [ ! -e /dev/dri/card0 ]; then
+    for mod in vboxvideo vmwgfx virtio_gpu bochs simpledrm; do
+        modprobe -q "$mod" 2>/dev/null || true
+    done
+    i=0
+    while [ "$i" -lt 40 ] && [ ! -e /dev/dri/card0 ]; do
+        sleep 0.25
+        i=$((i + 1))
+    done
+fi
+
+# 2. Wait for live-config to create live 'user' when booting from Live ISO
+if grep -qs "boot=live" /proc/cmdline 2>/dev/null; then
+    i=0
+    while [ "$i" -lt 240 ] && ! id -u user >/dev/null 2>&1; do
+        sleep 0.25
+        i=$((i + 1))
+    done
+    # Defensive fallback: create 'user' with password 'live' if live-config delayed >60s
+    if ! id -u user >/dev/null 2>&1; then
+        useradd -m -s /bin/bash user 2>/dev/null || true
+        echo "user:live" | chpasswd 2>/dev/null || true
+        if getent group sudo >/dev/null 2>&1; then
+            usermod -aG sudo user 2>/dev/null || true
+        fi
+    fi
+fi
+
+# 3. Ensure _greetd and live 'user' have access to DRM, render, input, and media devices
+for acct in _greetd user; do
+    if id -u "$acct" >/dev/null 2>&1; then
+        for grp in video render input audio plugdev netdev; do
+            if getent group "$grp" >/dev/null 2>&1; then
+                usermod -aG "$grp" "$acct" 2>/dev/null || true
+            fi
+        done
+    fi
+done
+
+if id -u _greetd >/dev/null 2>&1; then
+    mkdir -p /var/lib/greetd
+    chown _greetd:_greetd /var/lib/greetd 2>/dev/null || true
+fi
+
+# 4. Generate runtime /run/greetd/config.toml (live autologin vs installed greeter)
+mkdir -p /run/greetd
+if grep -qs "boot=live" /proc/cmdline 2>/dev/null && id -u user >/dev/null 2>&1; then
+    cp /etc/greetd/config.toml /run/greetd/config.toml
+else
+    awk '/^\[initial_session\]/{exit} {print}' /etc/greetd/config.toml > /run/greetd/config.toml
+fi
+chmod 644 /run/greetd/config.toml 2>/dev/null || true
+
+# 5. Switch active console to VT 7
+if command -v chvt >/dev/null 2>&1; then
+    chvt 7 || true
+fi
+
+exit 0

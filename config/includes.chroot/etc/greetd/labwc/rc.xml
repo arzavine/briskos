@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <core>
+    <decoration>none</decoration>
+    <gap>0</gap>
+    <adaptiveSync>no</adaptiveSync>
+  </core>
+  <theme>
+    <name>Brisk-Morning</name>
+    <cornerRadius>0</cornerRadius>
+    <dropShadow>no</dropShadow>
+  </theme>
+  <windowRules>
+    <windowRule identifier="*" serverDecoration="no">
+      <action name="Maximize" />
+    </windowRule>
+  </windowRules>
+</labwc_config>

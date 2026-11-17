@@ -1,0 +1,58 @@
+#!/bin/sh
+# ==============================================================================
+# BriskOS 1.0 LTS Wayland Greeter Session Wrapper (greetd [default_session])
+# Launches Morning Breeze graphical greeter inside isolated labwc with VM
+# software rendering fallback and tuigreet last-resort fallback.
+# ==============================================================================
+
+AUTH_MARKER="/tmp/brisk-greeter-authenticated"
+LOG_FILE="/tmp/brisk-greeter.log"
+
+rm -f "$AUTH_MARKER" 2>/dev/null || true
+
+export XDG_SESSION_TYPE="wayland"
+export XDG_CURRENT_DESKTOP="wlroots"
+export GDK_BACKEND="wayland,x11"
+
+UID_NUM="$(id -u)"
+export XDG_RUNTIME_DIR="/tmp/xdg-greetd-${UID_NUM}"
+mkdir -p -m 0700 "$XDG_RUNTIME_DIR"
+
+enable_software_wlr() {
+    export WLR_RENDERER="pixman"
+    export WLR_NO_HARDWARE_CURSORS="1"
+    export WLR_RENDERER_ALLOW_SOFTWARE="1"
+    export LIBGL_ALWAYS_SOFTWARE="1"
+}
+
+if grep -qsE '(^|[[:space:]])(brisk\.safe_graphics=1|nomodeset)([[:space:]]|$)' /proc/cmdline 2>/dev/null \
+    || [ -d /sys/module/vboxvideo ] || [ -d /sys/module/vboxguest ] || [ -d /sys/module/vmwgfx ] \
+    || grep -qiE 'virtualbox|innotek|oracle|vmware|qemu|kvm|bochs' /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/board_vendor 2>/dev/null; then
+    enable_software_wlr
+fi
+
+echo "=== BriskOS greeter start $(date -Is 2>/dev/null || date) uid=${UID_NUM} runtime=${XDG_RUNTIME_DIR} renderer=${WLR_RENDERER:-auto} ===" >>"$LOG_FILE" 2>/dev/null || true
+
+labwc -C /etc/greetd/labwc -S /usr/local/bin/brisk-greeter >>"$LOG_FILE" 2>&1
+rc=$?
+if [ -f "$AUTH_MARKER" ]; then
+    rm -f "$AUTH_MARKER" 2>/dev/null || true
+    exit 0
+fi
+
+# Retry once with forced software Pixman renderer if hardware path exited early
+enable_software_wlr
+echo "=== Retrying greeter with forced pixman renderer (prev rc=${rc}) ===" >>"$LOG_FILE" 2>/dev/null || true
+labwc -C /etc/greetd/labwc -S /usr/local/bin/brisk-greeter >>"$LOG_FILE" 2>&1
+rc=$?
+if [ -f "$AUTH_MARKER" ]; then
+    rm -f "$AUTH_MARKER" 2>/dev/null || true
+    exit 0
+fi
+
+# Last-resort console fallback with asterisks visible if Wayland compositor failed
+if command -v tuigreet >/dev/null 2>&1; then
+    exec tuigreet --asterisks --time --remember --cmd /usr/local/bin/brisk-session
+fi
+
+exit "${rc:-1}"

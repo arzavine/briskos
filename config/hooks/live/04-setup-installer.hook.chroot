@@ -65,7 +65,18 @@ chmod 666 /var/log/calamares-installer.log
 # 6. Remove calamares-settings-debian autostart script that errors on sh syntax at login
 rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
 
-# 7. Refresh desktop database
+# 7. Hide upstream duplicate installer launchers so only BriskOS Installer shows in Wofi
+for dup in /usr/share/applications/calamares.desktop /usr/share/applications/install-debian.desktop; do
+    if [ -f "$dup" ]; then
+        if grep -qE '^NoDisplay=' "$dup"; then
+            sed -i 's/^NoDisplay=.*/NoDisplay=true/' "$dup"
+        else
+            printf '\nNoDisplay=true\n' >> "$dup"
+        fi
+    fi
+done
+
+# 8. Refresh desktop database
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database /usr/share/applications || true
 fi

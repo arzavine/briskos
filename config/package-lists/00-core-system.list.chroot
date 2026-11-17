@@ -23,6 +23,10 @@ udev
 dbus
 dbus-user-session
 kbd
+libseat1
+libgl1-mesa-dri
+libegl-mesa0
+libgbm1
 zram-tools
 
 # Audio Stack (PipeWire modern audio engine)

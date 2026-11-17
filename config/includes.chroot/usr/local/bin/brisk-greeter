@@ -1,0 +1,806 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# BriskOS 1.0 LTS Graphical Wayland Login Greeter ("Morning Breeze")
+# Communicates directly with greetd via GREETD_SOCK JSON IPC.
+# Features Morning Breeze Silk backdrop, live session hint, masked password dots,
+# and an accessible SVG eye-toggle button to show or hide typed passwords.
+# ==============================================================================
+
+import datetime
+import json
+import os
+import pwd
+import socket
+import struct
+import subprocess
+import sys
+import threading
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
+
+
+APP_ID = "brisk-greeter"
+AUTH_MARKER = "/tmp/brisk-greeter-authenticated"
+SESSION_CMD = ["/usr/local/bin/brisk-session"]
+
+DAYS_ID = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+MONTHS_ID = [
+    "",
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+]
+
+MORNING_BREEZE_GREETER_CSS = b"""
+window,
+button,
+entry,
+box,
+frame {
+    background-image: none;
+    box-shadow: none;
+}
+
+.greeter-canvas {
+    background-color: #F5F7F7;
+    background-image: linear-gradient(145deg, #F7FAFA 0%, #E7F2F6 55%, #CDE3EC 100%);
+    color: #0F172A;
+    font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif;
+}
+
+.topbar-wrap {
+    padding: 16px 24px;
+}
+
+.brand-pill {
+    background-color: rgba(255, 255, 255, 0.90);
+    border: 1px solid #CBD5E1;
+    border-radius: 999px;
+    padding: 5px 14px;
+    color: #0F172A;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.clock-pill {
+    background-color: rgba(255, 255, 255, 0.90);
+    border: 1px solid #CBD5E1;
+    border-radius: 999px;
+    padding: 5px 14px;
+    color: #0F172A;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.login-card {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 16px;
+    padding: 26px 28px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.10);
+}
+
+.card-title {
+    color: #0F172A;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.card-subtitle {
+    color: #475569;
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+.live-hint-banner {
+    background-color: #E0F2FE;
+    border: 1px solid #7DD3FC;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.live-hint-text {
+    color: #0C5B73;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.field-label {
+    color: #0F172A;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.field-entry {
+    background-color: #FFFFFF;
+    border: 1px solid #64748B;
+    border-radius: 8px;
+    color: #0F172A;
+    font-size: 13.5px;
+    padding: 9px 12px;
+    min-height: 22px;
+    transition: border-color 120ms ease;
+}
+
+.field-entry:focus {
+    border: 2px solid #0E7490;
+    padding: 8px 11px;
+}
+
+.eye-btn {
+    background-color: #F5F7F7;
+    border: 1px solid #64748B;
+    border-radius: 8px;
+    color: #0F172A;
+    min-width: 40px;
+    min-height: 38px;
+    padding: 6px;
+    transition: all 120ms ease;
+}
+
+.eye-btn:hover {
+    background-color: #D6E9EE;
+    border-color: #0E7490;
+}
+
+.eye-btn:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+}
+
+.error-banner {
+    background-color: #FEE2E2;
+    border: 1px solid #FCA5A5;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.error-text {
+    color: #991B1B;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.btn-login {
+    background-color: #0E7490;
+    border: 1px solid #0E7490;
+    border-radius: 8px;
+    color: #FFFFFF;
+    font-size: 13.5px;
+    font-weight: 700;
+    min-height: 40px;
+    padding: 8px 16px;
+    transition: background-color 120ms ease;
+}
+
+.btn-login:hover {
+    background-color: #0C627A;
+    border-color: #0C627A;
+}
+
+.btn-login:focus {
+    outline: 2px solid #0F172A;
+    outline-offset: 2px;
+}
+
+.btn-login:disabled {
+    background-color: #64748B;
+    border-color: #64748B;
+    color: #FFFFFF;
+}
+
+.card-divider {
+    background-color: #E2E8F0;
+    min-height: 1px;
+}
+
+.session-pill {
+    background-color: #E9F1F4;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 5px 10px;
+    color: #0C5B73;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.power-btn {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    color: #475569;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 10px;
+    min-height: 30px;
+    transition: all 120ms ease;
+}
+
+.power-btn:hover {
+    background-color: #E9F1F4;
+    border-color: #0E7490;
+    color: #0F172A;
+}
+
+.power-btn:focus {
+    outline: 2px solid #0E7490;
+    outline-offset: 2px;
+}
+"""
+
+SVG_TEMPLATES = {
+    "user": (
+        '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>'
+        '<circle cx="12" cy="7" r="4"/>'
+    ),
+    "eye": (
+        '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>'
+        '<circle cx="12" cy="12" r="3"/>'
+    ),
+    "eye_off": (
+        '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>'
+        '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>'
+        '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>'
+        '<line x1="1" y1="1" x2="23" y2="23"/>'
+    ),
+    "arrow_right": (
+        '<line x1="5" y1="12" x2="19" y2="12"/>'
+        '<polyline points="12 5 19 12 12 19"/>'
+    ),
+    "info": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<line x1="12" y1="16" x2="12" y2="12"/>'
+        '<line x1="12" y1="8" x2="12.01" y2="8"/>'
+    ),
+    "alert": (
+        '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+        '<line x1="12" y1="9" x2="12" y2="13"/>'
+        '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+    ),
+    "restart": (
+        '<polyline points="23 4 23 10 17 10"/>'
+        '<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'
+    ),
+    "power": (
+        '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>'
+        '<line x1="12" y1="2" x2="12" y2="12"/>'
+    ),
+}
+
+BRAND_FEATHER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#0E7490"/>
+  <path d="M18 46 C24 38, 34 26, 48 16 C45 23, 39 33, 31 40 C26 44, 21 46, 18 46 Z" fill="#E9F1F4"/>
+  <path d="M16 48 C23 41, 35 28, 49 14" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="49" cy="14" r="2.2" fill="#FFFFFF"/>
+</svg>"""
+
+
+def is_live_mode() -> bool:
+    try:
+        with open("/proc/cmdline", "r", encoding="utf-8", errors="ignore") as f:
+            return "boot=live" in f.read()
+    except OSError:
+        return False
+
+
+def detect_default_username(live_mode: bool) -> str:
+    if live_mode:
+        try:
+            pwd.getpwnam("user")
+            return "user"
+        except KeyError:
+            pass
+    try:
+        candidates = []
+        for entry in pwd.getpwall():
+            shell = entry.pw_shell or ""
+            if (
+                1000 <= entry.pw_uid < 60000
+                and entry.pw_name != "nobody"
+                and not shell.endswith(("/nologin", "/false"))
+            ):
+                candidates.append((entry.pw_uid, entry.pw_name))
+        if candidates:
+            candidates.sort()
+            return candidates[0][1]
+    except Exception:
+        pass
+    return "user" if live_mode else ""
+
+
+def user_exists(username: str) -> bool:
+    if not username:
+        return False
+    try:
+        pwd.getpwnam(username)
+        return True
+    except KeyError:
+        return False
+
+
+def make_svg_pixbuf(name: str, color: str = "#0F172A", size: int = 18):
+    inner = SVG_TEMPLATES.get(name, SVG_TEMPLATES["info"])
+    svg_xml = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" '
+        f'stroke-linecap="round" stroke-linejoin="round">{inner}</svg>'
+    ).encode("utf-8")
+    loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+    loader.set_size(size, size)
+    loader.write(svg_xml)
+    loader.close()
+    return loader.get_pixbuf()
+
+
+def make_brand_pixbuf(size: int = 44):
+    loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+    loader.set_size(size, size)
+    loader.write(BRAND_FEATHER_SVG.encode("utf-8"))
+    loader.close()
+    return loader.get_pixbuf()
+
+
+def make_svg_icon(name: str, color: str = "#0F172A", size: int = 18) -> Gtk.Image:
+    return Gtk.Image.new_from_pixbuf(make_svg_pixbuf(name, color=color, size=size))
+
+
+class GreetdIPCError(Exception):
+    pass
+
+
+class GreetdIPCClient:
+    """Minimal synchronous greetd JSON IPC client (4-byte native uint32 framing)."""
+
+    def __init__(self, socket_path: str | None = None):
+        self.socket_path = socket_path or os.environ.get("GREETD_SOCK", "")
+
+    @staticmethod
+    def encode_message(payload: dict) -> bytes:
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        return struct.pack("=I", len(body)) + body
+
+    @staticmethod
+    def _recv_exact(sock: socket.socket, nbytes: int) -> bytes:
+        buf = bytearray()
+        while len(buf) < nbytes:
+            chunk = sock.recv(nbytes - len(buf))
+            if not chunk:
+                raise GreetdIPCError("Koneksi ke layanan greetd terputus.")
+            buf.extend(chunk)
+        return bytes(buf)
+
+    @classmethod
+    def send_and_recv(cls, sock: socket.socket, payload: dict) -> dict:
+        sock.sendall(cls.encode_message(payload))
+        header = cls._recv_exact(sock, 4)
+        (length,) = struct.unpack("=I", header)
+        if length <= 0 or length > 1048576:
+            raise GreetdIPCError(f"Panjang pesan IPC greetd tidak valid: {length}")
+        raw = cls._recv_exact(sock, length)
+        return json.loads(raw.decode("utf-8"))
+
+    def authenticate_and_start(self, username: str, password: str, session_cmd: list[str]) -> tuple[bool, str]:
+        if not self.socket_path:
+            return False, "Socket GREETD_SOCK tidak tersedia di sesi ini."
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(12.0)
+        try:
+            sock.connect(self.socket_path)
+            resp = self.send_and_recv(sock, {"type": "create_session", "username": username})
+            secret_sent = False
+
+            for _ in range(8):
+                rtype = resp.get("type")
+                if rtype == "success":
+                    start_resp = self.send_and_recv(
+                        sock,
+                        {"type": "start_session", "cmd": session_cmd, "env": []},
+                    )
+                    if start_resp.get("type") == "success":
+                        return True, ""
+                    err_desc = start_resp.get("description") or "Gagal memulai sesi desktop."
+                    try:
+                        self.send_and_recv(sock, {"type": "cancel_session"})
+                    except Exception:
+                        pass
+                    return False, err_desc
+
+                if rtype == "auth_message":
+                    msg_type = resp.get("auth_message_type", "")
+                    if msg_type in ("visible", "secret"):
+                        answer = password if not secret_sent else ""
+                        secret_sent = True
+                        resp = self.send_and_recv(
+                            sock,
+                            {"type": "post_auth_message_response", "response": answer},
+                        )
+                    else:
+                        resp = self.send_and_recv(
+                            sock,
+                            {"type": "post_auth_message_response", "response": None},
+                        )
+                    continue
+
+                if rtype == "error":
+                    err_type = resp.get("error_type", "")
+                    desc = resp.get("description", "")
+                    try:
+                        self.send_and_recv(sock, {"type": "cancel_session"})
+                    except Exception:
+                        pass
+                    if err_type == "auth_error":
+                        return False, "AUTH_FAILED"
+                    return False, desc or "Autentikasi gagal."
+
+                try:
+                    self.send_and_recv(sock, {"type": "cancel_session"})
+                except Exception:
+                    pass
+                return False, "Respons layanan login tidak dikenali."
+
+            try:
+                self.send_and_recv(sock, {"type": "cancel_session"})
+            except Exception:
+                pass
+            return False, "Proses login melebihi batas langkah autentikasi."
+        except OSError as exc:
+            return False, f"Tidak dapat terhubung ke greetd: {exc}"
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+class BriskGreeterWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("BriskOS Login")
+        self.set_decorated(False)
+        self.fullscreen()
+
+        self.live_mode = is_live_mode()
+        self.password_visible = False
+        self.is_submitting = False
+
+        self._setup_ui()
+        self._update_clock()
+        GLib.timeout_add_seconds(1, self._update_clock)
+
+        self.connect("destroy", Gtk.main_quit)
+        self.connect("map-event", self._on_first_map)
+
+    def _setup_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        root.get_style_context().add_class("greeter-canvas")
+        self.add(root)
+
+        # Top Bar
+        topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        topbar.get_style_context().add_class("topbar-wrap")
+        root.pack_start(topbar, False, False, 0)
+
+        lbl_brand_top = Gtk.Label(label="BriskOS 1.0 LTS  •  Morning Breeze")
+        lbl_brand_top.get_style_context().add_class("brand-pill")
+        topbar.pack_start(lbl_brand_top, False, False, 0)
+
+        self.lbl_clock = Gtk.Label(label="")
+        self.lbl_clock.get_style_context().add_class("clock-pill")
+        topbar.pack_end(self.lbl_clock, False, False, 0)
+
+        # Centered Login Card
+        center_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        center_wrap.set_valign(Gtk.Align.CENTER)
+        center_wrap.set_halign(Gtk.Align.CENTER)
+        root.pack_start(center_wrap, True, True, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        card.get_style_context().add_class("login-card")
+        card.set_size_request(390, -1)
+        center_wrap.pack_start(card, False, False, 0)
+
+        # Card Header
+        hdr_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        card.pack_start(hdr_row, False, False, 0)
+
+        brand_img = Gtk.Image.new_from_pixbuf(make_brand_pixbuf(44))
+        hdr_row.pack_start(brand_img, False, False, 0)
+
+        hdr_text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        hdr_row.pack_start(hdr_text_col, True, True, 0)
+
+        lbl_title = Gtk.Label(label="BriskOS 1.0 LTS", xalign=0)
+        lbl_title.get_style_context().add_class("card-title")
+        hdr_text_col.pack_start(lbl_title, False, False, 0)
+
+        lbl_sub = Gtk.Label(label="Masuk ke ruang kerja Morning Breeze Anda", xalign=0)
+        lbl_sub.get_style_context().add_class("card-subtitle")
+        hdr_text_col.pack_start(lbl_sub, False, False, 0)
+
+        # Live Hint Banner (only shown in Live ISO boot)
+        if self.live_mode:
+            hint_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            hint_box.get_style_context().add_class("live-hint-banner")
+            hint_box.pack_start(make_svg_icon("info", color="#0C5B73", size=16), False, False, 0)
+            lbl_hint = Gtk.Label(
+                label='Mode Live Aktif: akun bawaan "user" dan kata sandi "live" siap digunakan.',
+                xalign=0,
+            )
+            lbl_hint.set_line_wrap(True)
+            lbl_hint.set_max_width_chars(40)
+            lbl_hint.get_style_context().add_class("live-hint-text")
+            hint_box.pack_start(lbl_hint, True, True, 0)
+            card.pack_start(hint_box, False, False, 0)
+
+        # Username Field
+        user_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.pack_start(user_box, False, False, 0)
+
+        lbl_user = Gtk.Label(label="Nama Pengguna", xalign=0)
+        lbl_user.get_style_context().add_class("field-label")
+        user_box.pack_start(lbl_user, False, False, 0)
+
+        self.entry_user = Gtk.Entry()
+        self.entry_user.get_style_context().add_class("field-entry")
+        self.entry_user.set_placeholder_text("Masukkan nama pengguna...")
+        self.entry_user.get_accessible().set_name("Nama Pengguna")
+        default_user = detect_default_username(self.live_mode)
+        if default_user:
+            self.entry_user.set_text(default_user)
+        self.entry_user.connect("activate", self._on_username_activate)
+        user_box.pack_start(self.entry_user, False, False, 0)
+
+        # Password Field + Eye Toggle Button
+        pass_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.pack_start(pass_box, False, False, 0)
+
+        lbl_pass = Gtk.Label(label="Kata Sandi", xalign=0)
+        lbl_pass.get_style_context().add_class("field-label")
+        pass_box.pack_start(lbl_pass, False, False, 0)
+
+        pass_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        pass_box.pack_start(pass_row, False, False, 0)
+
+        self.entry_pass = Gtk.Entry()
+        self.entry_pass.get_style_context().add_class("field-entry")
+        self.entry_pass.set_visibility(False)
+        self.entry_pass.set_invisible_char("•")
+        self.entry_pass.set_placeholder_text("Masukkan kata sandi...")
+        self.entry_pass.get_accessible().set_name("Kata Sandi")
+        if self.live_mode and default_user == "user":
+            self.entry_pass.set_text("live")
+        self.entry_pass.connect("activate", lambda *_: self._submit_login())
+        pass_row.pack_start(self.entry_pass, True, True, 0)
+
+        self.eye_icon = make_svg_icon("eye", color="#0F172A", size=18)
+        self.eye_icon.show()
+        self.btn_eye = Gtk.Button()
+        self.btn_eye.get_style_context().add_class("eye-btn")
+        self.btn_eye.set_always_show_image(True)
+        self.btn_eye.set_image(self.eye_icon)
+        self.btn_eye.set_tooltip_text("Lihat kata sandi")
+        self.btn_eye.get_accessible().set_name("Tampilkan atau sembunyikan kata sandi")
+        self.btn_eye.connect("clicked", self._toggle_password_visibility)
+        pass_row.pack_end(self.btn_eye, False, False, 0)
+
+        # Error Banner (Hidden until error occurs)
+        self.error_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.error_box.get_style_context().add_class("error-banner")
+        self.error_box.set_no_show_all(True)
+        self.error_icon = make_svg_icon("alert", color="#991B1B", size=16)
+        self.error_icon.show()
+        self.lbl_error = Gtk.Label(label="", xalign=0)
+        self.lbl_error.set_line_wrap(True)
+        self.lbl_error.set_max_width_chars(38)
+        self.lbl_error.get_style_context().add_class("error-text")
+        self.lbl_error.show()
+        self.error_box.pack_start(self.error_icon, False, False, 0)
+        self.error_box.pack_start(self.lbl_error, True, True, 0)
+        card.pack_start(self.error_box, False, False, 0)
+
+        # Login Submit Button
+        self.btn_login = Gtk.Button()
+        self.btn_login.get_style_context().add_class("btn-login")
+        btn_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_inner.set_halign(Gtk.Align.CENTER)
+        self.lbl_login_btn = Gtk.Label(label="Masuk ke Desktop")
+        btn_inner.pack_start(self.lbl_login_btn, False, False, 0)
+        btn_inner.pack_start(make_svg_icon("arrow_right", color="#FFFFFF", size=16), False, False, 0)
+        self.btn_login.add(btn_inner)
+        self.btn_login.get_accessible().set_name("Masuk ke Desktop BriskOS")
+        self.btn_login.connect("clicked", lambda *_: self._submit_login())
+        card.pack_start(self.btn_login, False, False, 2)
+
+        # Divider & Footer Actions
+        div = Gtk.Box()
+        div.get_style_context().add_class("card-divider")
+        card.pack_start(div, False, False, 2)
+
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        card.pack_start(footer, False, False, 0)
+
+        lbl_sess = Gtk.Label(label="Sesi: BriskOS Wayland")
+        lbl_sess.get_style_context().add_class("session-pill")
+        footer.pack_start(lbl_sess, False, False, 0)
+
+        spacer = Gtk.Box()
+        footer.pack_start(spacer, True, True, 0)
+
+        btn_reboot = self._make_power_button("restart", "Restart", self._on_reboot)
+        btn_power = self._make_power_button("power", "Matikan", self._on_poweroff)
+        footer.pack_end(btn_power, False, False, 0)
+        footer.pack_end(btn_reboot, False, False, 0)
+
+    def _make_power_button(self, icon_name: str, label: str, handler) -> Gtk.Button:
+        btn = Gtk.Button()
+        btn.get_style_context().add_class("power-btn")
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        box.pack_start(make_svg_icon(icon_name, color="#475569", size=14), False, False, 0)
+        box.pack_start(Gtk.Label(label=label), False, False, 0)
+        btn.add(box)
+        btn.connect("clicked", handler)
+        return btn
+
+    def _on_first_map(self, *_args):
+        if self.entry_user.get_text().strip():
+            self.entry_pass.grab_focus()
+        else:
+            self.entry_user.grab_focus()
+        return False
+
+    def _update_clock(self) -> bool:
+        now = datetime.datetime.now()
+        day_name = DAYS_ID[now.weekday()]
+        month_name = MONTHS_ID[now.month]
+        self.lbl_clock.set_text(f"{now:%H:%M}  •  {day_name}, {now.day} {month_name} {now.year}")
+        return True
+
+    def _toggle_password_visibility(self, *_args):
+        self.password_visible = not self.password_visible
+        self.entry_pass.set_visibility(self.password_visible)
+        icon_name = "eye_off" if self.password_visible else "eye"
+        self.eye_icon.set_from_pixbuf(make_svg_pixbuf(icon_name, color="#0F172A", size=18))
+        self.btn_eye.set_tooltip_text(
+            "Sembunyikan kata sandi" if self.password_visible else "Lihat kata sandi"
+        )
+        self.entry_pass.grab_focus()
+        pos = len(self.entry_pass.get_text())
+        self.entry_pass.set_position(pos)
+
+    def _on_username_activate(self, *_args):
+        if self.entry_pass.get_text():
+            self._submit_login()
+        else:
+            self.entry_pass.grab_focus()
+
+    def _show_error(self, msg: str):
+        self.lbl_error.set_text(msg)
+        self.error_box.show()
+
+    def _clear_error(self):
+        self.error_box.hide()
+
+    def _set_busy(self, busy: bool):
+        self.is_submitting = busy
+        self.btn_login.set_sensitive(not busy)
+        self.entry_user.set_sensitive(not busy)
+        self.entry_pass.set_sensitive(not busy)
+        self.lbl_login_btn.set_text("Memverifikasi..." if busy else "Masuk ke Desktop")
+
+    def _submit_login(self):
+        if self.is_submitting:
+            return
+        self._clear_error()
+
+        username = self.entry_user.get_text().strip()
+        password = self.entry_pass.get_text()
+
+        if not username:
+            self._show_error("Masukkan nama pengguna terlebih dahulu.")
+            self.entry_user.grab_focus()
+            return
+
+        if not user_exists(username):
+            hint = ' Di Mode Live, gunakan akun "user".' if self.live_mode else ""
+            self._show_error(f'Akun "{username}" tidak ditemukan di sistem ini.{hint}')
+            self.entry_user.grab_focus()
+            return
+
+        if self.live_mode and username == "user" and not password:
+            password = "live"
+
+        self._set_busy(True)
+        threading.Thread(
+            target=self._run_auth_thread,
+            args=(username, password),
+            daemon=True,
+        ).start()
+
+    def _run_auth_thread(self, username: str, password: str):
+        client = GreetdIPCClient()
+        ok, err = client.authenticate_and_start(username, password, SESSION_CMD)
+        GLib.idle_add(self._on_auth_done, ok, err)
+
+    def _on_auth_done(self, ok: bool, err: str):
+        self._set_busy(False)
+        if ok:
+            try:
+                with open(AUTH_MARKER, "w", encoding="utf-8") as fh:
+                    fh.write("ok\n")
+            except OSError:
+                pass
+            Gtk.main_quit()
+            return False
+
+        if err == "AUTH_FAILED":
+            msg = "Kata sandi salah — klik ikon mata di kanan kolom untuk memeriksa ketikan Anda."
+            if self.live_mode:
+                msg = 'Kata sandi salah — akun Live bawaan adalah username "user" dan sandi "live".'
+            self._show_error(msg)
+        else:
+            self._show_error(err or "Gagal memulai sesi desktop.")
+
+        self.entry_pass.grab_focus()
+        self.entry_pass.select_region(0, -1)
+        return False
+
+    def _run_power_action(self, cmd: list[str], label: str):
+        self._clear_error()
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode != 0:
+                self._show_error(f"Tidak dapat menjalankan {label} dari layar login.")
+        except Exception as exc:
+            self._show_error(f"Gagal {label}: {exc}")
+
+    def _on_reboot(self, *_args):
+        self._run_power_action(["systemctl", "reboot"], "Restart")
+
+    def _on_poweroff(self, *_args):
+        self._run_power_action(["systemctl", "poweroff"], "Matikan")
+
+
+def apply_styling():
+    screen = Gdk.Screen.get_default()
+    if screen is not None:
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MORNING_BREEZE_GREETER_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+
+def main():
+    GLib.set_prgname(APP_ID)
+    GLib.set_application_name("BriskOS Login")
+
+    if not Gtk.init_check()[0]:
+        print("Error: Could not initialize GTK display for brisk-greeter.", file=sys.stderr)
+        sys.exit(1)
+
+    apply_styling()
+    win = BriskGreeterWindow()
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
